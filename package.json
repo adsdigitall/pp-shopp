@@ -9,7 +9,7 @@
     "dev:api": "node server/index.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/"
+    "test": "node --test tests/shopee.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
