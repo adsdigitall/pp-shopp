@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="shopeeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5722"/>
+      <stop offset="100%" stop-color="#EE4D2D"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="24" fill="url(#shopeeGrad)"/>
+  <!-- Bag handle -->
+  <path d="M38 35 C38 24, 62 24, 62 35" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <!-- Bag body -->
+  <path d="M26 35 L74 35 L68 78 L32 78 Z" fill="#FFFFFF" fill-opacity="0.18"/>
+  <!-- "S" Shopee-style wave or shopping tag -->
+  <path d="M54 44 C46 44 43 47 43 51 C43 57 58 55 58 63 C58 68 53 71 47 70 C42 69 39 66 38 63" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --shopee-orange: #ee4d2d;
+    --shopee-orange-hover: #d73211;
+    --shopee-light: #fff5f2;
+    --shopee-dark: #1e293b;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased selection:bg-orange-500 selection:text-white;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom smooth transitions and animations */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area inset for modern mobile devices / PWA */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 1rem);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top, 1rem);
+}

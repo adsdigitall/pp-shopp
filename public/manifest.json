@@ -1,0 +1,17 @@
+{
+  "name": "Afiliado Shopee Pro",
+  "short_name": "ShoppAfiliado",
+  "description": "Painel de seleção de produtos e gerador de ofertas para afiliados Shopee",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#ee4d2d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
