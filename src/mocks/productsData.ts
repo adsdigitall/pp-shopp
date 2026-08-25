@@ -2,6 +2,29 @@ import { Product } from '../types/product';
 
 export const MOCK_PRODUCTS: Product[] = [
   {
+    id: 'prod-000',
+    name: 'Máquina de Café Portátil 3 em 1 com Extração de Alta Pressão, Suporta Cápsulas e Pó',
+    imageUrl: 'https://images.unsplash.com/photo-1517668808822-9ebb02f2a0e6?auto=format&fit=crop&w=600&q=80',
+    currentPrice: 224.99,
+    originalPrice: 299.99,
+    discountPercentage: 25,
+    salesCount: 8400,
+    salesCountText: '8.4k vendidos',
+    rating: 4.9,
+    reviewsCount: 3120,
+    category: 'Eletroportáteis',
+    shopeeUrl: 'https://shopee.com.br/product/12345/cafeteira_portatil',
+    affiliateUrl: 'https://s.shopee.com.br/aff_cafeteira_3em1',
+    isFreeShipping: true,
+    isHot: true,
+    privateCommission: {
+      percentage: 16,
+      estimatedValue: 35.99,
+    },
+    shortDescription: 'Compatível com cápsulas Nespresso, Dolce Gusto e café em pó moído.',
+    highlightPoints: ['3 em 1: Cápsulas e Pó', 'Bateria recarregável USB', 'Pressão de 15 bar'],
+  },
+  {
     id: 'prod-001',
     name: 'Smartwatch D20 Pro Relógio Inteligente com Monitor Cardíaco',
     imageUrl: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=600&q=80',
@@ -115,28 +138,5 @@ export const MOCK_PRODUCTS: Product[] = [
     },
     shortDescription: 'Espaço acolchoado para notebook até 15.6", tecido impermeável e zíper oculto.',
     highlightPoints: ['Entrada USB externa para carregar celular', 'Bolsos secretos nas costas', 'Material resistente a cortes e água'],
-  },
-  {
-    id: 'prod-006',
-    name: 'Mini Aspirador de Pó Portátil Sem Fio 2 em 1 para Carro e Casa',
-    imageUrl: 'https://images.unsplash.com/photo-1558317374-067fb5f30001?auto=format&fit=crop&w=600&q=80',
-    currentPrice: 42.90,
-    originalPrice: 109.00,
-    discountPercentage: 60,
-    salesCount: 9800,
-    salesCountText: '9.8k vendidos',
-    rating: 4.7,
-    reviewsCount: 2980,
-    category: 'Automotivo & Casa',
-    shopeeUrl: 'https://shopee.com.br/product/12345/aspirador',
-    affiliateUrl: 'https://s.shopee.com.br/aff_mini_aspirador_semfio',
-    isFreeShipping: true,
-    isHot: false,
-    privateCommission: {
-      percentage: 17,
-      estimatedValue: 7.29,
-    },
-    shortDescription: 'Sucção forte de 9000Pa, filtro HEPA lavável e bicos inclusos para cantos.',
-    highlightPoints: ['Filtro HEPA reutilizável e lavável', 'Super leve com apenas 300g', 'Bateria durável recarregável via USB'],
   }
 ];

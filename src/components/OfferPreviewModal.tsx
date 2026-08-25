@@ -1,18 +1,26 @@
-import React, { useState } from 'react';
-import { Product, OfferFormat } from '../types/product';
-import { generateShareableOffer } from '../services/offerGenerator';
+import React, { useState, useEffect } from 'react';
+import { Product } from '../types/product';
+import { 
+  generateShareableOffer, 
+  getNextReaction, 
+  getNextImageStyle, 
+  CopyReaction, 
+  ImageStyle 
+} from '../services/offerGenerator';
 import { 
   X, 
   Copy, 
   Share2, 
   Check, 
   Sparkles, 
+  RefreshCw, 
+  Image as ImageIcon, 
+  Link as LinkIcon, 
+  Truck, 
   ShieldCheck, 
-  ExternalLink, 
-  MessageSquare, 
-  Layers, 
-  Zap,
-  Tag
+  ExternalLink,
+  Loader2,
+  MessageCircle
 } from 'lucide-react';
 
 interface OfferPreviewModalProps {
@@ -28,41 +36,73 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
   onClose,
   onShowToast,
 }) => {
-  const [selectedFormat, setSelectedFormat] = useState<OfferFormat>('standard');
-  const [copied, setCopied] = useState(false);
+  const [reaction, setReaction] = useState<CopyReaction>('love');
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('badge_discount');
+  const [isRegeneratingCopy, setIsRegeneratingCopy] = useState(false);
+  const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setReaction('love');
+      setImageStyle('badge_discount');
+      setCopiedText(false);
+      setCopiedLink(false);
+    }
+  }, [isOpen, product?.id]);
 
   if (!isOpen || !product) return null;
 
-  // Generate safe shareable copy without commission data
-  const offer = generateShareableOffer(product, selectedFormat);
+  const offer = generateShareableOffer(product, reaction, imageStyle);
 
-  const handleCopyOffer = async () => {
+  // Button: Regenerar Copy
+  const handleRegenerateCopy = () => {
+    setIsRegeneratingCopy(true);
+    setTimeout(() => {
+      const next = getNextReaction(reaction);
+      setReaction(next);
+      setIsRegeneratingCopy(false);
+      onShowToast('Copy atualizada!', undefined, 'info');
+    }, 250);
+  };
+
+  // Button: Regenerar Imagem
+  const handleRegenerateImage = () => {
+    setIsRegeneratingImage(true);
+    setTimeout(() => {
+      const next = getNextImageStyle(imageStyle);
+      setImageStyle(next);
+      setIsRegeneratingImage(false);
+      onShowToast('Visual da imagem atualizado!', undefined, 'info');
+    }, 250);
+  };
+
+  // Button: Copiar Texto
+  const handleCopyText = async () => {
     try {
       await navigator.clipboard.writeText(offer.copyText);
-      setCopied(true);
-      onShowToast(
-        'Oferta copiada com sucesso!',
-        'O texto pronto e link já estão na sua área de transferência.',
-        'success'
-      );
-      setTimeout(() => setCopied(false), 2500);
+      setCopiedText(true);
+      onShowToast('Texto copiado com sucesso!', 'Pronto para enviar no WhatsApp.', 'success');
+      setTimeout(() => setCopiedText(false), 2000);
     } catch (err) {
-      onShowToast('Erro ao copiar', 'Tente selecionar o texto manualmente.', 'error');
+      onShowToast('Erro ao copiar texto', undefined, 'error');
     }
   };
 
-  const handleCopyLinkOnly = async () => {
+  // Button: Copiar Link
+  const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(offer.affiliateLink);
       setCopiedLink(true);
-      onShowToast('Link copiado!', 'Link de afiliado pronto para envio.', 'success');
+      onShowToast('Link copiado!', 'Link pronto para envio.', 'success');
       setTimeout(() => setCopiedLink(false), 2000);
     } catch (err) {
-      onShowToast('Erro ao copiar link', 'Tente selecionar o link manualmente.', 'error');
+      onShowToast('Erro ao copiar link', undefined, 'error');
     }
   };
 
+  // Button: Compartilhar
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -73,224 +113,244 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
         });
         onShowToast('Compartilhado com sucesso!', undefined, 'success');
       } catch (err: any) {
-        // User cancelled share or aborted
         if (err?.name !== 'AbortError') {
-          handleCopyOffer();
+          handleCopyText();
         }
       }
     } else {
-      // Fallback to copy if Web Share API is not available
-      handleCopyOffer();
+      handleCopyText();
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
       
       {/* Modal Card */}
       <div 
-        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
+        className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[94vh] animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-offer-title"
       >
         
-        {/* Modal Header */}
-        <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        {/* Top Header */}
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-orange-100 text-[#EE4D2D] rounded-xl">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#FF5722] to-[#FF7A00] flex items-center justify-center text-white shadow-2xs">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="modal-offer-title" className="font-extrabold text-base sm:text-lg text-slate-900 leading-tight">
-                Pré-visualização da Oferta
+              <h2 id="modal-offer-title" className="font-black text-base text-slate-900 leading-tight">
+                Prévia da Oferta
               </h2>
-              <p className="text-xs text-slate-500">
-                Modelo pronto e seguro para postar em grupos e redes sociais
+              <p className="text-[11px] text-slate-500 font-medium">
+                Visual exato de como aparecerá no grupo de WhatsApp
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors"
-            aria-label="Fechar janela"
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+            aria-label="Fechar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body (Scrollable) */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+        {/* Modal Scrollable Body */}
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 bg-slate-100/70">
           
-          {/* Security Notice: Confirming private commissions are hidden */}
-          <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-emerald-50 border border-emerald-200/80 rounded-2xl text-xs text-emerald-800 font-medium">
+          {/* Security Notice */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-[11px] text-emerald-800 font-semibold">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>
-              <strong>100% Seguro:</strong> As comissões e dados privados foram removidos deste texto.
+              <strong>100% Seguro:</strong> Suas comissões privadas não aparecem nesta mensagem.
             </span>
           </div>
 
-          {/* Product Summary Card */}
-          <div className="flex flex-col sm:flex-row gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 items-center sm:items-start">
-            <img
-              src={offer.imageUrl}
-              alt={offer.productName}
-              className="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl shrink-0 border border-slate-200 shadow-xs"
-            />
-            <div className="flex-1 min-w-0 space-y-1.5 text-center sm:text-left">
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#EE4D2D] bg-orange-100/90 px-2 py-0.5 rounded-md">
-                <Tag className="w-3 h-3" />
-                {offer.discountBadge}
-              </span>
-              <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
-                {offer.productName}
-              </h3>
-              <div className="flex items-baseline justify-center sm:justify-start gap-2 pt-0.5">
-                <span className="text-xs text-slate-400 line-through">
-                  {offer.originalPriceFormatted}
-                </span>
-                <span className="text-lg font-black text-emerald-700">
-                  {offer.promotionalPriceFormatted}
-                </span>
+          {/* REALISTIC WHATSAPP PREVIEW CARD (Matching the reference screenshot) */}
+          <div className="bg-[#1f2c34] text-white rounded-3xl p-3 sm:p-4 shadow-xl border border-slate-700/50 space-y-3 relative overflow-hidden">
+            
+            {/* WhatsApp Header Badge */}
+            <div className="flex items-center justify-between pb-1 text-[11px] text-slate-400 font-medium border-b border-slate-700/60">
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>Mensagem WhatsApp</span>
               </div>
-              <p className="text-xs text-slate-500 line-clamp-2">
-                {offer.descriptionSnippet}
-              </p>
+              <span>Somente admins</span>
             </div>
+
+            {/* Product Image in WhatsApp Bubble */}
+            <div className="relative aspect-square w-full max-h-56 bg-slate-900 rounded-2xl overflow-hidden border border-slate-700/70 flex items-center justify-center">
+              {isRegeneratingImage ? (
+                <div className="flex flex-col items-center gap-2 text-orange-400">
+                  <Loader2 className="w-7 h-7 animate-spin" />
+                  <span className="text-xs font-semibold">Atualizando imagem...</span>
+                </div>
+              ) : (
+                <>
+                  <img
+                    src={offer.imageUrl}
+                    alt={offer.productName}
+                    className="w-full h-full object-cover"
+                  />
+
+                  {/* Badges on image */}
+                  {imageStyle !== 'original' && offer.discountBadge && (
+                    <div className="absolute top-2.5 left-2.5">
+                      <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/40">
+                        {offer.discountBadge}
+                      </span>
+                    </div>
+                  )}
+
+                  {(imageStyle === 'badge_full' || imageStyle === 'badge_shipping') && offer.isFreeShipping && (
+                    <div className="absolute bottom-2.5 left-2.5">
+                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-600 text-white flex items-center gap-1 shadow-xs">
+                        <Truck className="w-3 h-3" />
+                        Frete Grátis
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Clean Copy Content (Exact WhatsApp Structure) */}
+            {isRegeneratingCopy ? (
+              <div className="py-6 flex flex-col items-center justify-center gap-2 text-orange-400">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span className="text-xs font-semibold">Regenerando texto...</span>
+              </div>
+            ) : (
+              <div className="space-y-2 text-xs sm:text-sm font-sans leading-relaxed pt-1">
+                {/* 1. Reaction Headline */}
+                <div className="text-base sm:text-lg font-black text-slate-100 tracking-tight">
+                  {offer.headline}
+                </div>
+
+                {/* 2. Product Title */}
+                <div className="text-slate-200 font-semibold leading-snug">
+                  {offer.productName}
+                </div>
+
+                {/* 3. Pricing */}
+                <div className="pt-1 text-xs sm:text-sm space-y-0.5">
+                  {offer.originalPriceFormatted && (
+                    <div className="text-slate-400">
+                      De: {offer.originalPriceFormatted}
+                    </div>
+                  )}
+                  <div className="text-sm sm:text-base font-extrabold text-white flex items-center gap-1.5">
+                    <span>Por {offer.promotionalPriceFormatted}</span>
+                    <span className="text-emerald-400 text-base">✅</span>
+                  </div>
+                  {offer.isFreeShipping && (
+                    <div className="text-emerald-400 font-semibold text-xs pt-0.5 flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>Frete Grátis disponível</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Call to Action & Link */}
+                <div className="pt-2">
+                  <div className="text-slate-300 font-bold">
+                    compre aqui 🛍️
+                  </div>
+                  <div className="text-[#38bdf8] font-semibold underline break-all text-xs pt-0.5">
+                    🔗 {offer.affiliateLink}
+                  </div>
+                </div>
+
+                <div className="text-right text-[10px] text-slate-400 pt-1">
+                  14:26
+                </div>
+              </div>
+            )}
+
           </div>
 
-          {/* Format Selector Pills */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-              Formato da Mensagem:
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedFormat('standard')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border ${
-                  selectedFormat === 'standard'
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>WhatsApp / Grupos</span>
-              </button>
+          {/* REGENERATION ACTION BUTTONS (Regenerar copy & Regenerar imagem) */}
+          <div className="grid grid-cols-2 gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={handleRegenerateCopy}
+              disabled={isRegeneratingCopy}
+              className="py-2.5 px-3 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-xs font-bold rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#EE4D2D] ${isRegeneratingCopy ? 'animate-spin' : ''}`} />
+              <span>{isRegeneratingCopy ? 'Gerando...' : 'Regenerar copy'}</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => setSelectedFormat('compact')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border ${
-                  selectedFormat === 'compact'
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Curto / Stories</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedFormat('urgent')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border ${
-                  selectedFormat === 'urgent'
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>Relâmpago</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleRegenerateImage}
+              disabled={isRegeneratingImage}
+              className="py-2.5 px-3 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-xs font-bold rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <ImageIcon className={`w-3.5 h-3.5 text-[#EE4D2D] ${isRegeneratingImage ? 'animate-spin' : ''}`} />
+              <span>{isRegeneratingImage ? 'Trocando...' : 'Regenerar imagem'}</span>
+            </button>
           </div>
 
-          {/* Textarea Preview */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Texto formatado para envio:
-              </label>
-              <button
-                onClick={handleCopyOffer}
-                className="text-xs text-[#EE4D2D] hover:underline font-semibold flex items-center gap-1"
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copiado!' : 'Copiar texto'}
-              </button>
-            </div>
-
-            <div className="relative">
-              <textarea
-                readOnly
-                value={offer.copyText}
-                rows={7}
-                className="w-full p-3.5 bg-slate-900 text-slate-100 rounded-2xl text-xs sm:text-sm font-mono leading-relaxed border border-slate-800 focus:outline-none resize-none shadow-inner"
-              />
-            </div>
-          </div>
-
-          {/* Affiliate Link Box */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-              Link de Afiliado Exemplo:
-            </label>
-            <div className="flex items-center gap-2 p-2.5 bg-slate-100 rounded-xl border border-slate-200">
-              <input
-                type="text"
-                readOnly
-                value={offer.affiliateLink}
-                className="flex-1 bg-transparent text-xs font-medium text-slate-700 outline-none truncate"
-              />
-              <button
-                onClick={handleCopyLinkOnly}
-                className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-300 transition-colors shrink-0 flex items-center gap-1"
-              >
-                {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                {copiedLink ? 'Copiado' : 'Copiar Link'}
-              </button>
-              <a
-                href={offer.affiliateLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-1 text-slate-400 hover:text-[#EE4D2D]"
-                title="Testar link no navegador"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            </div>
+          {/* Quick Copy Link Row */}
+          <div className="flex items-center gap-2 p-2 bg-white rounded-2xl border border-slate-200">
+            <LinkIcon className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+            <input
+              type="text"
+              readOnly
+              value={offer.affiliateLink}
+              className="flex-1 bg-transparent text-xs font-medium text-slate-600 outline-none truncate"
+            />
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-200 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedLink ? 'Copiado!' : 'Copiar link'}</span>
+            </button>
+            <a
+              href={offer.affiliateLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 text-slate-400 hover:text-[#EE4D2D]"
+              title="Testar link"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
           </div>
 
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50 flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5">
+        <div className="p-4 sm:p-5 border-t border-slate-100 bg-white flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs sm:text-sm hover:bg-slate-100 transition-colors"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
           >
             Fechar
           </button>
 
           <button
             type="button"
-            onClick={handleShare}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 active:scale-[0.98] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all"
+            onClick={handleCopyText}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-black active:scale-[0.98] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
           >
-            <Share2 className="w-4 h-4" />
-            <span>Compartilhar</span>
+            {copiedText ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedText ? 'Texto Copiado!' : 'Copiar texto'}</span>
           </button>
 
           <button
             type="button"
-            onClick={handleCopyOffer}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#EE4D2D] hover:from-[#EE4D2D] hover:to-[#D73211] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            onClick={handleShare}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#EE4D2D] hover:from-[#EE4D2D] hover:to-[#D73211] active:scale-[0.98] text-white font-black text-xs sm:text-sm shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            <span>{copied ? 'Oferta Copiada!' : 'Copiar Oferta'}</span>
+            <Share2 className="w-4 h-4" />
+            <span>Compartilhar</span>
           </button>
         </div>
 

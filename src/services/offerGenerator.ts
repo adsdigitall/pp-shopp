@@ -1,4 +1,7 @@
-import { Product, OfferFormat } from '../types/product';
+import { Product } from '../types/product';
+
+export type CopyReaction = 'love' | 'look' | 'urgent' | 'found';
+export type ImageStyle = 'original' | 'badge_discount' | 'badge_shipping' | 'badge_full';
 
 export interface GeneratedOffer {
   productId: string;
@@ -7,76 +10,89 @@ export interface GeneratedOffer {
   originalPriceFormatted: string;
   promotionalPriceFormatted: string;
   discountBadge: string;
+  isFreeShipping: boolean;
   affiliateLink: string;
   copyText: string;
-  descriptionSnippet: string;
-  highlights: string[];
+  reaction: CopyReaction;
+  headline: string;
+  imageStyle: ImageStyle;
 }
 
+const REACTIONS: { id: CopyReaction; headline: string; label: string }[] = [
+  { id: 'love', headline: 'EU AMEIIII!🤩❤️', label: 'Eu Amei (Viral)' },
+  { id: 'look', headline: 'OLHA ESSA OFERTA!😱🔥', label: 'Olha Essa Oferta' },
+  { id: 'found', headline: 'ACHADINHO PERFEITO!✨🛍️', label: 'Achadinho' },
+  { id: 'urgent', headline: 'BAIXOU MUITO!💥⏳', label: 'Relâmpago / Urgente' },
+];
+
+const IMAGE_STYLES: ImageStyle[] = ['badge_discount', 'badge_full', 'badge_shipping', 'original'];
+
 /**
- * Generates promotional text and shareable payload for an affiliate offer.
- * CRITICAL SECURITY RULE:
- * This generator NEVER includes commission %, commission R$ or private owner data.
+ * Generates the clean, punchy WhatsApp affiliate format based directly on high-converting reference:
+ *
+ * EU AMEIIII!🤩❤️
+ *
+ * Nome do Produto
+ *
+ * De: R$ 299,99
+ * Por R$ 224,99 ✅
+ *
+ * compre aqui 🛍️
+ * 🔗 https://s.shopee.com.br/aff_link
+ *
+ * RULES:
+ * - NO hashtags
+ * - NO long paragraphs
+ * - NO commission metrics (Strict privacy)
  */
-export function generateShareableOffer(product: Product, format: OfferFormat = 'standard'): GeneratedOffer {
-  const origPrice = product.originalPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-  const promoPrice = product.currentPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-  const discountBadge = `-${product.discountPercentage}% OFF`;
+export function generateShareableOffer(
+  product: Product,
+  reactionId: CopyReaction = 'love',
+  imageStyle: ImageStyle = 'badge_discount'
+): GeneratedOffer {
+  const origPrice =
+    product.originalPrice !== null &&
+    product.currentPrice !== null &&
+    product.originalPrice > product.currentPrice
+      ? product.originalPrice.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })
+      : '';
 
-  let copyText = '';
+  const promoPrice =
+    product.currentPrice !== null
+      ? product.currentPrice.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })
+      : 'Confira no link';
 
-  if (format === 'standard') {
-    // High-converting complete format for WhatsApp / Telegram groups
-    copyText = [
-      `🔥 *PROMOÇÃO RELÂMPAGO NA SHOPEE!* 🔥`,
-      ``,
-      `📦 *${product.name}*`,
-      ``,
-      `❌ De: ~${origPrice}~`,
-      `✅ *Por apenas: ${promoPrice}* (${discountBadge})`,
-      product.isFreeShipping ? `🚚 Frete Grátis disponível no app!` : '',
-      `⭐ Avaliação: ${product.rating.toFixed(1)} / 5.0 (${product.salesCountText})`,
-      ``,
-      `✨ *Destaques do Produto:*`,
-      ...product.highlightPoints.map((point) => ` • ${point}`),
-      ``,
-      `🛒 *COMPRE COM DESCONTO NO LINK OFICIAL:*`,
-      `👇👇👇`,
-      `${product.affiliateUrl}`,
-      ``,
-      `⚡ _Corra antes que o estoque com desconto acabe!_`,
-    ]
-      .filter((line) => line !== '')
-      .join('\n');
-  } else if (format === 'compact') {
-    // Compact format for Instagram Direct / Twitter / Fast SMS
-    copyText = [
-      `🚨 *ACHADINHO SHOPEE:* ${product.name}`,
-      `💰 De ~${origPrice}~ por APENAS *${promoPrice}* (${discountBadge})`,
-      product.isFreeShipping ? `🚚 Cupom de Frete Grátis!` : '',
-      `👉 Garanta o seu aqui: ${product.affiliateUrl}`,
-    ]
-      .filter((line) => line !== '')
-      .join('\n');
-  } else {
-    // Urgent flash promo format
-    copyText = [
-      `⏳ *MENOR PREÇO HISTÓRICO!* 💥`,
-      ``,
-      `👉 *${product.name}*`,
-      `🔥 De ~${origPrice}~ por *${promoPrice}*`,
-      `🏷️ *Desconto de ${product.discountPercentage}% aplicado!*`,
-      ``,
-      `🔗 *Link direto com desconto:*`,
-      `${product.affiliateUrl}`,
-    ].join('\n');
-  }
+  const discountBadge =
+    product.discountPercentage !== null && product.discountPercentage > 0
+      ? `${product.discountPercentage}% OFF`
+      : '';
+
+  const isFreeShipping = Boolean(product.isFreeShipping);
+  const link = product.affiliateUrl || 'https://shopee.com.br';
+
+  const selectedReaction = REACTIONS.find((r) => r.id === reactionId) || REACTIONS[0];
+  const headline = selectedReaction.headline;
+
+  const copyLines = [
+    headline,
+    ``,
+    product.name,
+    ``,
+    origPrice ? `De: ${origPrice}` : '',
+    `Por ${promoPrice} ✅`,
+    isFreeShipping ? `🚚 Frete Grátis disponível` : '',
+    ``,
+    `compre aqui 🛍️`,
+    `🔗 ${link}`,
+  ].filter((line) => line !== '');
+
+  const copyText = copyLines.join('\n');
 
   return {
     productId: product.id,
@@ -85,9 +101,23 @@ export function generateShareableOffer(product: Product, format: OfferFormat = '
     originalPriceFormatted: origPrice,
     promotionalPriceFormatted: promoPrice,
     discountBadge,
-    affiliateLink: product.affiliateUrl,
+    isFreeShipping,
+    affiliateLink: link,
     copyText,
-    descriptionSnippet: product.shortDescription,
-    highlights: product.highlightPoints,
+    reaction: reactionId,
+    headline,
+    imageStyle,
   };
+}
+
+export function getNextReaction(current: CopyReaction): CopyReaction {
+  const currentIndex = REACTIONS.findIndex((r) => r.id === current);
+  const nextIndex = (currentIndex + 1) % REACTIONS.length;
+  return REACTIONS[nextIndex].id;
+}
+
+export function getNextImageStyle(current: ImageStyle): ImageStyle {
+  const currentIndex = IMAGE_STYLES.indexOf(current);
+  const nextIndex = (currentIndex + 1) % IMAGE_STYLES.length;
+  return IMAGE_STYLES[nextIndex];
 }
