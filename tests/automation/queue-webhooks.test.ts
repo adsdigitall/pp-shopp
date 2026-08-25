@@ -5,14 +5,14 @@ import {
   createShareDestination,
   createShareJob,
 } from '../../src/automation/index.ts';
-import { validShareJobInput } from './fixtures.ts';
+import { storySharePayload, validShareJobInput } from './fixtures.ts';
 
-describe('in-memory send queue (no real dispatch)', () => {
-  it('keeps REAL_DISPATCH_ENABLED off in etapa 1', () => {
+describe('fila em memória (sem envio real)', () => {
+  it('mantém REAL_DISPATCH_ENABLED desligado', () => {
     expect(REAL_DISPATCH_ENABLED).toBe(false);
   });
 
-  it('enqueues a job and records history + webhook without sending', () => {
+  it('enfileira job e registra histórico + webhook sem enviar', () => {
     const runtime = createAutomationRuntime();
     const destination = createShareDestination({
       name: 'Grupo Ofertas',
@@ -28,18 +28,18 @@ describe('in-memory send queue (no real dispatch)', () => {
     runtime.enqueue(job);
 
     expect(runtime.queue.snapshot().map((item) => item.id)).toEqual([job.id]);
-    expect(runtime.webhooks.list().map((event) => event.type)).toContain('share.job.created');
-    expect(runtime.webhooks.list().every((event) => event.deliveryStatus === 'recorded')).toBe(
-      true,
+    expect(runtime.webhooks.list().map((event) => event.type)).toContain(
+      'share.job.created',
     );
+    expect(
+      runtime.webhooks.list().every((event) => event.deliveryStatus === 'recorded'),
+    ).toBe(true);
   });
 
-  it('processes the queue with the noop dispatcher: retries then fails, never sends', async () => {
+  it('processa a fila com noop: tenta 3x, falha, nunca envia', async () => {
     const t0 = new Date('2026-08-25T18:00:00.000Z');
     let now = t0;
-    const runtime = createAutomationRuntime({
-      now: () => now,
-    });
+    const runtime = createAutomationRuntime({ now: () => now });
     const job = createShareJob(validShareJobInput(), { now: () => now });
     runtime.enqueue(job);
 
@@ -69,23 +69,22 @@ describe('in-memory send queue (no real dispatch)', () => {
     expect(runtime.dispatcher.name).toBe('noop');
   });
 
-  it('does not dequeue a job whose nextAttemptAt is still in the future', async () => {
+  it('não processa job cujo nextAttemptAt ainda está no futuro', async () => {
     const t0 = new Date('2026-08-25T18:00:00.000Z');
-    let now = t0;
+    const now = t0;
     const runtime = createAutomationRuntime({ now: () => now });
-    runtime.enqueue(createShareJob(validShareJobInput(), { now: () => now }));
+    const job = createShareJob(validShareJobInput(), { now: () => now });
+    runtime.enqueue(job);
 
     await runtime.processNext();
-    expect(runtime.getJob(runtime.queue.snapshot()[0].id)?.nextAttemptAt).toBe(
-      '2026-08-25T18:00:01.000Z',
-    );
+    expect(runtime.getJob(job.id)?.nextAttemptAt).toBe('2026-08-25T18:00:01.000Z');
 
     const skipped = await runtime.processNext();
     expect(skipped.skipped).toBe(true);
     expect(skipped.reason).toMatch(/nextAttemptAt|not due/i);
   });
 
-  it('can simulate a successful send without enabling real dispatch', async () => {
+  it('simula envio bem-sucedido sem habilitar dispatch real', async () => {
     const runtime = createAutomationRuntime({ dispatcher: 'simulated-success' });
     const job = createShareJob(validShareJobInput());
     runtime.enqueue(job);
@@ -97,17 +96,81 @@ describe('in-memory send queue (no real dispatch)', () => {
     expect(runtime.getJob(job.id)?.status).toBe('sent');
     expect(runtime.getJob(job.id)?.sentAt).toEqual(expect.any(String));
     expect(runtime.history.list()[0]?.success).toBe(true);
-    expect(runtime.webhooks.list().some((event) => event.type === 'share.job.sent')).toBe(true);
+    expect(
+      runtime.webhooks.list().some((event) => event.type === 'share.job.sent'),
+    ).toBe(true);
+  });
+
+  it('passa pelo status ready antes de sent', async () => {
+    const runtime = createAutomationRuntime({ dispatcher: 'simulated-success' });
+    runtime.enqueue(createShareJob(validShareJobInput()));
+
+    await runtime.processNext();
+    expect(
+      runtime.webhooks.list().some((event) => event.type === 'share.job.ready'),
+    ).toBe(true);
   });
 });
 
-describe('future integrations stay disabled', () => {
-  it('exposes WhatsApp and MCP/Jarvis as inactive contracts', () => {
+describe('ShareHistory', () => {
+  it('registra produto, destino, formato, data/hora, status, erro e tentativas', async () => {
+    const runtime = createAutomationRuntime({ dispatcher: 'simulated-success' });
+    const job = createShareJob({
+      destinationId: 'dest-status',
+      payload: storySharePayload(),
+    });
+    runtime.enqueue(job);
+    await runtime.processNext();
+
+    const entry = runtime.history.list()[0];
+    expect(entry).toBeDefined();
+    expect(entry.productId).toBe('prod-001');
+    expect(entry.destinationId).toBe('dest-status');
+    expect(entry.format).toBe('story');
+    expect(entry.recordedAt).toEqual(expect.any(String));
+    expect(entry.status).toBe('sent');
+    expect(entry.error).toBeNull();
+    expect(entry.attempts).toBe(1);
+    expect(entry.dryRun).toBe(true);
+    expect(entry.realDispatch).toBe(false);
+  });
+
+  it('registra erro quando o job falha', async () => {
+    const t0 = new Date('2026-08-25T18:00:00.000Z');
+    const runtime = createAutomationRuntime({ now: () => t0 });
+    const job = createShareJob(validShareJobInput(), { now: () => t0 });
+    runtime.enqueue(job);
+
+    await runtime.processNext();
+
+    const entry = runtime.history.byJob(job.id)[0];
+    expect(entry.success).toBe(false);
+    expect(entry.error).toMatch(/real dispatch disabled|dispatch failed/i);
+    expect(entry.attempts).toBe(1);
+  });
+
+  it('webhooks só carregam payload público (sem comissão/secret)', () => {
+    const runtime = createAutomationRuntime();
+    runtime.enqueue(createShareJob(validShareJobInput()));
+
+    const serialized = JSON.stringify(runtime.webhooks.list()).toLowerCase();
+    expect(serialized).not.toContain('commission');
+    expect(serialized).not.toContain('comiss');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('accesstoken');
+  });
+});
+
+describe('integrações futuras permanecem desligadas', () => {
+  it('expõe WhatsApp e MCP/Jarvis como contratos inativos', () => {
     const runtime = createAutomationRuntime();
     expect(runtime.integrations.whatsapp.enabled).toBe(false);
     expect(runtime.integrations.mcp.enabled).toBe(false);
     expect(runtime.integrations.jarvis.enabled).toBe(false);
-    expect(() => runtime.integrations.whatsapp.connect()).toThrow(/not enabled|etapa 1/i);
+    expect(() => runtime.integrations.whatsapp.connect()).toThrow(
+      /not enabled|etapa 1/i,
+    );
     expect(() => runtime.integrations.mcp.connect()).toThrow(/not enabled|etapa 1/i);
+    expect(() => runtime.integrations.jarvis.connect()).toThrow(/not enabled|etapa 1/i);
   });
 });
