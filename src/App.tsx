@@ -2,13 +2,17 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Product, FilterType, AffiliateSettings } from './types/product';
 import { productService } from './services/productService';
 import { Header } from './components/Header';
+import { HowItWorks } from './components/HowItWorks';
 import { FilterTabs } from './components/FilterTabs';
 import { ProductCard } from './components/ProductCard';
+import { GroupsShortcutCard } from './components/GroupsShortcutCard';
 import { OfferPreviewModal } from './components/OfferPreviewModal';
 import { SettingsModal } from './components/SettingsModal';
+import { GroupsModal } from './components/GroupsModal';
+import { NotificationsModal } from './components/NotificationsModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { MobileBottomNav } from './components/MobileBottomNav';
-import { ShoppingBag, SearchX, Zap, TrendingUp } from 'lucide-react';
+import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
+import { SearchX } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AffiliateSettings = {
   affiliateTag: 'aff_shopp_vip',
@@ -22,11 +26,14 @@ export function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
+  const [activeNav, setActiveNav] = useState<MainNavTab>('home');
 
   // Modal States
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [isGroupsModalOpen, setIsGroupsModalOpen] = useState<boolean>(false);
+  const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
 
   // Settings & Toasts
   const [settings, setSettings] = useState<AffiliateSettings>(DEFAULT_SETTINGS);
@@ -73,99 +80,62 @@ export function App() {
     setIsOfferModalOpen(true);
   };
 
-  // Stats calculation for active view
-  const stats = useMemo(() => {
-    const totalCount = products.length;
-    const avgCommission =
-      totalCount > 0
-        ? products.reduce((acc, p) => acc + p.privateCommission.estimatedValue, 0) / totalCount
-        : 0;
-    const maxDiscount =
-      totalCount > 0 ? Math.max(...products.map((p) => p.discountPercentage)) : 0;
-
-    return {
-      totalCount,
-      avgCommissionFormatted: avgCommission.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }),
-      maxDiscount,
-    };
-  }, [products]);
+  // Nav handler from bottom bar
+  const handleSelectNav = (nav: MainNavTab) => {
+    setActiveNav(nav);
+    if (nav === 'groups') {
+      setIsGroupsModalOpen(true);
+    } else if (nav === 'config') {
+      setIsSettingsModalOpen(true);
+    } else if (nav === 'products') {
+      // scroll to products or switch focus
+      window.scrollTo({ top: 280, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col pb-20 sm:pb-12 text-slate-900">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col pb-24 sm:pb-16 text-slate-900 font-sans">
       
-      {/* Top Header */}
+      {/* Top Header matching reference (ShopLink Afiliados) */}
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
-        totalProducts={products.length}
+        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
       />
 
-      {/* Main Content Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
         
-        {/* Quick Affiliate Stats Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-            <div className="p-2 sm:p-2.5 bg-orange-50 text-[#EE4D2D] rounded-xl shrink-0">
-              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">Produtos Disponíveis</div>
-              <div className="text-base sm:text-lg font-black text-slate-900">{stats.totalCount} no catálogo</div>
-            </div>
-          </div>
+        {/* Step 1: Como Funciona (Interactive stepper matching reference) */}
+        {!searchQuery && <HowItWorks />}
 
-          <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-emerald-100 shadow-xs flex items-center gap-3">
-            <div className="p-2 sm:p-2.5 bg-emerald-50 text-emerald-600 rounded-xl shrink-0">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div>
-              <div className="text-[11px] text-emerald-700 font-semibold uppercase tracking-wider">Média de Ganho / Venda</div>
-              <div className="text-base sm:text-lg font-black text-emerald-800">{stats.avgCommissionFormatted}</div>
-            </div>
-          </div>
-
-          <div className="col-span-2 sm:col-span-1 p-3.5 sm:p-4 bg-white rounded-2xl border border-amber-100 shadow-xs flex items-center gap-3">
-            <div className="p-2 sm:p-2.5 bg-amber-50 text-amber-600 rounded-xl shrink-0">
-              <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div>
-              <div className="text-[11px] text-amber-700 font-semibold uppercase tracking-wider">Maior Desconto</div>
-              <div className="text-base sm:text-lg font-black text-amber-900">Até {stats.maxDiscount}% OFF</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters and Title */}
+        {/* Step 2: Produtos em alta (Title + Filters) */}
         <FilterTabs
           activeFilter={activeFilter}
           onSelectFilter={setActiveFilter}
           resultCount={products.length}
         />
 
-        {/* Product Grid */}
+        {/* Step 3: Product Grid (2 columns on mobile, 3-4 on desktop/notebook) */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 pt-4">
-            {[1, 2, 3, 4, 5, 6].map((idx) => (
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+            {[1, 2, 3, 4].map((idx) => (
               <div
                 key={idx}
-                className="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 animate-pulse"
+                className="bg-white rounded-3xl p-3 sm:p-4 space-y-3 animate-pulse border border-slate-100"
               >
                 <div className="aspect-square bg-slate-200 rounded-2xl w-full" />
-                <div className="space-y-2">
-                  <div className="h-4 bg-slate-200 rounded w-3/4" />
-                  <div className="h-4 bg-slate-200 rounded w-1/2" />
-                </div>
-                <div className="h-10 bg-slate-200 rounded-xl" />
+                <div className="h-4 bg-slate-200 rounded w-3/4" />
+                <div className="h-4 bg-slate-200 rounded w-1/2" />
+                <div className="h-8 bg-slate-200 rounded-xl" />
               </div>
             ))}
           </div>
         ) : products.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
             {products.map((product) => (
               <ProductCard
                 key={product.id}
@@ -176,14 +146,14 @@ export function App() {
           </div>
         ) : (
           /* Empty State */
-          <div className="text-center py-16 px-4 bg-white rounded-3xl border border-slate-200 max-w-md mx-auto space-y-4">
-            <div className="w-14 h-14 bg-orange-100 text-[#EE4D2D] rounded-2xl flex items-center justify-center mx-auto">
-              <SearchX className="w-7 h-7" />
+          <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-100 max-w-sm mx-auto space-y-3">
+            <div className="w-12 h-12 bg-orange-100 text-[#EE4D2D] rounded-2xl flex items-center justify-center mx-auto">
+              <SearchX className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-900">Nenhum produto encontrado</h3>
+              <h3 className="text-sm font-bold text-slate-900">Nenhum produto encontrado</h3>
               <p className="text-xs text-slate-500">
-                Não encontramos ofertas para "{searchQuery}". Tente usar palavras-chave mais genéricas.
+                Não encontramos ofertas para "{searchQuery}".
               </p>
             </div>
             <button
@@ -194,6 +164,9 @@ export function App() {
             </button>
           </div>
         )}
+
+        {/* Step 4: Seus Grupos (Card widget matching bottom section in reference) */}
+        <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />
 
       </main>
 
@@ -214,14 +187,26 @@ export function App() {
         onShowToast={showToast}
       />
 
+      {/* Groups Modal */}
+      <GroupsModal
+        isOpen={isGroupsModalOpen}
+        onClose={() => setIsGroupsModalOpen(false)}
+        onShowToast={showToast}
+      />
+
+      {/* Notifications Modal */}
+      <NotificationsModal
+        isOpen={isNotificationsModalOpen}
+        onClose={() => setIsNotificationsModalOpen(false)}
+      />
+
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
-      {/* Mobile Native-Feel Bottom Navigation */}
+      {/* Mobile Native-Feel Bottom Navigation (Matching reference: Início, Produtos, Grupos, Config) */}
       <MobileBottomNav
-        activeFilter={activeFilter}
-        onSelectFilter={setActiveFilter}
-        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        activeNav={activeNav}
+        onSelectNav={handleSelectNav}
       />
 
     </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Product } from '../types/product';
-import { Star, Flame, ExternalLink, Sparkles, Lock, Truck } from 'lucide-react';
+import { Sparkles, DollarSign, ExternalLink, Star, Truck } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -27,10 +27,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   });
 
   return (
-    <div className="group bg-white rounded-3xl border border-slate-200/90 hover:border-orange-300 hover:shadow-xl hover:shadow-orange-500/5 transition-all duration-300 flex flex-col overflow-hidden">
+    <div className="group bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-100/80 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-200 transition-all duration-300 flex flex-col justify-between">
       
       {/* Product Image & Badges */}
-      <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
+      <div className="relative aspect-square w-full bg-slate-50 rounded-2xl overflow-hidden mb-3 border border-slate-100">
         <img
           src={product.imageUrl}
           alt={product.name}
@@ -38,118 +38,93 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
         />
 
-        {/* Discount Badge */}
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
-          <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/30 tracking-tight">
-            -{product.discountPercentage}% OFF
+        {/* Discount Badge (Top-left, orange pill like reference) */}
+        <div className="absolute top-2.5 left-2.5">
+          <span className="px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/30">
+            {product.discountPercentage}% OFF
           </span>
-          {product.isHot && (
-            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500 text-white flex items-center gap-1 shadow-xs">
-              <Flame className="w-3 h-3 fill-white" />
-              EM ALTA
-            </span>
-          )}
         </div>
 
-        {/* Free shipping badge if available */}
+        {/* Free Shipping Tag (Bottom-left) */}
         {product.isFreeShipping && (
-          <div className="absolute bottom-3 left-3">
-            <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-emerald-600/90 backdrop-blur-xs text-white flex items-center gap-1 shadow-xs">
+          <div className="absolute bottom-2 left-2">
+            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-600/90 text-white flex items-center gap-1 shadow-xs">
               <Truck className="w-3 h-3" />
               Frete Grátis
             </span>
           </div>
         )}
-
-        {/* Category Tag */}
-        <div className="absolute top-3 right-3">
-          <span className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-900/60 backdrop-blur-md text-white">
-            {product.category}
-          </span>
-        </div>
       </div>
 
-      {/* Product Content */}
-      <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-4">
+      {/* Product Info & Content */}
+      <div className="flex-1 flex flex-col justify-between space-y-3">
         
-        {/* Name & Ratings */}
-        <div className="space-y-2">
-          {/* Social Proof (Rating & Sales) */}
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <div className="flex items-center gap-1 font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              <span>{product.rating.toFixed(1)}</span>
-              <span className="text-slate-400 font-normal">({product.reviewsCount})</span>
-            </div>
-            <span className="font-medium text-slate-500">
-              {product.salesCountText}
+        {/* Name & Rating */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-slate-500 font-medium truncate max-w-[120px]">
+              {product.category}
             </span>
+            <div className="flex items-center gap-0.5 text-amber-500 font-semibold">
+              <Star className="w-3 h-3 fill-amber-400" />
+              <span>{product.rating.toFixed(1)}</span>
+            </div>
           </div>
 
-          {/* Product Title */}
           <h3 
-            className="font-bold text-slate-900 text-sm sm:text-base leading-snug line-clamp-2 hover:text-[#EE4D2D] transition-colors" 
+            className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug line-clamp-2 min-h-[2.5rem] group-hover:text-[#EE4D2D] transition-colors"
             title={product.name}
           >
             {product.name}
           </h3>
         </div>
 
-        {/* Pricing Section */}
-        <div className="pt-2 border-t border-slate-100">
-          <div className="flex items-baseline gap-2">
-            <span className="text-xs text-slate-400 line-through">
+        {/* Price Section */}
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400 line-through">
               {originalPriceFormatted}
             </span>
-            <span className="text-xs font-bold text-emerald-600">
-              Economia de {(product.originalPrice - product.currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
+              Economize {(product.originalPrice - product.currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </span>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          <div className="text-base sm:text-xl font-black text-[#EE4D2D] tracking-tight">
             {currentPriceFormatted}
           </div>
         </div>
 
-        {/* PRIVATE COMMISSION AREA (Owner Only) */}
-        <div className="p-3 bg-gradient-to-r from-amber-50/90 to-orange-50/90 border border-amber-200/90 rounded-2xl relative overflow-hidden">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 uppercase tracking-wider">
-              <Lock className="w-3.5 h-3.5 text-amber-600" />
-              <span>Área Privada • Seu Ganho</span>
+        {/* PRIVATE COMMISSION PILL (Matching the green pill in the reference) */}
+        <div className="p-2 sm:p-2.5 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-1.5 text-emerald-800">
+          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold truncate">
+            <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shrink-0 font-black">
+              $
             </div>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900">
-              {product.privateCommission.percentage}% Comissão
-            </span>
+            <span>Sua comissão:</span>
           </div>
-
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs text-slate-600 font-medium">Ganho estimado:</span>
-            <span className="text-base font-extrabold text-emerald-700">
-              + {commissionValueFormatted} <span className="text-[10px] font-medium text-slate-500">/venda</span>
-            </span>
-          </div>
+          <span className="text-xs sm:text-sm font-black text-emerald-700 shrink-0">
+            {commissionValueFormatted}
+          </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-          {/* Primary: Gerar oferta */}
+        {/* Primary Action: Divulgar / Gerar oferta */}
+        <div className="pt-1 space-y-1.5">
           <button
             onClick={() => onGenerateOffer(product)}
-            className="w-full py-2.5 px-3 bg-gradient-to-r from-[#FF5722] to-[#EE4D2D] hover:from-[#EE4D2D] hover:to-[#D73211] active:scale-[0.98] text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            className="w-full py-2.5 px-3 bg-gradient-to-r from-[#FF5722] to-[#EE4D2D] hover:from-[#EE4D2D] hover:to-[#D73211] active:scale-[0.98] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-orange-500/25 hover:shadow-orange-500/35 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Gerar oferta</span>
+            <span>Divulgar</span>
           </button>
 
-          {/* Secondary: Ver produto */}
           <a
             href={product.affiliateUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            className="w-full py-1 text-slate-400 hover:text-slate-600 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
           >
-            <span>Ver produto</span>
-            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            <span>Ver produto original</span>
+            <ExternalLink className="w-3 h-3" />
           </a>
         </div>
 
