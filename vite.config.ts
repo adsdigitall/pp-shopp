@@ -10,6 +10,13 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      // Backend interno com as credenciais Shopee (server-side only)
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true
+      }
+    }
   }
 })
