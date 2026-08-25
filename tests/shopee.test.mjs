@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, afterAll } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -105,7 +105,15 @@ function startMockUpstream() {
       req.on('data', (c) => (body += c));
       req.on('end', () => {
         seenRequests.push({ auth: req.headers.authorization || '', body });
-        const kwMatch = /keyword:\s*"([^"]*)"/.exec(body);
+        let queryText = '';
+        try {
+          queryText = String(JSON.parse(body)?.query || '');
+        } catch {
+          queryText = body;
+        }
+        // queryText é a query GraphQL já desescapada (JSON.parse acima),
+        // então as aspas são literais.
+        const kwMatch = /keyword:\s*"([^"]*)"/.exec(queryText);
         const keyword = kwMatch ? kwMatch[1] : '';
 
         if (keyword === '__timeout__') {
@@ -224,7 +232,7 @@ async function startInstance(name, { envFile, stripCreds = false }) {
   throw new Error(`instância ${name} não subiu`);
 }
 
-beforeAll(async () => {
+before(async () => {
   await startMockUpstream();
   await startInstance('ok', { envFile: envOkFile });
   await startInstance('wrong', { envFile: envWrongFile });
@@ -232,9 +240,9 @@ beforeAll(async () => {
     envFile: envMissingFile,
     stripCreds: true,
   });
-}, 20000);
+}, { timeout: 20000 });
 
-afterAll(() => {
+after(() => {
   for (const child of Object.values(procs)) child.kill();
   if (mockServer) mockServer.close();
 });
