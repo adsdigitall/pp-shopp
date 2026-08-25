@@ -141,15 +141,17 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
             <div className="flex-1 min-w-0 space-y-1.5 text-center sm:text-left">
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#EE4D2D] bg-orange-100/90 px-2 py-0.5 rounded-md">
                 <Tag className="w-3 h-3" />
-                {offer.discountBadge}
+                {offer.discountBadge || 'Oferta Shopee'}
               </span>
               <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
                 {offer.productName}
               </h3>
               <div className="flex items-baseline justify-center sm:justify-start gap-2 pt-0.5">
-                <span className="text-xs text-slate-400 line-through">
-                  {offer.originalPriceFormatted}
-                </span>
+                {offer.originalPriceFormatted && (
+                  <span className="text-xs text-slate-400 line-through">
+                    {offer.originalPriceFormatted}
+                  </span>
+                )}
                 <span className="text-lg font-black text-emerald-700">
                   {offer.promotionalPriceFormatted}
                 </span>

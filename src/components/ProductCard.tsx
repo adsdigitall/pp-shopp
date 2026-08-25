@@ -11,20 +11,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onGenerateOffer,
 }) => {
-  const currentPriceFormatted = product.currentPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  const currentPriceFormatted =
+    product.currentPrice !== null
+      ? product.currentPrice.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })
+      : 'Não disponível';
 
-  const originalPriceFormatted = product.originalPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  // Preço anterior só existe quando a API informou o % de desconto
+  const hasOriginalPrice =
+    product.originalPrice !== null &&
+    product.currentPrice !== null &&
+    product.originalPrice > product.currentPrice;
 
-  const commissionValueFormatted = product.privateCommission.estimatedValue.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  const originalPriceFormatted = hasOriginalPrice
+    ? (product.originalPrice as number).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      })
+    : '';
+
+  const commissionValueFormatted =
+    product.privateCommission.estimatedValue !== null
+      ? product.privateCommission.estimatedValue.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })
+      : 'Não disponível';
 
   return (
     <div className="group bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-100/80 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-200 transition-all duration-300 flex flex-col justify-between">
@@ -39,11 +53,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         />
 
         {/* Discount Badge (Top-left, orange pill like reference) */}
-        <div className="absolute top-2.5 left-2.5">
-          <span className="px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/30">
-            {product.discountPercentage}% OFF
-          </span>
-        </div>
+        {product.discountPercentage !== null && product.discountPercentage > 0 && (
+          <div className="absolute top-2.5 left-2.5">
+            <span className="px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/30">
+              {product.discountPercentage}% OFF
+            </span>
+          </div>
+        )}
 
         {/* Free Shipping Tag (Bottom-left) */}
         {product.isFreeShipping && (
@@ -63,11 +79,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="space-y-1">
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span className="text-slate-500 font-medium truncate max-w-[120px]">
-              {product.category}
+              {product.category || ''}
             </span>
             <div className="flex items-center gap-0.5 text-amber-500 font-semibold">
-              <Star className="w-3 h-3 fill-amber-400" />
-              <span>{product.rating.toFixed(1)}</span>
+              {product.rating !== null ? (
+                <>
+                  <Star className="w-3 h-3 fill-amber-400" />
+                  <span>{product.rating.toFixed(1)}</span>
+                </>
+              ) : (
+                <span className="text-slate-400">Não disponível</span>
+              )}
             </div>
           </div>
 
@@ -81,14 +103,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Price Section */}
         <div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-400 line-through">
-              {originalPriceFormatted}
-            </span>
-            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
-              Economize {(product.originalPrice - product.currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-          </div>
+          {hasOriginalPrice && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400 line-through">
+                {originalPriceFormatted}
+              </span>
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
+                Economize{' '}
+                {((
+                  product.originalPrice as number
+                ) - (product.currentPrice as number)).toLocaleString('pt-BR', {
+                  style: 'currency',
+                  currency: 'BRL',
+                })}
+              </span>
+            </div>
+          )}
           <div className="text-base sm:text-xl font-black text-[#EE4D2D] tracking-tight">
             {currentPriceFormatted}
           </div>
@@ -118,10 +148,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </button>
 
           <a
-            href={product.affiliateUrl}
+            href={product.affiliateUrl ?? undefined}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full py-1 text-slate-400 hover:text-slate-600 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
+            className={`w-full py-1 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors ${
+              product.affiliateUrl
+                ? 'text-slate-400 hover:text-slate-600'
+                : 'text-slate-300 pointer-events-none'
+            }`}
           >
             <span>Ver produto original</span>
             <ExternalLink className="w-3 h-3" />

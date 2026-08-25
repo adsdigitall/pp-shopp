@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:vite": "vite",
+    "dev:api": "node server/index.mjs",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -13,21 +13,48 @@ export interface GeneratedOffer {
   highlights: string[];
 }
 
+const UNAVAILABLE = 'Não disponível';
+
 /**
  * Generates promotional text and shareable payload for an affiliate offer.
  * CRITICAL SECURITY RULE:
  * This generator NEVER includes commission %, commission R$ or private owner data.
+ * Campos ausentes na API são tratados como "Não disponível" — nunca inventados.
  */
 export function generateShareableOffer(product: Product, format: OfferFormat = 'standard'): GeneratedOffer {
-  const origPrice = product.originalPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-  const promoPrice = product.currentPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-  const discountBadge = `-${product.discountPercentage}% OFF`;
+  const origPrice =
+    product.originalPrice !== null && product.currentPrice !== null && product.originalPrice > product.currentPrice
+      ? product.originalPrice.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })
+      : '';
+  const promoPrice =
+    product.currentPrice !== null
+      ? product.currentPrice.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })
+      : UNAVAILABLE;
+  const discountBadge =
+    product.discountPercentage !== null && product.discountPercentage > 0
+      ? `-${product.discountPercentage}% OFF`
+      : '';
+
+  const ratingText =
+    product.rating !== null
+      ? `⭐ Avaliação: ${product.rating.toFixed(1)} / 5.0${
+          product.salesCountText ? ` (${product.salesCountText})` : ''
+        }`
+      : product.salesCountText
+        ? `📦 ${product.salesCountText}`
+        : '';
+
+  const highlights = Array.isArray(product.highlightPoints)
+    ? product.highlightPoints.filter(Boolean)
+    : [];
+
+  const link = product.affiliateUrl || 'Link indisponível';
 
   let copyText = '';
 
@@ -38,17 +65,17 @@ export function generateShareableOffer(product: Product, format: OfferFormat = '
       ``,
       `📦 *${product.name}*`,
       ``,
-      `❌ De: ~${origPrice}~`,
-      `✅ *Por apenas: ${promoPrice}* (${discountBadge})`,
+      origPrice ? `❌ De: ~${origPrice}~` : '',
+      `✅ *Por apenas: ${promoPrice}*${discountBadge ? ` (${discountBadge})` : ''}`,
       product.isFreeShipping ? `🚚 Frete Grátis disponível no app!` : '',
-      `⭐ Avaliação: ${product.rating.toFixed(1)} / 5.0 (${product.salesCountText})`,
+      ratingText,
       ``,
-      `✨ *Destaques do Produto:*`,
-      ...product.highlightPoints.map((point) => ` • ${point}`),
-      ``,
+      ...(highlights.length > 0
+        ? [`✨ *Destaques do Produto:*`, ...highlights.map((point) => ` • ${point}`), ``]
+        : []),
       `🛒 *COMPRE COM DESCONTO NO LINK OFICIAL:*`,
       `👇👇👇`,
-      `${product.affiliateUrl}`,
+      `${link}`,
       ``,
       `⚡ _Corra antes que o estoque com desconto acabe!_`,
     ]
@@ -58,9 +85,9 @@ export function generateShareableOffer(product: Product, format: OfferFormat = '
     // Compact format for Instagram Direct / Twitter / Fast SMS
     copyText = [
       `🚨 *ACHADINHO SHOPEE:* ${product.name}`,
-      `💰 De ~${origPrice}~ por APENAS *${promoPrice}* (${discountBadge})`,
+      `💰 ${origPrice ? `De ~${origPrice}~ por APENAS` : 'Por apenas'} *${promoPrice}*${discountBadge ? ` (${discountBadge})` : ''}`,
       product.isFreeShipping ? `🚚 Cupom de Frete Grátis!` : '',
-      `👉 Garanta o seu aqui: ${product.affiliateUrl}`,
+      `👉 Garanta o seu aqui: ${link}`,
     ]
       .filter((line) => line !== '')
       .join('\n');
@@ -70,12 +97,14 @@ export function generateShareableOffer(product: Product, format: OfferFormat = '
       `⏳ *MENOR PREÇO HISTÓRICO!* 💥`,
       ``,
       `👉 *${product.name}*`,
-      `🔥 De ~${origPrice}~ por *${promoPrice}*`,
-      `🏷️ *Desconto de ${product.discountPercentage}% aplicado!*`,
+      `🔥 De ~${origPrice || UNAVAILABLE}~ por *${promoPrice}*`,
+      discountBadge ? `🏷️ *Desconto de ${discountBadge} aplicado!*` : '',
       ``,
       `🔗 *Link direto com desconto:*`,
-      `${product.affiliateUrl}`,
-    ].join('\n');
+      `${link}`,
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
   }
 
   return {
@@ -85,9 +114,9 @@ export function generateShareableOffer(product: Product, format: OfferFormat = '
     originalPriceFormatted: origPrice,
     promotionalPriceFormatted: promoPrice,
     discountBadge,
-    affiliateLink: product.affiliateUrl,
+    affiliateLink: link,
     copyText,
-    descriptionSnippet: product.shortDescription,
-    highlights: product.highlightPoints,
+    descriptionSnippet: product.shortDescription || UNAVAILABLE,
+    highlights,
   };
 }

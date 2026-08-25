@@ -12,7 +12,7 @@ import { GroupsModal } from './components/GroupsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
-import { SearchX } from 'lucide-react';
+import { SearchX, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AffiliateSettings = {
   affiliateTag: 'aff_shopp_vip',
@@ -24,7 +24,9 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
 
@@ -57,18 +59,31 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Debounce da busca para não spammar a API da Shopee a cada tecla
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Fetch products via service
   const loadProducts = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
-      const data = await productService.getProducts(activeFilter, searchQuery);
+      const data = await productService.getProducts(activeFilter, debouncedSearchQuery);
       setProducts(data);
     } catch (err) {
-      showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setProducts([]);
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Erro ao carregar produtos. Tente novamente mais tarde.';
+      setErrorMessage(message);
     } finally {
       setLoading(false);
     }
-  }, [activeFilter, searchQuery, showToast]);
+  }, [activeFilter, debouncedSearchQuery]);
 
   useEffect(() => {
     loadProducts();
@@ -134,6 +149,23 @@ export function App() {
               </div>
             ))}
           </div>
+        ) : errorMessage ? (
+          /* Error State (backend / Shopee indisponível) */
+          <div className="text-center py-12 px-4 bg-white rounded-3xl border border-red-100 max-w-sm mx-auto space-y-3">
+            <div className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">Erro ao carregar produtos</h3>
+              <p className="text-xs text-slate-500">{errorMessage}</p>
+            </div>
+            <button
+              onClick={loadProducts}
+              className="px-5 py-2.5 bg-[#EE4D2D] text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+            >
+              Tentar novamente
+            </button>
+          </div>
         ) : products.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
             {products.map((product) => (
@@ -151,16 +183,20 @@ export function App() {
               <SearchX className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-900">Nenhum produto encontrado</h3>
+              <h3 className="text-sm font-bold text-slate-900">
+                {debouncedSearchQuery ? 'Nenhum produto encontrado' : 'Sem produtos no momento'}
+              </h3>
               <p className="text-xs text-slate-500">
-                Não encontramos ofertas para "{searchQuery}".
+                {debouncedSearchQuery
+                  ? `Não encontramos ofertas para "${debouncedSearchQuery}".`
+                  : 'A Shopee não retornou ofertas para este filtro agora. Tente novamente em instantes.'}
               </p>
             </div>
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => (debouncedSearchQuery ? setSearchQuery('') : loadProducts())}
               className="px-4 py-2 bg-[#EE4D2D] text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
             >
-              Limpar busca
+              {debouncedSearchQuery ? 'Limpar busca' : 'Recarregar'}
             </button>
           </div>
         )}

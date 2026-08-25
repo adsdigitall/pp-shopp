@@ -3,15 +3,15 @@ import { MOCK_PRODUCTS } from '../mocks/productsData';
 
 /**
  * Service to manage products.
- * Currently uses mock data, fully isolated and ready to be plugged into Shopee Open API / Backend endpoints.
+ * Uses mock data clearly separated for future API integration.
  */
 class ProductService {
   /**
    * Fetch list of products according to filter and search keyword.
    */
   async getProducts(filter: FilterType = 'trending', query: string = ''): Promise<Product[]> {
-    // Simulate brief network latency for realistic feel
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Simulate brief latency for realistic feel
+    await new Promise((resolve) => setTimeout(resolve, 60));
 
     let list = [...MOCK_PRODUCTS];
 
@@ -29,22 +29,18 @@ class ProductService {
     // Apply sorting/filtering rules
     switch (filter) {
       case 'trending':
-        // Trending: prioritize items flagged as hot or high rating
         list.sort((a, b) => (b.isHot ? 1 : 0) - (a.isHot ? 1 : 0) || b.rating - a.rating);
         break;
 
       case 'top_sales':
-        // Top Sales: highest sales count first
         list.sort((a, b) => b.salesCount - a.salesCount);
         break;
 
       case 'high_commission':
-        // Highest Commission: sort by estimated private commission value
         list.sort((a, b) => b.privateCommission.estimatedValue - a.privateCommission.estimatedValue);
         break;
 
       case 'high_discount':
-        // Highest Discount %: sort by discount percentage
         list.sort((a, b) => b.discountPercentage - a.discountPercentage);
         break;
 

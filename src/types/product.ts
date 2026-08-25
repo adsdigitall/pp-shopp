@@ -1,28 +1,35 @@
 export type FilterType = 'trending' | 'top_sales' | 'high_commission' | 'high_discount';
 
 export interface PrivateCommission {
-  percentage: number; // e.g. 14 -> 14%
-  estimatedValue: number; // e.g. 18.90
+  percentage: number | null; // ex.: 14 -> 14% | null = API não forneceu
+  estimatedValue: number | null; // ex.: 18.90 | null = API não forneceu
 }
 
+/**
+ * Produto normalizado vindo do nosso backend (/api/products).
+ * Campos `null` = dado não disponível na Shopee Affiliate API.
+ * REGRA: NUNCA inventar valores no frontend — exibir "Não disponível".
+ *
+ * privateCommission é PRIVATE DATA: proibido em payloads de compartilhamento.
+ */
 export interface Product {
   id: string;
   name: string;
   imageUrl: string;
-  currentPrice: number;
-  originalPrice: number;
-  discountPercentage: number;
-  salesCount: number;
-  salesCountText: string;
-  rating: number;
-  reviewsCount: number;
-  category: string;
-  shopeeUrl: string;
-  affiliateUrl: string;
+  currentPrice: number | null;
+  originalPrice: number | null;
+  discountPercentage: number | null;
+  salesCount: number | null;
+  salesCountText: string | null;
+  rating: number | null;
+  reviewsCount: number | null;
+  category: string | null;
+  shopeeUrl: string | null;
+  affiliateUrl: string | null;
   isFreeShipping?: boolean;
   isHot?: boolean;
   privateCommission: PrivateCommission;
-  shortDescription: string;
+  shortDescription: string | null;
   highlightPoints: string[];
 }
 
