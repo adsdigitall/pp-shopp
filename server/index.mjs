@@ -142,7 +142,7 @@ async function handleOfferCopy(req, res) {
       signal: controller.signal,
     });
     const json = await response.json().catch(() => null);
-    const text = json?.output_text;
+    const text = json?.output_text || json?.output?.flatMap((item) => item?.content || []).find((item) => item?.type === 'output_text')?.text;
     if (!response.ok || typeof text !== 'string' || !text.trim()) {
       sendJson(res, 502, { error: { code: 'OPENAI_COPY_ERROR', message: 'Não foi possível gerar a copy agora.' } });
       return;
