@@ -11,20 +11,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onGenerateOffer,
 }) => {
-  const currentPriceFormatted = product.currentPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  const currentPriceFormatted = product.currentPrice !== null && product.currentPrice !== undefined
+    ? product.currentPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : 'Confira no link';
 
-  const originalPriceFormatted = product.originalPrice.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  const originalPriceFormatted = product.originalPrice !== null && product.originalPrice !== undefined
+    ? product.originalPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : null;
 
-  const commissionValueFormatted = product.privateCommission.estimatedValue.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+  const commissionValueFormatted = product.privateCommission?.estimatedValue !== null && product.privateCommission?.estimatedValue !== undefined
+    ? product.privateCommission.estimatedValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : '—';
 
   return (
     <div className="group bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-100/80 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-200 transition-all duration-300 flex flex-col justify-between">
@@ -41,7 +38,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Discount Badge (Top-left, orange pill like reference) */}
         <div className="absolute top-2.5 left-2.5">
           <span className="px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/30">
-            {product.discountPercentage}% OFF
+            {product.discountPercentage ?? 0}% OFF
           </span>
         </div>
 
@@ -71,11 +68,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="space-y-1">
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span className="text-slate-500 font-medium truncate max-w-[120px]">
-              {product.category}
+              {product.category || 'Shopee'}
             </span>
             <div className="flex items-center gap-0.5 text-amber-500 font-semibold">
               <Star className="w-3 h-3 fill-amber-400" />
-              <span>{product.rating.toFixed(1)}</span>
+              <span>{typeof product.rating === 'number' ? product.rating.toFixed(1) : '—'}</span>
             </div>
           </div>
 
@@ -91,10 +88,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div>
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] text-slate-400 line-through">
-              {originalPriceFormatted}
+            {originalPriceFormatted || 'Preço promocional'}
             </span>
             <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
-              Economize {(product.originalPrice - product.currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {product.originalPrice !== null && product.originalPrice !== undefined && product.currentPrice !== null && product.currentPrice !== undefined
+                ? `Economize ${(product.originalPrice - product.currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                : 'Oferta Shopee'}
             </span>
           </div>
           <div className="text-base sm:text-xl font-black text-[#EE4D2D] tracking-tight">
