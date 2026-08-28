@@ -58,13 +58,15 @@ export function App() {
   }, []);
 
   // Fetch products via service
-  const loadProducts = useCallback(async () => {
-    setLoading(true);
+  const loadProducts = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await productService.getProducts(activeFilter, searchQuery);
       setProducts(data);
     } catch (err) {
-      showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
+      if (!silent) {
+        showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -72,6 +74,15 @@ export function App() {
 
   useEffect(() => {
     loadProducts();
+  }, [loadProducts]);
+
+  // Atualiza ofertas a cada 2 minutos sem interromper a navegação do usuário.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') loadProducts(true);
+    };
+    const intervalId = window.setInterval(refresh, 120_000);
+    return () => window.clearInterval(intervalId);
   }, [loadProducts]);
 
   // Open Offer Modal
