@@ -242,6 +242,11 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
                       De: {offer.originalPriceFormatted}
                     </div>
                   )}
+                  {offer.discountBadge && (
+                    <div className="text-orange-300 font-bold">
+                      Desconto: {offer.discountBadge}
+                    </div>
+                  )}
                   <div className="text-sm sm:text-base font-extrabold text-white flex items-center gap-1.5">
                     <span>Por {offer.promotionalPriceFormatted}</span>
                     <span className="text-emerald-400 text-base">✅</span>
