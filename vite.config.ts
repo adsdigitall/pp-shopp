@@ -11,6 +11,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    allowedHosts: ['.trycloudflare.com'],
     proxy: {
       // Backend interno com as credenciais Shopee (server-side only)
       '/api': {
