@@ -30,9 +30,9 @@ interface OfferPreviewModalProps {
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-async function createOfferCardFile(product: Product, offer: ReturnType<typeof generateShareableOffer>): Promise<File | null> {
+async function createOfferCardFile(product: Product, offer: ReturnType<typeof generateShareableOffer>, imageUrl = offer.imageUrl): Promise<File | null> {
   try {
-    const response = await fetch(offer.imageUrl, { mode: 'cors' });
+    const response = await fetch(imageUrl, { mode: 'cors' });
     if (!response.ok) return null;
     const bitmap = await createImageBitmap(await response.blob());
     const canvas = document.createElement('canvas');
@@ -58,9 +58,21 @@ async function createOfferCardFile(product: Product, offer: ReturnType<typeof ge
     ctx.fillStyle = '#ffb000';
     ctx.font = '700 36px Arial';
     if (offer.discountBadge) ctx.fillText(offer.discountBadge, 70, 1100);
+    if (offer.originalPriceFormatted) {
+      ctx.fillStyle = '#aeb8c2';
+      ctx.font = '500 30px Arial';
+      ctx.fillText(offer.originalPriceFormatted, 70, 1150);
+      const oldWidth = ctx.measureText(offer.originalPriceFormatted).width;
+      ctx.strokeStyle = '#aeb8c2';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(70, 1140);
+      ctx.lineTo(70 + oldWidth, 1140);
+      ctx.stroke();
+    }
     ctx.fillStyle = '#ffffff';
     ctx.font = '900 58px Arial';
-    ctx.fillText(offer.promotionalPriceFormatted, 70, 1190);
+    ctx.fillText(offer.promotionalPriceFormatted, 70, offer.originalPriceFormatted ? 1220 : 1190);
     ctx.fillStyle = '#aeb8c2';
     ctx.font = '500 24px Arial';
     ctx.fillText('Toque no link para aproveitar', 70, 1260);
@@ -83,6 +95,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -90,12 +103,14 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
       setImageStyle('badge_discount');
       setCopiedText(false);
       setCopiedLink(false);
+      setGeneratedImageUrl(null);
     }
   }, [isOpen, product?.id]);
 
   if (!isOpen || !product) return null;
 
   const offer = generateShareableOffer(product, reaction, imageStyle);
+  const displayImageUrl = generatedImageUrl || offer.imageUrl;
 
   // Button: Regenerar Copy
   const handleRegenerateCopy = () => {
@@ -109,14 +124,33 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
   };
 
   // Button: Regenerar Imagem
-  const handleRegenerateImage = () => {
+  const handleRegenerateImage = async () => {
     setIsRegeneratingImage(true);
-    setTimeout(() => {
-      const next = getNextImageStyle(imageStyle);
-      setImageStyle(next);
+    try {
+      const response = await fetch('/api/offer-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: product.name,
+          description: product.shortDescription,
+          discount: offer.discountBadge,
+          price: offer.promotionalPriceFormatted,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && typeof data?.imageUrl === 'string') {
+        setGeneratedImageUrl(data.imageUrl);
+        onShowToast('Imagem gerada com IA!', undefined, 'success');
+      } else {
+        setImageStyle(getNextImageStyle(imageStyle));
+        onShowToast('IA indisponível; visual alternativo aplicado.', undefined, 'info');
+      }
+    } catch {
+      setImageStyle(getNextImageStyle(imageStyle));
+      onShowToast('IA indisponível; visual alternativo aplicado.', undefined, 'info');
+    } finally {
       setIsRegeneratingImage(false);
-      onShowToast('Visual da imagem atualizado!', undefined, 'info');
-    }, 250);
+    }
   };
 
   // Button: Copiar Texto
@@ -152,7 +186,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
           text: offer.copyText,
           url: offer.affiliateLink,
         };
-        const personalizedCard = await createOfferCardFile(product, offer);
+        const personalizedCard = await createOfferCardFile(product, offer, displayImageUrl);
         if (personalizedCard && (!navigator.canShare || navigator.canShare({ files: [personalizedCard] }))) {
           shareData = { ...shareData, files: [personalizedCard] };
         }
@@ -237,7 +271,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
               ) : (
                 <>
                   <img
-                    src={offer.imageUrl}
+                    src={displayImageUrl}
                     alt={offer.productName}
                     className="w-full h-full object-cover"
                   />

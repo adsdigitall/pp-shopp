@@ -68,6 +68,55 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 12_000) reject(new Error('BODY_TOO_LARGE'));
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(raw || '{}')); } catch { reject(new Error('INVALID_JSON')); }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function handleOfferImage(req, res) {
+  const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (!apiKey) {
+    sendJson(res, 503, { error: { code: 'OPENAI_NOT_CONFIGURED', message: 'Geração de imagem não configurada.' } });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const name = typeof body.name === 'string' ? body.name.slice(0, 180) : 'Produto em oferta';
+  const description = typeof body.description === 'string' ? body.description.slice(0, 300) : '';
+  const discount = typeof body.discount === 'string' ? body.discount.slice(0, 30) : '';
+  const price = typeof body.price === 'string' ? body.price.slice(0, 30) : '';
+  const prompt = `Crie uma arte vertical elegante para divulgar este produto em um grupo de WhatsApp. Produto: ${name}. Descrição: ${description}. Use fundo limpo, foto/ilustração comercial do produto, destaque visual para ${discount || 'oferta'} e preço ${price || 'promocional'}. Não invente logotipos, selos oficiais ou informações que não foram fornecidas. Não inclua URL nem comissão. Texto curto, legível e em português.`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1536', quality: 'medium', output_format: 'jpeg' }),
+      signal: controller.signal,
+    });
+    const json = await response.json().catch(() => null);
+    const b64 = json?.data?.[0]?.b64_json;
+    if (!response.ok || typeof b64 !== 'string') {
+      sendJson(res, 502, { error: { code: 'OPENAI_IMAGE_ERROR', message: 'Não foi possível gerar a arte agora.' } });
+      return;
+    }
+    sendJson(res, 200, { imageUrl: `data:image/jpeg;base64,${b64}` });
+  } catch {
+    sendJson(res, 504, { error: { code: 'OPENAI_TIMEOUT', message: 'A geração demorou demais. Tente novamente.' } });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function parseProductsQuery(url) {
   const qs = url.searchParams;
   const rawFilter = (qs.get('sort') || qs.get('filter') || 'trending').trim();
@@ -149,6 +198,11 @@ export function createApp() {
       if (req.method === 'GET' && pathOnly === '/api/products') {
         await handleProducts(req, res);
         logLine(`GET /api/products 200 ${Date.now() - startedAt}ms`);
+        return;
+      }
+
+      if (req.method === 'POST' && pathOnly === '/api/offer-image') {
+        await handleOfferImage(req, res);
         return;
       }
 
