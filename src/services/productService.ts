@@ -37,6 +37,8 @@ interface ApiProductDto {
   affiliateUrl?: string | null;
   rating?: number | null;
   soldCount?: number | null;
+  categoryIds?: number[];
+  isFlashSale?: boolean;
 }
 
 interface ApiEnvelope {
@@ -82,6 +84,8 @@ function mapDtoToProduct(dto: ApiProductDto): Product {
     },
     shortDescription: null,
     highlightPoints: [],
+    categoryIds: Array.isArray(dto.categoryIds) ? dto.categoryIds : [],
+    isFlashSale: dto.isFlashSale === true,
   };
 }
 

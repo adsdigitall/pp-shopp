@@ -76,6 +76,8 @@ function parseProductsQuery(url) {
     : 'trending';
 
   const keyword = (qs.get('keyword') || '').toString().slice(0, 80);
+  const categoryIdRaw = Number.parseInt(qs.get('categoryId') || '', 10);
+  const categoryId = Number.isInteger(categoryIdRaw) && categoryIdRaw > 0 ? categoryIdRaw : null;
 
   let page = Number.parseInt(qs.get('page') || '1', 10);
   if (!Number.isFinite(page) || page < 1) page = 1;
@@ -85,12 +87,12 @@ function parseProductsQuery(url) {
   if (!Number.isFinite(limit) || limit < 1) limit = 12;
   if (limit > 50) limit = 50;
 
-  return { filter, keyword, page, limit };
+  return { filter, keyword, categoryId, page, limit };
 }
 
 async function handleProducts(req, res) {
   const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
-  const { filter, keyword, page, limit } = parseProductsQuery(parsed);
+  const { filter, keyword, categoryId, page, limit } = parseProductsQuery(parsed);
 
   // Config lida a cada request: permite trocar .env.local sem restart
   // e facilita testes com variáveis isoladas.
@@ -101,6 +103,7 @@ async function handleProducts(req, res) {
     filter,
     page,
     limit,
+    categoryId,
     config,
   });
 

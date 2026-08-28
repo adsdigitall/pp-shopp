@@ -109,6 +109,14 @@ export function normalizeProductOffer(node) {
       const s = parseNumber(node.sales);
       return s === null ? null : Math.round(s);
     })(),
+    categoryIds: Array.isArray(node.productCatIds) ? node.productCatIds : [],
+    periodStartTime: parseNumber(node.periodStartTime),
+    periodEndTime: parseNumber(node.periodEndTime),
+    isFlashSale:
+      parseNumber(node.periodStartTime) !== null &&
+      parseNumber(node.periodEndTime) !== null &&
+      Date.now() / 1000 >= parseNumber(node.periodStartTime) &&
+      Date.now() / 1000 <= parseNumber(node.periodEndTime),
   };
 }
 

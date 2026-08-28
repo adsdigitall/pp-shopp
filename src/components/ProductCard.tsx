@@ -45,6 +45,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </span>
         </div>
 
+        {product.isFlashSale && (
+          <div className="absolute top-2.5 right-2.5">
+            <span className="px-2 py-1 rounded-xl text-[10px] font-black bg-violet-600 text-white shadow-md">
+              RELÂMPAGO
+            </span>
+          </div>
+        )}
+
         {/* Free Shipping Tag (Bottom-left) */}
         {product.isFreeShipping && (
           <div className="absolute bottom-2 left-2">

@@ -24,6 +24,8 @@ export interface Product {
   privateCommission: PrivateCommission;
   shortDescription: string;
   highlightPoints: string[];
+  categoryIds?: number[];
+  isFlashSale?: boolean;
 }
 
 export interface AffiliateSettings {

@@ -31,7 +31,10 @@ const PRODUCT_OFFER_FIELDS = `
       commissionRate
       commission
       shopId
-      shopName`;
+      shopName
+      productCatIds
+      periodStartTime
+      periodEndTime`;
 
 /** Escapa string para interpolação segura na query GraphQL inline. */
 function gqlEscapeString(value) {
@@ -71,6 +74,7 @@ export function mapFilterToShopeeArgs(filter) {
  *   filter?: 'trending'|'top_sales'|'high_commission'|'high_discount',
  *   page?: number,
  *   limit?: number,
+ *   categoryId?: number,
  *   config: { appId: string, secret: string, apiUrl: string, timeoutMs: number }
  * }} p
  * @returns {Promise<{ nodes: any[], pageInfo: { page: number, limit: number, hasNextPage: boolean } }>}
@@ -80,6 +84,7 @@ export async function searchProductOffers({
   filter = 'trending',
   page = 1,
   limit = 10,
+  categoryId = null,
   config,
 }) {
   const { listType, sortType } = mapFilterToShopeeArgs(filter);
@@ -93,6 +98,9 @@ export async function searchProductOffers({
   ];
   if (keyword.trim()) {
     args.unshift(`keyword: "${gqlEscapeString(keyword.trim())}"`);
+  }
+  if (Number.isInteger(categoryId) && categoryId > 0) {
+    args.unshift(`productCatId: ${categoryId}`);
   }
 
   const query = `{
