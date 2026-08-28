@@ -79,7 +79,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
     try {
       const response = await fetch('/api/offer-copy', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: product.name, description: product.shortDescription, discount: offer.discountBadge, price: offer.promotionalPriceFormatted, link: offer.affiliateLink, previous: displayCopyText }),
+        body: JSON.stringify({ name: product.name, description: product.shortDescription, originalPrice: offer.originalPriceFormatted, discount: offer.discountBadge, price: offer.promotionalPriceFormatted, link: offer.affiliateLink, previous: displayCopyText }),
       });
       const data = await response.json().catch(() => null);
       if (response.ok && typeof data?.copyText === 'string') {

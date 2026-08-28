@@ -93,6 +93,7 @@ async function handleOfferImage(req, res) {
   const description = typeof body.description === 'string' ? body.description.slice(0, 300) : '';
   const discount = typeof body.discount === 'string' ? body.discount.slice(0, 30) : '';
   const price = typeof body.price === 'string' ? body.price.slice(0, 30) : '';
+  const originalPrice = typeof body.originalPrice === 'string' ? body.originalPrice.slice(0, 30) : '';
   const prompt = `Crie uma imagem comercial bonita e limpa para este produto, para ser compartilhada ao lado de uma mensagem de oferta no WhatsApp. Produto: ${name}. Descrição: ${description}. Gere uma composição de lifestyle/produto com boa iluminação e fundo elegante. NÃO escreva nenhum texto, preço, percentual, URL, logotipo ou selo na imagem; a mensagem de texto será enviada separadamente.`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60_000);
@@ -131,7 +132,7 @@ async function handleOfferCopy(req, res) {
   const link = typeof body.link === 'string' ? body.link.slice(0, 300) : '';
   const previous = typeof body.previous === 'string' ? body.previous.slice(0, 900) : '';
   const nonce = Math.random().toString(36).slice(2, 10);
-  const prompt = `Crie uma copy curta e diferente para WhatsApp para divulgar este produto. Variação ${nonce}. Produto: ${name}. Descrição: ${description}. Desconto real: ${discount || 'não informado'}. Preço atual: ${price || 'não informado'}. Link: ${link}. Copy anterior (NÃO REPETIR): ${previous || 'nenhuma'}. Use português natural, uma abertura diferente e senso de oportunidade/escassez sem inventar prazo, estoque ou promessa. Inclua nome, desconto se informado, preço, chamada para ação e o link. NÃO inclua comissão, percentual de comissão, segredos ou dados administrativos. Retorne somente o texto final, com marcação WhatsApp *negrito* e ~preço antigo riscado~ quando aplicável.`;
+  const prompt = `Crie uma copy curta e diferente para WhatsApp para divulgar este produto. Variação ${nonce}. Produto: ${name}. Descrição: ${description}. Preço antigo: ${originalPrice || 'não informado'}. Desconto real: ${discount || 'não informado'}. Preço atual: ${price || 'não informado'}. Link: ${link}. Copy anterior (NÃO REPETIR): ${previous || 'nenhuma'}. Use português natural, uma abertura diferente e senso de oportunidade/escassez sem inventar prazo, estoque ou promessa. Inclua nome, preço antigo riscado com ~ quando informado, desconto se informado, preço atual, chamada para ação e o link. NÃO inclua comissão, percentual de comissão, segredos ou dados administrativos. Retorne somente o texto final, com marcação WhatsApp *negrito*.`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
