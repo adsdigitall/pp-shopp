@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Product, FilterType, AffiliateSettings } from './types/product';
 import { productService } from './services/productService';
 import { Header } from './components/Header';
@@ -25,6 +25,10 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [hasNextPage, setHasNextPage] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
@@ -69,8 +73,10 @@ export function App() {
     if (!silent) setLoading(true);
     try {
       const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
-      const data = await productService.getProducts(activeFilter, combinedQuery);
-      setProducts(data);
+      const result = await productService.getProductsPage(activeFilter, combinedQuery, 1);
+      setProducts(result.products);
+      setHasNextPage(result.hasNextPage);
+      setCurrentPage(1);
     } catch (err) {
       if (!silent) {
         showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
@@ -83,6 +89,36 @@ export function App() {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  const loadMoreProducts = useCallback(async () => {
+    if (loading || loadingMore || !hasNextPage) return;
+    setLoadingMore(true);
+    try {
+      const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
+      const nextPage = currentPage + 1;
+      const result = await productService.getProductsPage(activeFilter, combinedQuery, nextPage);
+      setProducts((current) => {
+        const ids = new Set(current.map((product) => product.id));
+        return [...current, ...result.products.filter((product) => !ids.has(product.id))];
+      });
+      setHasNextPage(result.hasNextPage);
+      setCurrentPage(nextPage);
+    } catch {
+      showToast('Não foi possível carregar mais ofertas', 'Tente novamente em instantes.', 'error');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeFilter, activeCategory, searchQuery, hasNextPage, loading, loadingMore, currentPage, showToast]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMoreProducts();
+    }, { rootMargin: '500px 0px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loadMoreProducts]);
 
   // Atualiza ofertas a cada 2 minutos sem interromper a navegação do usuário.
   useEffect(() => {
@@ -207,6 +243,10 @@ export function App() {
             </button>
           </div>
         )}
+
+        <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-xs font-semibold text-slate-500">
+          {loadingMore ? 'Carregando mais ofertas reais…' : hasNextPage ? 'Role para carregar mais' : 'Você chegou ao fim desta lista'}
+        </div>
 
         {/* Step 4: Seus Grupos (Card widget matching bottom section in reference) */}
         <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />

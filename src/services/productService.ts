@@ -97,15 +97,17 @@ class ProductService {
    * Busca produtos reais via backend interno.
    * @throws ProductsApiError quando o backend ou a Shopee falharem.
    */
-  async getProducts(
+  async getProductsPage(
     filter: FilterType = 'trending',
     query: string = '',
+    page = 1,
     signal?: AbortSignal
-  ): Promise<Product[]> {
+  ): Promise<{ products: Product[]; hasNextPage: boolean }> {
     const activeFilter = VALID_FILTERS.includes(filter) ? filter : 'trending';
 
     const params = new URLSearchParams();
     params.set('sort', activeFilter);
+    params.set('page', String(page));
     params.set('limit', activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value' ? '50' : '12');
     if (activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value') params.set('sort', 'high_commission');
     if (query.trim()) params.set('keyword', query.trim());
@@ -142,7 +144,15 @@ class ProductService {
       products = products.filter((product) => (product.privateCommission?.estimatedValue ?? 0) >= minimum);
     }
     if (activeFilter === 'best_value') products.sort((a, b) => (a.currentPrice ?? Number.POSITIVE_INFINITY) - (b.currentPrice ?? Number.POSITIVE_INFINITY));
-    return products;
+    return {
+      products,
+      hasNextPage: body.meta?.hasNextPage === true,
+    };
+  }
+
+  async getProducts(filter: FilterType = 'trending', query: string = '', signal?: AbortSignal): Promise<Product[]> {
+    const result = await this.getProductsPage(filter, query, 1, signal);
+    return result.products;
   }
 
   /**
