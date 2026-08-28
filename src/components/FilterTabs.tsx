@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilterType } from '../types/product';
-import { Flame, TrendingUp, DollarSign, Percent } from 'lucide-react';
+import { Flame, TrendingUp, DollarSign, Percent, BadgeDollarSign, ShoppingBag } from 'lucide-react';
 
 interface FilterTabsProps {
   activeFilter: FilterType;
@@ -18,6 +18,9 @@ export const FilterTabs: React.FC<FilterTabsProps> = ({
     { id: 'top_sales', label: 'Mais vendidos', icon: <TrendingUp className="w-3.5 h-3.5" /> },
     { id: 'high_commission', label: 'Maior comissão', icon: <DollarSign className="w-3.5 h-3.5" /> },
     { id: 'high_discount', label: 'Maior desconto', icon: <Percent className="w-3.5 h-3.5" /> },
+    { id: 'commission_8', label: 'Comissão ≥ R$ 8', icon: <BadgeDollarSign className="w-3.5 h-3.5" /> },
+    { id: 'commission_10', label: 'Comissão ≥ R$ 10', icon: <BadgeDollarSign className="w-3.5 h-3.5" /> },
+    { id: 'best_value', label: 'Barato + comissão', icon: <ShoppingBag className="w-3.5 h-3.5" /> },
   ];
 
   return (

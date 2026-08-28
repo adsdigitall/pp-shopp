@@ -12,7 +12,7 @@ import { GroupsModal } from './components/GroupsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
-import { SearchX } from 'lucide-react';
+import { SearchX, Layers3 } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AffiliateSettings = {
   affiliateTag: 'aff_shopp_vip',
@@ -25,6 +25,7 @@ export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
 
@@ -61,7 +62,8 @@ export function App() {
   const loadProducts = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const data = await productService.getProducts(activeFilter, searchQuery);
+      const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
+      const data = await productService.getProducts(activeFilter, combinedQuery);
       setProducts(data);
     } catch (err) {
       if (!silent) {
@@ -70,7 +72,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [activeFilter, searchQuery, showToast]);
+  }, [activeFilter, activeCategory, searchQuery, showToast]);
 
   useEffect(() => {
     loadProducts();
@@ -107,7 +109,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col pb-24 sm:pb-16 text-slate-900 font-sans">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff7ed_0%,#f8fafc_42%,#eef2ff_100%)] flex flex-col pb-24 sm:pb-16 text-slate-900 font-sans">
       
       {/* Top Header matching reference (ShopLink Afiliados) */}
       <Header
@@ -129,6 +131,27 @@ export function App() {
           onSelectFilter={setActiveFilter}
           resultCount={products.length}
         />
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-2xl border border-white/70 bg-white/65 p-2.5 shadow-sm backdrop-blur-md">
+          <div className="flex items-center gap-2 px-1.5 text-xs font-bold text-slate-600">
+            <Layers3 className="h-4 w-4 text-[#EE4D2D]" />
+            <span>Categoria / nicho</span>
+          </div>
+          <select
+            value={activeCategory}
+            onChange={(event) => setActiveCategory(event.target.value)}
+            className="w-full sm:w-auto flex-1 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+            aria-label="Filtrar por categoria ou nicho"
+          >
+            <option value="">Todos os nichos</option>
+            <option value="eletrônicos">Eletrônicos</option>
+            <option value="casa">Casa e cozinha</option>
+            <option value="moda">Moda</option>
+            <option value="beleza">Beleza</option>
+            <option value="acessórios">Acessórios</option>
+            <option value="celular">Celulares e informática</option>
+          </select>
+        </div>
 
         {/* Step 3: Product Grid (2 columns on mobile, 3-4 on desktop/notebook) */}
         {loading ? (

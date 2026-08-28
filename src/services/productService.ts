@@ -11,6 +11,9 @@ const VALID_FILTERS: FilterType[] = [
   'top_sales',
   'high_commission',
   'high_discount',
+  'commission_8',
+  'commission_10',
+  'best_value',
 ];
 
 export class ProductsApiError extends Error {
@@ -103,7 +106,8 @@ class ProductService {
 
     const params = new URLSearchParams();
     params.set('sort', activeFilter);
-    params.set('limit', '12');
+    params.set('limit', activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value' ? '50' : '12');
+    if (activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value') params.set('sort', 'high_commission');
     if (query.trim()) params.set('keyword', query.trim());
 
     let response: Response;
@@ -132,7 +136,13 @@ class ProductService {
     const list: ApiProductDto[] = Array.isArray(body.products)
       ? body.products
       : [];
-    return list.map(mapDtoToProduct);
+    let products = list.map(mapDtoToProduct);
+    if (activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value') {
+      const minimum = activeFilter === 'commission_10' ? 10 : 8;
+      products = products.filter((product) => (product.privateCommission?.estimatedValue ?? 0) >= minimum);
+    }
+    if (activeFilter === 'best_value') products.sort((a, b) => (a.currentPrice ?? Number.POSITIVE_INFINITY) - (b.currentPrice ?? Number.POSITIVE_INFINITY));
+    return products;
   }
 
   /**

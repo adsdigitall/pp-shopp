@@ -1,4 +1,4 @@
-export type FilterType = 'trending' | 'top_sales' | 'high_commission' | 'high_discount';
+export type FilterType = 'trending' | 'top_sales' | 'high_commission' | 'high_discount' | 'commission_8' | 'commission_10' | 'best_value';
 
 export interface PrivateCommission {
   percentage: number; // e.g. 14 -> 14%

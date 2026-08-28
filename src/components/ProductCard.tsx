@@ -24,7 +24,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     : '—';
 
   return (
-    <div className="group bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-100/80 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-200 transition-all duration-300 flex flex-col justify-between">
+    <div className="group bg-white/80 backdrop-blur-md rounded-3xl p-3.5 sm:p-4 border border-white/80 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-200 transition-all duration-300 flex flex-col justify-between">
       
       {/* Product Image & Badges */}
       <div className="relative aspect-square w-full bg-slate-50 rounded-2xl overflow-hidden mb-3 border border-slate-100">
