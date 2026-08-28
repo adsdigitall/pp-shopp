@@ -117,6 +117,44 @@ async function handleOfferImage(req, res) {
   }
 }
 
+async function handleOfferCopy(req, res) {
+  const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (!apiKey) {
+    sendJson(res, 503, { error: { code: 'OPENAI_NOT_CONFIGURED', message: 'Geração de copy não configurada.' } });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const name = typeof body.name === 'string' ? body.name.slice(0, 180) : 'Produto em oferta';
+  const description = typeof body.description === 'string' ? body.description.slice(0, 300) : '';
+  const discount = typeof body.discount === 'string' ? body.discount.slice(0, 30) : '';
+  const price = typeof body.price === 'string' ? body.price.slice(0, 30) : '';
+  const link = typeof body.link === 'string' ? body.link.slice(0, 300) : '';
+  const previous = typeof body.previous === 'string' ? body.previous.slice(0, 900) : '';
+  const nonce = Math.random().toString(36).slice(2, 10);
+  const prompt = `Crie uma copy curta e diferente para WhatsApp para divulgar este produto. Variação ${nonce}. Produto: ${name}. Descrição: ${description}. Desconto real: ${discount || 'não informado'}. Preço atual: ${price || 'não informado'}. Link: ${link}. Copy anterior (NÃO REPETIR): ${previous || 'nenhuma'}. Use português natural, uma abertura diferente e senso de oportunidade/escassez sem inventar prazo, estoque ou promessa. Inclua nome, desconto se informado, preço, chamada para ação e o link. NÃO inclua comissão, percentual de comissão, segredos ou dados administrativos. Retorne somente o texto final, com marcação WhatsApp *negrito* e ~preço antigo riscado~ quando aplicável.`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', input: prompt, temperature: 1 }),
+      signal: controller.signal,
+    });
+    const json = await response.json().catch(() => null);
+    const text = json?.output_text;
+    if (!response.ok || typeof text !== 'string' || !text.trim()) {
+      sendJson(res, 502, { error: { code: 'OPENAI_COPY_ERROR', message: 'Não foi possível gerar a copy agora.' } });
+      return;
+    }
+    sendJson(res, 200, { copyText: text.trim() });
+  } catch {
+    sendJson(res, 504, { error: { code: 'OPENAI_TIMEOUT', message: 'A geração demorou demais. Tente novamente.' } });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function parseProductsQuery(url) {
   const qs = url.searchParams;
   const rawFilter = (qs.get('sort') || qs.get('filter') || 'trending').trim();
@@ -203,6 +241,11 @@ export function createApp() {
 
       if (req.method === 'POST' && pathOnly === '/api/offer-image') {
         await handleOfferImage(req, res);
+        return;
+      }
+
+      if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
+        await handleOfferCopy(req, res);
         return;
       }
 

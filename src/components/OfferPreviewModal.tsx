@@ -54,6 +54,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
   const [copiedText, setCopiedText] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedCopy, setGeneratedCopy] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,6 +63,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
       setCopiedText(false);
       setCopiedLink(false);
       setGeneratedImageUrl(null);
+      setGeneratedCopy(null);
     }
   }, [isOpen, product?.id]);
 
@@ -69,16 +71,30 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
 
   const offer = generateShareableOffer(product, reaction, imageStyle);
   const displayImageUrl = generatedImageUrl || offer.imageUrl;
+  const displayCopyText = generatedCopy || offer.copyText;
 
   // Button: Regenerar Copy
-  const handleRegenerateCopy = () => {
+  const handleRegenerateCopy = async () => {
     setIsRegeneratingCopy(true);
-    setTimeout(() => {
-      const next = getNextReaction(reaction);
-      setReaction(next);
+    try {
+      const response = await fetch('/api/offer-copy', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: product.name, description: product.shortDescription, discount: offer.discountBadge, price: offer.promotionalPriceFormatted, link: offer.affiliateLink, previous: displayCopyText }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && typeof data?.copyText === 'string') {
+        setGeneratedCopy(data.copyText);
+        onShowToast('Nova copy criada!', undefined, 'success');
+      } else {
+        setReaction(getNextReaction(reaction));
+        onShowToast('IA indisponível; copy alternativa aplicada.', undefined, 'info');
+      }
+    } catch {
+      setReaction(getNextReaction(reaction));
+      onShowToast('IA indisponível; copy alternativa aplicada.', undefined, 'info');
+    } finally {
       setIsRegeneratingCopy(false);
-      onShowToast('Copy atualizada!', undefined, 'info');
-    }, 250);
+    }
   };
 
   // Button: Regenerar Imagem
@@ -114,7 +130,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
   // Button: Copiar Texto
   const handleCopyText = async () => {
     try {
-      await navigator.clipboard.writeText(offer.copyText);
+      await navigator.clipboard.writeText(displayCopyText);
       setCopiedText(true);
       onShowToast('Texto copiado com sucesso!', 'Pronto para enviar no WhatsApp.', 'success');
       setTimeout(() => setCopiedText(false), 2000);
@@ -141,7 +157,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
       try {
         let shareData: ShareData = {
           title: `Oferta Shopee: ${offer.productName}`,
-          text: offer.copyText,
+          text: displayCopyText,
         };
         const productImage = await createImageFile(displayImageUrl, offer.productId);
         if (productImage && (!navigator.canShare || navigator.canShare({ files: [productImage] }))) {
