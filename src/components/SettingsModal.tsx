@@ -98,6 +98,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Privacy Toggle */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">Tema do aplicativo</label>
+            <select
+              value={form.theme}
+              onChange={(e) => setForm({ ...form, theme: e.target.value as 'light' | 'dark' })}
+              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#EE4D2D] outline-none font-medium text-slate-800"
+            >
+              <option value="light">Claro</option>
+              <option value="dark">Escuro</option>
+            </select>
+          </div>
+
+          {/* Privacy Toggle */}
           <div className="pt-2">
             <label className="flex items-center justify-between p-3.5 bg-amber-50/70 border border-amber-200/70 rounded-2xl cursor-pointer">
               <div className="pr-3">

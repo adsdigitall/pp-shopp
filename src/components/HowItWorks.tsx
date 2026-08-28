@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShoppingCart, ClipboardList, MessageCircle, Coins, ChevronRight } from 'lucide-react';
 
-export const HowItWorks: React.FC = () => {
+export const HowItWorks: React.FC<{ onStepClick?: (step: number) => void }> = ({ onStepClick }) => {
   const steps = [
     {
       num: 1,
@@ -46,7 +46,7 @@ export const HowItWorks: React.FC = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 relative">
         {steps.map((step, idx) => (
-          <div key={step.num} className="flex flex-col items-center text-center relative group">
+          <button type="button" key={step.num} onClick={() => onStepClick?.(step.num)} className="flex flex-col items-center text-center relative group cursor-pointer">
             
             {/* Step Number Badge */}
             <div className="w-5 h-5 rounded-full bg-[#EE4D2D] text-white text-[11px] font-bold flex items-center justify-center mb-2 shadow-xs ring-2 ring-white">
@@ -72,7 +72,7 @@ export const HowItWorks: React.FC = () => {
                 <ChevronRight className="w-5 h-5" />
               </div>
             )}
-          </div>
+          </button>
         ))}
       </div>
     </div>

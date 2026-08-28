@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
   defaultFormat: 'standard',
   includeHashtags: true,
   showPrivateCommission: true,
+  theme: 'light',
 };
 
 export function App() {
@@ -39,6 +40,11 @@ export function App() {
   // Settings & Toasts
   const [settings, setSettings] = useState<AffiliateSettings>(DEFAULT_SETTINGS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  useEffect(() => {
+    document.body.classList.toggle('app-dark', settings.theme === 'dark');
+    return () => document.body.classList.remove('app-dark');
+  }, [settings.theme]);
 
   // Toast handler
   const showToast = useCallback((
@@ -123,7 +129,10 @@ export function App() {
       <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
         
         {/* Step 1: Como Funciona (Interactive stepper matching reference) */}
-        {!searchQuery && <HowItWorks />}
+        {!searchQuery && <HowItWorks onStepClick={(step) => {
+          if (step <= 2) window.scrollTo({ top: 280, behavior: 'smooth' });
+          if (step === 3) showToast('Escolha um produto para compartilhar', undefined, 'info');
+        }} />}
 
         {/* Step 2: Produtos em alta (Title + Filters) */}
         <FilterTabs

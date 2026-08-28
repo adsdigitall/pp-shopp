@@ -33,6 +33,7 @@ export interface AffiliateSettings {
   defaultFormat: 'standard' | 'compact' | 'urgent';
   includeHashtags: boolean;
   showPrivateCommission: boolean;
+  theme: 'light' | 'dark';
 }
 
 export type OfferFormat = 'standard' | 'compact' | 'urgent';
