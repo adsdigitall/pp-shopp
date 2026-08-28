@@ -318,7 +318,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
                 {/* 3. Pricing */}
                 <div className="pt-1 text-xs sm:text-sm space-y-0.5">
                   {offer.originalPriceFormatted && (
-                    <div className="text-slate-400">
+                    <div className="text-slate-400 line-through decoration-slate-400/80 decoration-2">
                       De: {offer.originalPriceFormatted}
                     </div>
                   )}
