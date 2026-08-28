@@ -30,54 +30,12 @@ interface OfferPreviewModalProps {
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-async function createOfferCardFile(product: Product, offer: ReturnType<typeof generateShareableOffer>, imageUrl = offer.imageUrl): Promise<File | null> {
+async function createImageFile(imageUrl: string, productId: string): Promise<File | null> {
   try {
     const response = await fetch(imageUrl, { mode: 'cors' });
     if (!response.ok) return null;
-    const bitmap = await createImageBitmap(await response.blob());
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1350;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.fillStyle = '#17212b';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(40, 40, 1000, 820);
-    const scale = Math.max(1000 / bitmap.width, 780 / bitmap.height);
-    const width = bitmap.width * scale;
-    const height = bitmap.height * scale;
-    ctx.drawImage(bitmap, 40 + (1000 - width) / 2, 60 + (780 - height) / 2, width, height);
-    ctx.fillStyle = '#ee4d2d';
-    ctx.fillRect(40, 820, 1000, 40);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 34px Arial';
-    ctx.fillText('OFERTA SHOPEE', 70, 980);
-    ctx.font = '700 40px Arial';
-    ctx.fillText(product.name.slice(0, 45), 70, 1040);
-    ctx.fillStyle = '#ffb000';
-    ctx.font = '700 36px Arial';
-    if (offer.discountBadge) ctx.fillText(offer.discountBadge, 70, 1100);
-    if (offer.originalPriceFormatted) {
-      ctx.fillStyle = '#aeb8c2';
-      ctx.font = '500 30px Arial';
-      ctx.fillText(offer.originalPriceFormatted, 70, 1150);
-      const oldWidth = ctx.measureText(offer.originalPriceFormatted).width;
-      ctx.strokeStyle = '#aeb8c2';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(70, 1140);
-      ctx.lineTo(70 + oldWidth, 1140);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 58px Arial';
-    ctx.fillText(offer.promotionalPriceFormatted, 70, offer.originalPriceFormatted ? 1220 : 1190);
-    ctx.fillStyle = '#aeb8c2';
-    ctx.font = '500 24px Arial';
-    ctx.fillText('Toque no link para aproveitar', 70, 1260);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-    return blob ? new File([blob], `oferta-${offer.productId}.jpg`, { type: 'image/jpeg' }) : null;
+    const blob = await response.blob();
+    return new File([blob], `produto-${productId}.jpg`, { type: blob.type || 'image/jpeg' });
   } catch {
     return null;
   }
@@ -184,11 +142,10 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
         let shareData: ShareData = {
           title: `Oferta Shopee: ${offer.productName}`,
           text: offer.copyText,
-          url: offer.affiliateLink,
         };
-        const personalizedCard = await createOfferCardFile(product, offer, displayImageUrl);
-        if (personalizedCard && (!navigator.canShare || navigator.canShare({ files: [personalizedCard] }))) {
-          shareData = { ...shareData, files: [personalizedCard] };
+        const productImage = await createImageFile(displayImageUrl, offer.productId);
+        if (productImage && (!navigator.canShare || navigator.canShare({ files: [productImage] }))) {
+          shareData = { ...shareData, files: [productImage] };
         }
         await navigator.share(shareData);
         onShowToast('Compartilhado com sucesso!', undefined, 'success');

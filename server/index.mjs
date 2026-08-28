@@ -93,7 +93,7 @@ async function handleOfferImage(req, res) {
   const description = typeof body.description === 'string' ? body.description.slice(0, 300) : '';
   const discount = typeof body.discount === 'string' ? body.discount.slice(0, 30) : '';
   const price = typeof body.price === 'string' ? body.price.slice(0, 30) : '';
-  const prompt = `Crie uma arte vertical elegante para divulgar este produto em um grupo de WhatsApp. Produto: ${name}. Descrição: ${description}. Use fundo limpo, foto/ilustração comercial do produto, destaque visual para ${discount || 'oferta'} e preço ${price || 'promocional'}. Não invente logotipos, selos oficiais ou informações que não foram fornecidas. Não inclua URL nem comissão. Texto curto, legível e em português.`;
+  const prompt = `Crie uma imagem comercial bonita e limpa para este produto, para ser compartilhada ao lado de uma mensagem de oferta no WhatsApp. Produto: ${name}. Descrição: ${description}. Gere uma composição de lifestyle/produto com boa iluminação e fundo elegante. NÃO escreva nenhum texto, preço, percentual, URL, logotipo ou selo na imagem; a mensagem de texto será enviada separadamente.`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60_000);
   try {

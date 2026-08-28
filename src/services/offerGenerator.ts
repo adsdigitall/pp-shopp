@@ -84,7 +84,7 @@ export function generateShareableOffer(
     ``,
     product.name,
     ``,
-    origPrice ? `De: ${origPrice}` : '',
+    origPrice ? `~De: ${origPrice}~` : '',
     discountBadge ? `*Desconto: ${discountBadge}*` : '',
     `*Por ${promoPrice} ✅*`,
     isFreeShipping ? `🚚 Frete Grátis disponível` : '',
