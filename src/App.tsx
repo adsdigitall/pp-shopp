@@ -33,6 +33,8 @@ export function App() {
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const seenSalesRef = useRef<Set<string>>(new Set());
 
   // Modal States
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -49,6 +51,35 @@ export function App() {
     document.body.classList.toggle('app-dark', settings.theme === 'dark');
     return () => document.body.classList.remove('app-dark');
   }, [settings.theme]);
+
+  const enableSaleNotifications = useCallback(async () => {
+    if (!('Notification' in window)) { showToast('Notificações não suportadas neste navegador', undefined, 'error'); return; }
+    const permission = await Notification.requestPermission();
+    setNotificationsEnabled(permission === 'granted');
+    showToast(permission === 'granted' ? 'Notificações de vendas ativadas' : 'Permissão de notificações não concedida', undefined, permission === 'granted' ? 'success' : 'info');
+  }, [showToast]);
+
+  useEffect(() => {
+    const checkSales = async () => {
+      try {
+        const response = await fetch('/api/sales?hours=168');
+        if (!response.ok) return;
+        const body = await response.json();
+        const sales = Array.isArray(body.sales) ? body.sales : [];
+        for (const sale of sales) {
+          const id = String(sale.conversionId || sale.checkoutId || '');
+          if (!id || seenSalesRef.current.has(id)) continue;
+          seenSalesRef.current.add(id);
+          if (notificationsEnabled && Notification.permission === 'granted') {
+            new Notification('Nova venda Shopee', { body: `Comissão registrada: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
+          }
+        }
+      } catch { /* falha silenciosa para não interromper o app */ }
+    };
+    checkSales();
+    const intervalId = window.setInterval(checkSales, 120_000);
+    return () => window.clearInterval(intervalId);
+  }, [notificationsEnabled]);
 
   // Toast handler
   const showToast = useCallback((
@@ -197,6 +228,9 @@ export function App() {
             <option value="celular">Celulares e informática</option>
           </select>
         </div>
+        <button type="button" onClick={enableSaleNotifications} className="w-full rounded-2xl border border-orange-200 bg-orange-50/80 px-4 py-3 text-left text-xs font-bold text-orange-800 shadow-sm backdrop-blur-md hover:bg-orange-100">
+          {notificationsEnabled ? '🔔 Notificações de vendas ativadas' : '🔔 Ativar notificações quando sair uma venda'}
+        </button>
 
         {/* Step 3: Product Grid (2 columns on mobile, 3-4 on desktop/notebook) */}
         {loading ? (

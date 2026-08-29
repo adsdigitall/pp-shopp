@@ -9,6 +9,7 @@ import {
   mapFilterToShopeeArgs,
 } from './services/shopee/products.mjs';
 import { normalizeProductOffers } from './services/shopee/normalizer.mjs';
+import { fetchRecentConversions } from './services/shopee/reports.mjs';
 
 /**
  * Backend interno do PWA de afiliados.
@@ -216,6 +217,15 @@ async function handleProducts(req, res) {
   });
 }
 
+async function handleSales(req, res) {
+  const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+  const hoursRaw = Number.parseInt(parsed.searchParams.get('hours') || '24', 10);
+  const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 168) : 24;
+  const config = loadShopeeConfig();
+  const { nodes, pageInfo } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - hours * 3600 });
+  sendJson(res, 200, { sales: nodes, meta: { source: 'shopee-affiliate-api', operation: 'conversionReport', hasNextPage: Boolean(pageInfo.hasNextPage) } });
+}
+
 /**
  * @returns {import('node:http').Server}
  */
@@ -239,6 +249,11 @@ export function createApp() {
       if (req.method === 'GET' && pathOnly === '/api/products') {
         await handleProducts(req, res);
         logLine(`GET /api/products 200 ${Date.now() - startedAt}ms`);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly === '/api/sales') {
+        await handleSales(req, res);
+        logLine(`GET /api/sales 200 ${Date.now() - startedAt}ms`);
         return;
       }
 
