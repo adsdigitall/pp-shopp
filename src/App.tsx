@@ -57,7 +57,7 @@ export function App() {
     const permission = await Notification.requestPermission();
     setNotificationsEnabled(permission === 'granted');
     showToast(permission === 'granted' ? 'Notificações de vendas ativadas' : 'Permissão de notificações não concedida', undefined, permission === 'granted' ? 'success' : 'info');
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     const checkSales = async () => {
