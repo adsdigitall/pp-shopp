@@ -80,6 +80,8 @@ export function generateShareableOffer(
   const headline = selectedReaction.headline;
 
   const copyLines = [
+    '🚨 RADAR ENCONTROU!',
+    ``,
     headline,
     ``,
     product.name,
@@ -87,6 +89,8 @@ export function generateShareableOffer(
     origPrice ? `~De: ${origPrice}~` : '',
     discountBadge ? `*Desconto: ${discountBadge}*` : '',
     `*Por ${promoPrice} ✅*`,
+    `🏷️ Oferta na Shopee`,
+    `⚡ Pode acabar a qualquer momento`,
     isFreeShipping ? `🚚 Frete Grátis disponível` : '',
     ``,
     `compre aqui 🛍️`,
