@@ -10,6 +10,9 @@ import {
 } from './services/shopee/products.mjs';
 import { normalizeProductOffers } from './services/shopee/normalizer.mjs';
 import { fetchRecentConversions } from './services/shopee/reports.mjs';
+import { getPublicKey, saveSubscription, notifySubscribers } from './services/push.mjs';
+
+const notifiedSaleIds = new Set();
 
 /**
  * Backend interno do PWA de afiliados.
@@ -223,6 +226,12 @@ async function handleSales(req, res) {
   const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 168) : 24;
   const config = loadShopeeConfig();
   const { nodes, pageInfo } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - hours * 3600 });
+  for (const sale of nodes) {
+    const saleId = String(sale.conversionId || sale.checkoutId || '');
+    if (!saleId || notifiedSaleIds.has(saleId)) continue;
+    notifiedSaleIds.add(saleId);
+    await notifySubscribers({ title: 'Nova venda Shopee', body: `Produto vendido — comissão: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
+  }
   sendJson(res, 200, { sales: nodes, meta: { source: 'shopee-affiliate-api', operation: 'conversionReport', hasNextPage: Boolean(pageInfo.hasNextPage) } });
 }
 
@@ -254,6 +263,17 @@ export function createApp() {
       if (req.method === 'GET' && pathOnly === '/api/sales') {
         await handleSales(req, res);
         logLine(`GET /api/sales 200 ${Date.now() - startedAt}ms`);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly === '/api/push/public-key') {
+        const publicKey = getPublicKey();
+        sendJson(res, publicKey ? 200 : 503, publicKey ? { publicKey } : { error: { code: 'PUSH_NOT_CONFIGURED', message: 'Notificações push não configuradas.' } });
+        return;
+      }
+      if (req.method === 'POST' && pathOnly === '/api/push/subscribe') {
+        const subscription = await readJsonBody(req);
+        const saved = saveSubscription(subscription);
+        sendJson(res, saved ? 201 : 400, saved ? { ok: true } : { error: { code: 'INVALID_SUBSCRIPTION', message: 'Assinatura de notificação inválida.' } });
         return;
       }
 

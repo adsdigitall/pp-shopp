@@ -22,6 +22,12 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
   theme: 'light',
 };
 
+function decodeVapidKey(value: string) {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4);
+  const raw = atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+}
+
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -55,6 +61,19 @@ export function App() {
   const enableSaleNotifications = useCallback(async () => {
     if (!('Notification' in window)) { showToast('Notificações não suportadas neste navegador', undefined, 'error'); return; }
     const permission = await Notification.requestPermission();
+    if (permission === 'granted' && 'serviceWorker' in navigator && 'PushManager' in window) {
+      try {
+        const keyResponse = await fetch('/api/push/public-key');
+        const { publicKey } = await keyResponse.json();
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeVapidKey(publicKey) });
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscription) });
+      } catch {
+        showToast('Push ainda não configurado no servidor', undefined, 'info');
+        setNotificationsEnabled(false);
+        return;
+      }
+    }
     setNotificationsEnabled(permission === 'granted');
     showToast(permission === 'granted' ? 'Notificações de vendas ativadas' : 'Permissão de notificações não concedida', undefined, permission === 'granted' ? 'success' : 'info');
   }, []);
