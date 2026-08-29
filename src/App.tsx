@@ -78,6 +78,24 @@ export function App() {
     showToast(permission === 'granted' ? 'Notificações de vendas ativadas' : 'Permissão de notificações não concedida', undefined, permission === 'granted' ? 'success' : 'info');
   }, []);
 
+  const sendTestNotification = useCallback(async () => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      showToast('Ative as notificacoes primeiro', undefined, 'info');
+      return;
+    }
+    const options = { body: 'Produto de teste - comissao: R$ 10,00', icon: '/favicon.svg', badge: '/favicon.svg' };
+    try {
+      const registration = await navigator.serviceWorker?.ready;
+      if (registration) {
+        await registration.showNotification('Nova venda Shopee (teste)', options);
+        return;
+      }
+    } catch {
+      // Fallback para a notificacao do navegador quando o service worker nao estiver pronto.
+    }
+    new Notification('Nova venda Shopee (teste)', options);
+  }, []);
+
   useEffect(() => {
     const checkSales = async () => {
       try {
@@ -247,9 +265,12 @@ export function App() {
             <option value="celular">Celulares e informática</option>
           </select>
         </div>
-        <button type="button" onClick={enableSaleNotifications} className="w-full rounded-2xl border border-orange-200 bg-orange-50/80 px-4 py-3 text-left text-xs font-bold text-orange-800 shadow-sm backdrop-blur-md hover:bg-orange-100">
+        <div className="flex flex-col sm:flex-row gap-2">
+        <button type="button" onClick={enableSaleNotifications} className="flex-1 rounded-2xl border border-orange-200 bg-orange-50/80 px-4 py-3 text-left text-xs font-bold text-orange-800 shadow-sm backdrop-blur-md hover:bg-orange-100">
           {notificationsEnabled ? '🔔 Notificações de vendas ativadas' : '🔔 Ativar notificações quando sair uma venda'}
         </button>
+        {notificationsEnabled && <button type="button" onClick={sendTestNotification} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs font-bold text-slate-700 shadow-sm backdrop-blur-md hover:bg-slate-50">Enviar teste</button>}
+        </div>
 
         {/* Step 3: Product Grid (2 columns on mobile, 3-4 on desktop/notebook) */}
         {loading ? (
