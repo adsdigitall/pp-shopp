@@ -271,6 +271,12 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
             </div>
 
             {/* Clean Copy Content (Exact WhatsApp Structure) */}
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-3">
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-emerald-400">Copy que será enviada</div>
+              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100">
+                {displayCopyText}
+              </div>
+            </div>
             {isRegeneratingCopy ? (
               <div className="py-6 flex flex-col items-center justify-center gap-2 text-orange-400">
                 <Loader2 className="w-6 h-6 animate-spin" />
