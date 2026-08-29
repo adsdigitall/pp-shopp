@@ -55,6 +55,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [generatedCopy, setGeneratedCopy] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -64,12 +65,13 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
       setCopiedLink(false);
       setGeneratedImageUrl(null);
       setGeneratedCopy(null);
+      setCouponCode('');
     }
   }, [isOpen, product?.id]);
 
   if (!isOpen || !product) return null;
 
-  const offer = generateShareableOffer(product, reaction, imageStyle);
+  const offer = generateShareableOffer(product, reaction, imageStyle, couponCode);
   const displayImageUrl = generatedImageUrl || offer.imageUrl;
   const displayCopyText = generatedCopy || offer.copyText;
 
@@ -79,7 +81,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
     try {
       const response = await fetch('/api/offer-copy', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: product.name, description: product.shortDescription, originalPrice: offer.originalPriceFormatted, discount: offer.discountBadge, price: offer.promotionalPriceFormatted, link: offer.affiliateLink, previous: displayCopyText }),
+        body: JSON.stringify({ name: product.name, description: product.shortDescription, originalPrice: offer.originalPriceFormatted, discount: offer.discountBadge, price: offer.promotionalPriceFormatted, link: offer.affiliateLink, previous: displayCopyText, coupon: couponCode }),
       });
       const data = await response.json().catch(() => null);
       if (response.ok && typeof data?.copyText === 'string') {
@@ -357,6 +359,18 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
               <ImageIcon className={`w-3.5 h-3.5 text-[#EE4D2D] ${isRegeneratingImage ? 'animate-spin' : ''}`} />
               <span>{isRegeneratingImage ? 'Trocando...' : 'Regenerar imagem'}</span>
             </button>
+          </div>
+
+          <div className="flex items-center gap-2 p-2 bg-white rounded-2xl border border-slate-200">
+            <span className="text-base">🎟️</span>
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(event) => { setCouponCode(event.target.value.toUpperCase()); setGeneratedCopy(null); }}
+              placeholder="Cupom real (opcional)"
+              className="flex-1 bg-transparent text-xs font-medium text-slate-700 outline-none"
+              aria-label="Código de cupom"
+            />
           </div>
 
           {/* Quick Copy Link Row */}

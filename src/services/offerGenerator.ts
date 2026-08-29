@@ -48,7 +48,8 @@ const IMAGE_STYLES: ImageStyle[] = ['badge_discount', 'badge_full', 'badge_shipp
 export function generateShareableOffer(
   product: Product,
   reactionId: CopyReaction = 'love',
-  imageStyle: ImageStyle = 'badge_discount'
+  imageStyle: ImageStyle = 'badge_discount',
+  couponCode = ''
 ): GeneratedOffer {
   const origPrice =
     product.originalPrice !== null &&
@@ -88,6 +89,7 @@ export function generateShareableOffer(
     discountBadge ? `*Desconto: ${discountBadge}*` : '',
     `*Por ${promoPrice} ✅*`,
     `🏷️ Oferta na Shopee`,
+    couponCode.trim() ? `🎟️ Cupom: *${couponCode.trim()}*` : '',
     `⚡ Pode acabar a qualquer momento`,
     isFreeShipping ? `🚚 Frete Grátis disponível` : '',
     ``,
