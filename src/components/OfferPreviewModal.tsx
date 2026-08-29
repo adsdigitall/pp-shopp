@@ -286,7 +286,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
               <div className="space-y-2 text-xs sm:text-sm font-sans leading-relaxed pt-1">
                 {/* 1. Reaction Headline */}
                 <div className="text-base sm:text-lg font-black text-slate-100 tracking-tight">
-                  {offer.headline}
+                  🚨 RADAR ENCONTROU!
                 </div>
 
                 {/* 2. Product Title */}

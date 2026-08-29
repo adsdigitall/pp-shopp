@@ -82,8 +82,6 @@ export function generateShareableOffer(
   const copyLines = [
     '🚨 RADAR ENCONTROU!',
     ``,
-    headline,
-    ``,
     product.name,
     ``,
     origPrice ? `~De: ${origPrice}~` : '',
