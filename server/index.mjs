@@ -129,6 +129,7 @@ async function handleOfferCopy(req, res) {
   const description = typeof body.description === 'string' ? body.description.slice(0, 300) : '';
   const discount = typeof body.discount === 'string' ? body.discount.slice(0, 30) : '';
   const price = typeof body.price === 'string' ? body.price.slice(0, 30) : '';
+  const originalPrice = typeof body.originalPrice === 'string' ? body.originalPrice.slice(0, 30) : '';
   const link = typeof body.link === 'string' ? body.link.slice(0, 300) : '';
   const previous = typeof body.previous === 'string' ? body.previous.slice(0, 900) : '';
   const nonce = Math.random().toString(36).slice(2, 10);
