@@ -235,6 +235,19 @@ async function handleSales(req, res) {
   sendJson(res, 200, { sales: nodes, meta: { source: 'shopee-affiliate-api', operation: 'conversionReport', hasNextPage: Boolean(pageInfo.hasNextPage) } });
 }
 
+async function pollSalesInBackground() {
+  try {
+    const config = loadShopeeConfig();
+    const { nodes } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - 168 * 3600 });
+    for (const sale of nodes) {
+      const saleId = String(sale.conversionId || sale.checkoutId || '');
+      if (!saleId || notifiedSaleIds.has(saleId)) continue;
+      notifiedSaleIds.add(saleId);
+      await notifySubscribers({ title: 'Nova venda Shopee', body: `Produto vendido — comissão: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
+    }
+  } catch { /* polling não pode derrubar o servidor */ }
+}
+
 /**
  * @returns {import('node:http').Server}
  */
@@ -352,5 +365,6 @@ if (isDirectRun) {
     } catch (err) {
       logLine(`AVISO: ${/** @type {any} */ (err).message}`);
     }
+    setInterval(pollSalesInBackground, 120_000);
   });
 }
