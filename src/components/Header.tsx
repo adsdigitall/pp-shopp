@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <h1 className="font-black text-lg sm:text-xl text-slate-900 tracking-tight leading-tight">
-                ShopLink <span className="text-[#EE4D2D]">Afiliados</span>
+                Radar <span className="text-[#EE4D2D]">de Oferta</span>
               </h1>
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
                 Divulgue fácil e ganhe comissão

@@ -1,6 +1,6 @@
 {
-  "name": "Afiliado Shopee Pro",
-  "short_name": "ShoppAfiliado",
+  "name": "Radar de Oferta",
+  "short_name": "Radar de Oferta",
   "description": "Painel de seleção de produtos e gerador de ofertas para afiliados Shopee",
   "start_url": "/",
   "display": "standalone",
