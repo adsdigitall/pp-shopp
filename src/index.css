@@ -34,7 +34,7 @@
 
 body.app-dark { background: #202124; color: #f4f4f5; }
 body.app-dark .bg-white { background-color: #292a2f !important; }
-body.app-dark [class*="bg-white/"] { background-color: rgba(41,42,47,.94) !important; }
+body.app-dark [class*="bg-white/"] { background-color: #292a2f !important; opacity: 1 !important; }
 body.app-dark [class*="bg-gradient-"] { background-image: none !important; background-color: #111114 !important; }
 body.app-dark .bg-orange-50\/80 { background-color: #2a1915 !important; }
 body.app-dark input, body.app-dark textarea, body.app-dark select { background-color: #303136 !important; color: #f4f4f5 !important; border-color: #52525b !important; }
