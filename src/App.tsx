@@ -328,8 +328,8 @@ export function App() {
   };
 
   const marketplaceTabs: { id: Marketplace; label: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
-    { id: 'shopee', label: 'Shopee', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-[#EE4D2D]', bgColor: 'bg-orange-100' },
-    { id: 'mercado_livre', label: 'Mercado Livre', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
+    { id: 'shopee', label: '🛍️ Shopee', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-[#EE4D2D]', bgColor: 'bg-orange-100' },
+    { id: 'mercado_livre', label: '🛒 Mercado Livre', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
   ];
 
   return (
@@ -409,14 +409,14 @@ export function App() {
                 className="w-full sm:w-auto flex-1 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
                 aria-label="Filtrar por categoria ou nicho"
               >
-                <option value="">Todos os nichos</option>
-                <option value="eletrônicos">Eletrônicos</option>
-                <option value="moda feminina">Moda feminina</option>
-                <option value="casa e banho">Casa, cozinha e banho</option>
-                <option value="infantil">Infantil e crianças</option>
-                <option value="beleza">Beleza</option>
-                <option value="acessórios">Acessórios</option>
-                <option value="celular">Celulares e informática</option>
+                <option value="">✨ Todos os nichos</option>
+                <option value="eletrônicos">💻 Eletrônicos</option>
+                <option value="moda feminina">👗 Moda feminina</option>
+                <option value="casa e banho">🏠 Casa, cozinha e banho</option>
+                <option value="infantil">🧸 Infantil e crianças</option>
+                <option value="beleza">💄 Beleza</option>
+                <option value="acessórios">👜 Acessórios</option>
+                <option value="celular">📱 Celulares e informática</option>
               </select>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
