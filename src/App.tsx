@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, FilterType, AffiliateSettings } from './types/product';
 import { productService } from './services/productService';
 import { Header } from './components/Header';
@@ -12,7 +12,9 @@ import { GroupsModal } from './components/GroupsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
-import { SearchX, Layers3 } from 'lucide-react';
+import { MercadoLivreSearch } from './components/MercadoLivreSearch';
+import { AnalyticsModal } from './components/AnalyticsModal';
+import { SearchX, Layers3, ShoppingBag, Zap, LayoutGrid, RefreshCw, ArrowDown, BarChart2 } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AffiliateSettings = {
   affiliateTag: 'aff_shopp_vip',
@@ -21,6 +23,8 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
   showPrivateCommission: true,
   theme: 'light',
 };
+
+type Marketplace = 'shopee' | 'mercado_livre';
 
 function decodeVapidKey(value: string) {
   const padding = '='.repeat((4 - (value.length % 4)) % 4);
@@ -39,6 +43,7 @@ export function App() {
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
+  const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const seenSalesRef = useRef<Set<string>>(new Set());
 
@@ -48,6 +53,7 @@ export function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isGroupsModalOpen, setIsGroupsModalOpen] = useState<boolean>(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
+  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState<boolean>(false);
 
   // Settings & Toasts
   const [settings, setSettings] = useState<AffiliateSettings>(DEFAULT_SETTINGS);
@@ -136,7 +142,7 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch products via service
+  // Fetch products via service (Shopee only)
   const loadProducts = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -155,8 +161,10 @@ export function App() {
   }, [activeFilter, activeCategory, searchQuery, showToast]);
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    if (activeMarketplace === 'shopee') {
+      loadProducts();
+    }
+  }, [loadProducts, activeMarketplace]);
 
   const loadMoreProducts = useCallback(async () => {
     if (loading || loadingMore || !hasNextPage) return;
@@ -190,12 +198,13 @@ export function App() {
 
   // Atualiza ofertas a cada 2 minutos sem interromper a navegação do usuário.
   useEffect(() => {
+    if (activeMarketplace !== 'shopee') return;
     const refresh = () => {
       if (document.visibilityState === 'visible') loadProducts(true);
     };
     const intervalId = window.setInterval(refresh, 120_000);
     return () => window.clearInterval(intervalId);
-  }, [loadProducts]);
+  }, [loadProducts, activeMarketplace]);
 
   // Open Offer Modal
   const handleGenerateOffer = (product: Product) => {
@@ -211,17 +220,21 @@ export function App() {
     } else if (nav === 'config') {
       setIsSettingsModalOpen(true);
     } else if (nav === 'products') {
-      // scroll to products or switch focus
       window.scrollTo({ top: 280, behavior: 'smooth' });
     } else {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
+  const marketplaceTabs: { id: Marketplace; label: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
+    { id: 'shopee', label: 'Shopee', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-[#EE4D2D]', bgColor: 'bg-orange-100' },
+    { id: 'mercado_livre', label: 'Mercado Livre', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
+  ];
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff7ed_0%,#f8fafc_42%,#eef2ff_100%)] flex flex-col pb-24 sm:pb-16 text-slate-900 font-sans">
       
-      {/* Top Header matching reference (ShopLink Afiliados) */}
+      {/* Top Header */}
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -232,102 +245,123 @@ export function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
         
-        {/* Step 1: Como Funciona (Interactive stepper matching reference) */}
-        {!searchQuery && <HowItWorks onStepClick={(step) => {
-          if (step <= 2) window.scrollTo({ top: 280, behavior: 'smooth' });
-          if (step === 3) showToast('Escolha um produto para compartilhar', undefined, 'info');
-        }} />}
-
-        {/* Step 2: Produtos em alta (Title + Filters) */}
-        <FilterTabs
-          activeFilter={activeFilter}
-          onSelectFilter={setActiveFilter}
-          resultCount={products.length}
-        />
-
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-2xl border border-white/70 bg-white/65 p-2.5 shadow-sm backdrop-blur-md">
-          <div className="flex items-center gap-2 px-1.5 text-xs font-bold text-slate-600">
-            <Layers3 className="h-4 w-4 text-[#EE4D2D]" />
-            <span>Categoria / nicho</span>
-          </div>
-          <select
-            value={activeCategory}
-            onChange={(event) => setActiveCategory(event.target.value)}
-            className="w-full sm:w-auto flex-1 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
-            aria-label="Filtrar por categoria ou nicho"
-          >
-            <option value="">Todos os nichos</option>
-            <option value="eletrônicos">Eletrônicos</option>
-            <option value="casa">Casa e cozinha</option>
-            <option value="moda">Moda</option>
-            <option value="beleza">Beleza</option>
-            <option value="acessórios">Acessórios</option>
-            <option value="celular">Celulares e informática</option>
-          </select>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-        <button type="button" onClick={enableSaleNotifications} className="flex-1 rounded-2xl border border-orange-200 bg-orange-50/80 px-4 py-3 text-left text-xs font-bold text-orange-800 shadow-sm backdrop-blur-md hover:bg-orange-100">
-          {notificationsEnabled ? '🔔 Notificações de vendas ativadas' : '🔔 Ativar notificações quando sair uma venda'}
-        </button>
-        {notificationsEnabled && <button type="button" onClick={sendTestNotification} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs font-bold text-slate-700 shadow-sm backdrop-blur-md hover:bg-slate-50">Enviar teste</button>}
-        </div>
-
-        {/* Step 3: Product Grid (2 columns on mobile, 3-4 on desktop/notebook) */}
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-            {[1, 2, 3, 4].map((idx) => (
-              <div
-                key={idx}
-                className="bg-white rounded-3xl p-3 sm:p-4 space-y-3 animate-pulse border border-slate-100"
-              >
-                <div className="aspect-square bg-slate-200 rounded-2xl w-full" />
-                <div className="h-4 bg-slate-200 rounded w-3/4" />
-                <div className="h-4 bg-slate-200 rounded w-1/2" />
-                <div className="h-8 bg-slate-200 rounded-xl" />
-              </div>
-            ))}
-          </div>
-        ) : products.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onGenerateOffer={handleGenerateOffer}
-              />
-            ))}
-          </div>
-        ) : (
-          /* Empty State */
-          <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-100 max-w-sm mx-auto space-y-3">
-            <div className="w-12 h-12 bg-orange-100 text-[#EE4D2D] rounded-2xl flex items-center justify-center mx-auto">
-              <SearchX className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-900">Nenhum produto encontrado</h3>
-              <p className="text-xs text-slate-500">
-                Não encontramos ofertas para "{searchQuery}".
-              </p>
-            </div>
-            <button
-              onClick={() => setSearchQuery('')}
-              className="px-4 py-2 bg-[#EE4D2D] text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
-            >
-              Limpar busca
-            </button>
-          </div>
+        {/* Step 1: Como Funciona */}
+        {!searchQuery && activeMarketplace === 'shopee' && (
+          <HowItWorks onStepClick={(step) => {
+            if (step <= 2) window.scrollTo({ top: 280, behavior: 'smooth' });
+            if (step === 3) showToast('Escolha um produto para compartilhar', undefined, 'info');
+          }} />
         )}
 
-        <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-xs font-semibold text-slate-500">
-          {loadingMore ? 'Carregando mais ofertas reais…' : hasNextPage ? 'Role para carregar mais' : 'Você chegou ao fim desta lista'}
+        {/* Marketplace Selector Tabs */}
+        <div className="flex gap-2 bg-white/65 border border-white/70 rounded-2xl p-1.5 shadow-sm backdrop-blur-md">
+          {marketplaceTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveMarketplace(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeMarketplace === tab.id
+                  ? `${tab.bgColor} ${tab.color} shadow-md`
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <span className={`${tab.color}`}>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Step 4: Seus Grupos (Card widget matching bottom section in reference) */}
+        {activeMarketplace === 'shopee' ? (
+          <>  
+            {/* Shopee Filters */}
+            <FilterTabs
+              activeFilter={activeFilter}
+              onSelectFilter={setActiveFilter}
+              resultCount={products.length}
+            />
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-2xl border border-white/70 bg-white/65 p-2.5 shadow-sm backdrop-blur-md">
+              <div className="flex items-center gap-2 px-1.5 text-xs font-bold text-slate-600">
+                <Layers3 className="h-4 w-4 text-[#EE4D2D]" />
+                <span>Categoria / nicho</span>
+              </div>
+              <select
+                value={activeCategory}
+                onChange={(event) => setActiveCategory(event.target.value)}
+                className="w-full sm:w-auto flex-1 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                aria-label="Filtrar por categoria ou nicho"
+              >
+                <option value="">Todos os nichos</option>
+                <option value="eletrônicos">Eletrônicos</option>
+                <option value="casa">Casa e cozinha</option>
+                <option value="moda">Moda</option>
+                <option value="beleza">Beleza</option>
+                <option value="acessórios">Acessórios</option>
+                <option value="celular">Celulares e informática</option>
+              </select>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button type="button" onClick={enableSaleNotifications} className="flex-1 rounded-2xl border border-orange-200 bg-orange-50/80 px-4 py-3 text-left text-xs font-bold text-orange-800 shadow-sm backdrop-blur-md hover:bg-orange-100">
+                {notificationsEnabled ? '🔔 Notificações de vendas ativadas' : '🔔 Ativar notificações quando sair uma venda'}
+              </button>
+              {notificationsEnabled && <button type="button" onClick={sendTestNotification} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs font-bold text-slate-700 shadow-sm backdrop-blur-md hover:bg-slate-50">Enviar teste</button>}
+            </div>
+
+            {/* Shopee Product Grid */}
+            {loading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+                {[1, 2, 3, 4].map((idx) => (
+                  <div key={idx} className="bg-white rounded-3xl p-3 sm:p-4 space-y-3 animate-pulse border border-slate-100">
+                    <div className="aspect-square bg-slate-200 rounded-2xl w-full" />
+                    <div className="h-4 bg-slate-200 rounded w-3/4" />
+                    <div className="h-4 bg-slate-200 rounded w-1/2" />
+                    <div className="h-8 bg-slate-200 rounded-xl" />
+                  </div>
+                ))}
+              </div>
+            ) : products.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onGenerateOffer={handleGenerateOffer}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-100 max-w-sm mx-auto space-y-3">
+                <div className="w-12 h-12 bg-orange-100 text-[#EE4D2D] rounded-2xl flex items-center justify-center mx-auto">
+                  <SearchX className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-slate-900">Nenhum produto encontrado</h3>
+                  <p className="text-xs text-slate-500">Não encontramos ofertas para "{searchQuery}".</p>
+                </div>
+                <button onClick={() => setSearchQuery('')} className="px-4 py-2 bg-[#EE4D2D] text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer">
+                  Limpar busca
+                </button>
+              </div>
+            )}
+
+            <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-xs font-semibold text-slate-500">
+              {loadingMore ? 'Carregando mais ofertas reais…' : hasNextPage ? 'Role para carregar mais' : 'Você chegou ao fim desta lista'}
+            </div>
+          </>
+        ) : (
+          // Mercado Livre Search
+          <MercadoLivreSearch
+            onProductSelect={handleGenerateOffer}
+            onShowToast={showToast}
+          />
+        )}
+
+        {/* Step 4: Seus Grupos */}
         <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />
 
       </main>
 
-      {/* Offer Preview Modal (Guaranteed No Commission Leak) */}
+      {/* Offer Preview Modal */}
       <OfferPreviewModal
         product={selectedProduct}
         isOpen={isOfferModalOpen}
@@ -351,21 +385,37 @@ export function App() {
         onShowToast={showToast}
       />
 
-      {/* Notifications Modal */}
+{/* Notifications Modal */}
       <NotificationsModal
         isOpen={isNotificationsModalOpen}
         onClose={() => setIsNotificationsModalOpen(false)}
       />
 
+      {/* Analytics Modal */}
+      <AnalyticsModal
+        isOpen={isAnalyticsModalOpen}
+        onClose={() => setIsAnalyticsModalOpen(false)}
+        onShowToast={showToast}
+        activeMarketplace={activeMarketplace}
+      />
+
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
-      {/* Mobile Native-Feel Bottom Navigation (Matching reference: Início, Produtos, Grupos, Config) */}
+      {/* Mobile Bottom Navigation */}
       <MobileBottomNav
         activeNav={activeNav}
         onSelectNav={handleSelectNav}
       />
 
+      {/* Floating Analytics Button */}
+      <button
+        onClick={() => setIsAnalyticsModalOpen(true)}
+        className="fixed bottom-28 right-4 z-40 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-500/30 transition-all duration-200 flex items-center justify-center gap-1.5"
+        aria-label="Ver Analytics"
+      >
+        <BarChart2 className="w-5 h-5" />
+      </button>
     </div>
   );
 }
