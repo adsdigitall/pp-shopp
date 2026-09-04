@@ -14,6 +14,7 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
 import { MercadoLivreSearch } from './components/MercadoLivreSearch';
 import { AnalyticsModal } from './components/AnalyticsModal';
+import { DesktopSidebar } from './components/DesktopSidebar';
 import {
   getPullRefreshDistance,
   mergeFreshProducts,
@@ -345,6 +346,13 @@ export function App() {
       </div>
       
       {/* Top Header */}
+      <DesktopSidebar
+        onOverview={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onGroups={() => setIsGroupsModalOpen(true)}
+        onSettings={() => setIsSettingsModalOpen(true)}
+        onNotifications={() => setIsNotificationsModalOpen(true)}
+        onAnalytics={() => setIsAnalyticsModalOpen(true)}
+      />
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -353,7 +361,7 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6 lg:ml-72">
         
         {/* Step 1: Como Funciona */}
         {!searchQuery && activeMarketplace === 'shopee' && (
