@@ -347,7 +347,12 @@ export function App() {
       
       {/* Top Header */}
       <DesktopSidebar
-        onOverview={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onNavigate={(section) => {
+          window.history.pushState({}, '', `#${section}`);
+          const target = section === 'garimpar' || section === 'ofertas' ? 'produtos' : section === 'extensao' || section === 'templates' ? 'extensao-radar' : null;
+          if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          else window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         onGroups={() => setIsGroupsModalOpen(true)}
         onSettings={() => setIsSettingsModalOpen(true)}
         onNotifications={() => setIsNotificationsModalOpen(true)}
@@ -436,7 +441,7 @@ export function App() {
 
             {/* Shopee Product Grid */}
             {loading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+            <div id="produtos" className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
                 {[1, 2, 3, 4].map((idx) => (
                   <div key={idx} className="bg-white rounded-3xl p-3 sm:p-4 space-y-3 animate-pulse border border-slate-100">
                     <div className="aspect-square bg-slate-200 rounded-2xl w-full" />
@@ -487,7 +492,7 @@ export function App() {
         <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />
 
         {/* Extensão do Radar */}
-        <section className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="extensao-radar" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-black text-slate-900">🧩 Extensão Radar de Oferta</h2>

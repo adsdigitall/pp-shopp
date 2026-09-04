@@ -2,22 +2,22 @@ import React from 'react';
 import { BarChart3, Bell, Boxes, FileText, LayoutDashboard, PlugZap, Send, Settings, Users, WandSparkles } from 'lucide-react';
 
 interface DesktopSidebarProps {
-  onOverview: () => void;
+  onNavigate: (section: string) => void;
   onGroups: () => void;
   onSettings: () => void;
   onNotifications: () => void;
   onAnalytics: () => void;
 }
 
-export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ onOverview, onGroups, onSettings, onNotifications, onAnalytics }) => {
+export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ onNavigate, onGroups, onSettings, onNotifications, onAnalytics }) => {
   const items = [
-    ['Visão geral', LayoutDashboard, onOverview],
-    ['Garimpar ofertas', WandSparkles, onOverview],
+    ['Visão geral', LayoutDashboard, () => onNavigate('visao-geral')],
+    ['Garimpar ofertas', WandSparkles, () => onNavigate('garimpar')],
     ['Disparar grupos', Send, onGroups],
-    ['Ofertas / fila', Boxes, onOverview],
-    ['Templates e páginas', FileText, onOverview],
+    ['Ofertas / fila', Boxes, () => onNavigate('ofertas')],
+    ['Templates e páginas', FileText, () => onNavigate('templates')],
     ['Meus grupos', Users, onGroups],
-    ['Extensão', PlugZap, onOverview],
+    ['Extensão', PlugZap, () => onNavigate('extensao')],
     ['Analytics', BarChart3, onAnalytics],
   ] as const;
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200/80 bg-white/85 p-4 shadow-sm backdrop-blur-xl lg:block">
