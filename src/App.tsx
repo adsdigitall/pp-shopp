@@ -351,7 +351,7 @@ export function App() {
       <DesktopSidebar
         onNavigate={(section) => {
           window.history.pushState({}, '', `#${section}`);
-          const target = section === 'garimpar' || section === 'ofertas' ? 'produtos' : section === 'extensao' || section === 'templates' ? 'extensao-radar' : null;
+          const target = section === 'garimpar' || section === 'ofertas' ? 'produtos' : section === 'extensao' || section === 'templates' ? 'extensao-radar' : ['espelhamento', 'tutoriais', 'suporte'].includes(section) ? section : null;
           if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           else window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
@@ -455,7 +455,7 @@ export function App() {
                 ))}
               </div>
             ) : products.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+              <div id="produtos" className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
                 {products.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -465,7 +465,7 @@ export function App() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-100 max-w-sm mx-auto space-y-3">
+              <div id="produtos" className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-100 max-w-sm mx-auto space-y-3">
                 <div className="w-12 h-12 bg-orange-100 text-[#EE4D2D] rounded-2xl flex items-center justify-center mx-auto">
                   <SearchX className="w-6 h-6" />
                 </div>
@@ -508,6 +508,24 @@ export function App() {
             <li><b>2.</b> Abra <code className="rounded bg-slate-100 px-1">chrome://extensions</code> e ative o modo desenvolvedor.</li>
             <li><b>3.</b> Clique em “Carregar sem compactação” e selecione a pasta.</li>
           </ol>
+        </section>
+
+        <section id="espelhamento" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+          <h2 className="text-base font-black text-slate-900">Espelhamento</h2>
+          <p className="mt-1 text-xs text-slate-500">Acompanhe a captura de ofertas da extensão em um único painel. A conexão de grupos será habilitada quando você instalar a extensão Radar.</p>
+          <span className="mt-3 inline-flex rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600">Preparação disponível</span>
+        </section>
+
+        <section id="tutoriais" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+          <h2 className="text-base font-black text-slate-900">Tutoriais</h2>
+          <p className="mt-1 text-xs text-slate-500">Aprenda a garimpar, revisar e copiar ofertas para seus grupos com o fluxo manual seguro.</p>
+          <ol className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3"><li><b>1.</b> Escolha um produto.</li><li><b>2.</b> Gere e revise a mensagem.</li><li><b>3.</b> Copie e envie no WhatsApp.</li></ol>
+        </section>
+
+        <section id="suporte" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+          <h2 className="text-base font-black text-slate-900">Suporte</h2>
+          <p className="mt-1 text-xs text-slate-500">Precisa de ajuda? Confira as instruções da extensão e valide suas configurações de integração antes de solicitar atendimento.</p>
+          <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="mt-3 rounded-xl bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-700 hover:bg-orange-100">Abrir configurações</button>
         </section>
 
       </main>
