@@ -76,7 +76,7 @@ export function App() {
   const [pullDistance, setPullDistance] = useState(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('top_sales');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
   const [activeSection, setActiveSection] = useState('garimpar');
@@ -356,6 +356,7 @@ export function App() {
       
       {/* Top Header */}
       <DesktopSidebar
+        activeSection={activeSection}
         onNavigate={(section) => {
           setActiveSection(section);
           window.history.pushState({}, '', `#${section}`);
