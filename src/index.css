@@ -54,17 +54,18 @@ body.app-dark .text-sky-700, body.app-dark .text-blue-700 { color: #7dd3fc !impo
 body.app-dark .border-slate-100, body.app-dark .border-slate-200 { border-color: #27272a !important; }
 
 /* Radar default visual: opaque graphite surfaces with high-contrast type. */
-body { background: #202124 !important; color: #f4f4f5; }
-body .bg-white { background-color: #292a2f !important; }
-body [class*="bg-white/"] { background-color: rgba(41,42,47,.82) !important; opacity: 1 !important; }
+body { background: #2a2b30 !important; color: #f4f4f5; }
+body .bg-white { background-color: #34353b !important; }
+body [class*="bg-white/"] { background-color: rgba(52,53,59,.86) !important; opacity: 1 !important; }
 body .text-slate-900 { color: #f8fafc !important; }
 body .text-slate-800 { color: #f1f5f9 !important; }
-body .min-h-screen { background: #202124 !important; }
-body [class*="radial-gradient"] { background-image: none !important; background-color: #202124 !important; }
-body .bg-slate-50, body .bg-slate-100, body .bg-slate-100\/70 { background-color: #303136 !important; }
+body .min-h-screen { background: #2a2b30 !important; }
+body [class*="radial-gradient"] { background-image: none !important; background-color: #2a2b30 !important; }
+body .bg-slate-50, body .bg-slate-100, body .bg-slate-100\/70 { background-color: #3d3e44 !important; }
 body [class*="bg-emerald-"] { background-color: rgba(16,55,40,.82) !important; }
 body [class*="bg-orange-"] { background-color: rgba(80,39,27,.82) !important; }
 body .text-slate-600 { color: #d4d4d8 !important; }
 body .text-slate-500 { color: #a1a1aa !important; }
 body .text-emerald-600, body .text-emerald-700 { color: #6ee7b7 !important; }
 body .text-orange-600, body .text-orange-700, body .text-orange-800 { color: #ff9b78 !important; }
+body input, body textarea, body select { background-color: #3d3e44 !important; }
