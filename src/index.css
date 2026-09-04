@@ -52,3 +52,10 @@ body.app-dark .text-orange-700, body.app-dark .text-orange-800 { color: #ff9b78 
 body.app-dark .text-emerald-700, body.app-dark .text-emerald-800 { color: #6ee7b7 !important; }
 body.app-dark .text-sky-700, body.app-dark .text-blue-700 { color: #7dd3fc !important; }
 body.app-dark .border-slate-100, body.app-dark .border-slate-200 { border-color: #27272a !important; }
+
+/* Radar default visual: opaque graphite surfaces with high-contrast type. */
+body { background: #202124 !important; color: #f4f4f5; }
+body .bg-white { background-color: #292a2f !important; }
+body [class*="bg-white/"] { background-color: #292a2f !important; opacity: 1 !important; }
+body .text-slate-900 { color: #f8fafc !important; }
+body .text-slate-800 { color: #f1f5f9 !important; }
