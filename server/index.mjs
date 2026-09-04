@@ -925,19 +925,24 @@ function summarizeAnalyticsEvents(events, marketplace = 'all') {
 }
 
 async function handleUnifiedAnalytics(req, res) {
-  const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
-  const marketplace = parsed.searchParams.get('marketplace') || 'all';
-  if (marketplace !== 'all' && !ANALYTICS_MARKETPLACES.has(marketplace)) {
-    sendJson(res, 400, { error: { code: 'INVALID_MARKETPLACE', message: 'Marketplace inválido.' } });
-    return;
+  try {
+    const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+    const marketplace = parsed.searchParams.get('marketplace') || 'all';
+    if (marketplace !== 'all' && !ANALYTICS_MARKETPLACES.has(marketplace)) {
+      sendJson(res, 400, { error: { code: 'INVALID_MARKETPLACE', message: 'Marketplace inválido.' } });
+      return;
+    }
+    const hoursRaw = Number.parseInt(parsed.searchParams.get('hours') || '168', 10);
+    const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 720) : 168;
+    const since = Date.now() - hours * 3_600_000;
+    const store = createSupabaseAnalyticsStore();
+    const events = store.enabled ? await store.list({ marketplace, since }) : [];
+    const summary = summarizeAnalyticsEvents(events || [], marketplace);
+    sendJson(res, 200, { ...summary, meta: { source: store.enabled ? 'supabase' : 'local-fallback', hours, marketplace } });
+  } catch (err) {
+    logLine(`GET /api/analytics 500 UNIFIED_ANALYTICS_ERROR ${err && err.message}`);
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics.' } });
   }
-  const hoursRaw = Number.parseInt(parsed.searchParams.get('hours') || '168', 10);
-  const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 720) : 168;
-  const since = Date.now() - hours * 3_600_000;
-  const store = createSupabaseAnalyticsStore();
-  const events = store.enabled ? await store.list({ marketplace, since }) : [];
-  const summary = summarizeAnalyticsEvents(events, marketplace);
-  sendJson(res, 200, { ...summary, meta: { source: store.enabled ? 'supabase' : 'local-fallback', hours, marketplace } });
 }
 
 async function handleAnalyticsEvent(req, res) {
