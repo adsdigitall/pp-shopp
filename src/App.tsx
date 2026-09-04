@@ -80,6 +80,7 @@ export function App() {
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
   const [activeSection, setActiveSection] = useState('visao-geral');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const seenSalesRef = useRef<Set<string>>(new Set());
 
@@ -357,7 +358,10 @@ export function App() {
       {/* Top Header */}
       <DesktopSidebar
         activeSection={activeSection}
+        mobileOpen={mobileSidebarOpen}
+        onToggleMobile={() => setMobileSidebarOpen((open) => !open)}
         onNavigate={(section) => {
+          setMobileSidebarOpen(false);
           setActiveSection(section);
           window.history.pushState({}, '', `#${section}`);
           const target = section === 'visao-geral' ? 'visao-geral' : section === 'garimpar' ? 'produtos' : section === 'ofertas' ? 'ofertas-fila' : section === 'templates' ? 'templates-radar' : section === 'extensao' ? 'extensao-radar' : ['espelhamento', 'tutoriais', 'suporte'].includes(section) ? section : null;
