@@ -14,6 +14,7 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
 import { MercadoLivreSearch } from './components/MercadoLivreSearch';
 import { AnalyticsModal } from './components/AnalyticsModal';
+import { nextRefreshPage } from './services/productRefresh';
 import { SearchX, Layers3, ShoppingBag, Zap, LayoutGrid, RefreshCw, ArrowDown, BarChart2 } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AffiliateSettings = {
@@ -39,6 +40,7 @@ export function App() {
   const [hasNextPage, setHasNextPage] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState(1);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const refreshPageRef = useRef(1);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
@@ -143,14 +145,16 @@ export function App() {
   }, []);
 
   // Fetch products via service (Shopee only)
-  const loadProducts = useCallback(async (silent = false) => {
+  const loadProducts = useCallback(async (silent = false, rotatePage = false) => {
     if (!silent) setLoading(true);
     try {
       const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
-      const result = await productService.getProductsPage(activeFilter, combinedQuery, 1);
+      const targetPage = rotatePage ? nextRefreshPage(refreshPageRef.current) : 1;
+      const result = await productService.getProductsPage(activeFilter, combinedQuery, targetPage);
       setProducts(result.products);
       setHasNextPage(result.hasNextPage);
-      setCurrentPage(1);
+      setCurrentPage(targetPage);
+      refreshPageRef.current = targetPage;
     } catch (err) {
       if (!silent) {
         showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
@@ -162,6 +166,7 @@ export function App() {
 
   useEffect(() => {
     if (activeMarketplace === 'shopee') {
+      refreshPageRef.current = 1;
       loadProducts();
     }
   }, [loadProducts, activeMarketplace]);
@@ -200,7 +205,7 @@ export function App() {
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
     const refresh = () => {
-      if (document.visibilityState === 'visible') loadProducts(true);
+      if (document.visibilityState === 'visible') loadProducts(true, true);
     };
     const intervalId = window.setInterval(refresh, 120_000);
     return () => window.clearInterval(intervalId);
@@ -285,6 +290,14 @@ export function App() {
                 <Layers3 className="h-4 w-4 text-[#EE4D2D]" />
                 <span>Categoria / nicho</span>
               </div>
+              <button
+                type="button"
+                onClick={() => loadProducts(false, true)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Novas ofertas
+              </button>
               <select
                 value={activeCategory}
                 onChange={(event) => setActiveCategory(event.target.value)}

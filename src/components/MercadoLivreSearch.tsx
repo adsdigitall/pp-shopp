@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Product, FilterType } from '../types/product';
-import { Search, Filter, Zap, Tag, DollarSign, Truck, Star, ExternalLink, RefreshCw, Clock, Brain, Layers3 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Product } from '../types/product';
+import { nextRefreshPage } from '../services/productRefresh';
+import { Search, Filter, Zap, Tag, DollarSign, Truck, Star, ExternalLink, RefreshCw, Clock, Brain, Layers3, ShoppingBag, Settings, X, Save } from 'lucide-react';
 
 interface MercadoLivreSearchProps {
   onProductSelect: (product: Product) => void;
@@ -38,6 +39,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
   const [hasNextPage, setHasNextPage] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const refreshPageRef = useRef(1);
 
   const [filters, setFilters] = useState({
     keyword: '',
@@ -66,7 +68,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
   const [showAutoSearchModal, setShowAutoSearchModal] = useState(false);
   const [editingAutoSearch, setEditingAutoSearch] = useState<any | null>(null);
 
-  const fetchProducts = useCallback(async (silent = false, page = 1) => {
+  const fetchProducts = useCallback(async (silent = false, page = 1, replace = false) => {
     if (!silent) setLoading(true);
     setCurrentPage(page);
     
@@ -79,8 +81,9 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
       });
       params.set('page', String(page));
       params.set('limit', '20');
+      params.set('_refresh', String(Date.now()));
 
-      const res = await fetch(`/api/mercadolivre/products?${params.toString()}`);
+      const res = await fetch(`/api/mercadolivre/products?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json();
 
       if (!res.ok) {
@@ -89,7 +92,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
 
       const newProducts = data.products || [];
       
-      if (page === 1) {
+      if (page === 1 || replace) {
         setProducts(newProducts);
       } else {
         setProducts(prev => {
@@ -99,6 +102,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
       }
       
       setHasNextPage(data.meta?.hasNextPage || false);
+      refreshPageRef.current = page;
     } catch (err) {
       if (!silent) {
         onShowToast('Erro ao carregar', err instanceof Error ? err.message : 'Tente novamente', 'error');
@@ -116,6 +120,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
   }, [loading, loadingMore, hasNextPage, currentPage, fetchProducts]);
 
   useEffect(() => {
+    refreshPageRef.current = 1;
     fetchProducts();
   }, [fetchProducts]);
 
@@ -128,6 +133,15 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
     observer.observe(target);
     return () => observer.disconnect();
   }, [loadMoreProducts]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const page = nextRefreshPage(refreshPageRef.current);
+      void fetchProducts(true, page, true);
+    }, 120_000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchProducts]);
 
   const fetchAutoSearchConfigs = useCallback(async () => {
     try {
@@ -149,11 +163,13 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
   };
 
   const handleSearch = () => {
+    refreshPageRef.current = 1;
     setCurrentPage(1);
     fetchProducts();
   };
 
   const handleClearFilters = () => {
+    refreshPageRef.current = 1;
     setFilters({
       keyword: '',
       categoryId: '',
@@ -268,6 +284,15 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
         <span className="px-2.5 py-1 text-[10px] font-bold bg-yellow-100 text-yellow-700 rounded-full">
           {products.length} ofertas
         </span>
+        <button
+          type="button"
+          onClick={() => fetchProducts(false, nextRefreshPage(refreshPageRef.current), true)}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-yellow-300 bg-white px-3 py-2 text-xs font-bold text-yellow-800 hover:bg-yellow-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </button>
       </div>
 
       {/* Search & Filters */}
@@ -728,6 +753,3 @@ const AutoSearchModal: React.FC<{
     </div>
   );
 };
-
-import { useRef } from 'react';
-import { ShoppingBag, Settings, X, Save } from 'lucide-react';

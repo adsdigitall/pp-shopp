@@ -126,13 +126,17 @@ class ProductService {
     const params = new URLSearchParams();
     params.set('sort', activeFilter);
     params.set('page', String(page));
+    params.set('_refresh', String(Date.now()));
     params.set('limit', activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value' ? '50' : '12');
     if (activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value') params.set('sort', 'high_commission');
     if (query.trim()) params.set('keyword', query.trim());
 
     let response: Response;
     try {
-      response = await fetch(`/api/products?${params.toString()}`, { signal });
+      response = await fetch(`/api/products?${params.toString()}`, {
+        signal,
+        cache: 'no-store',
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
       throw new ProductsApiError(
