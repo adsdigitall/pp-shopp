@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Radar de Oferta Connect",
+  "version": "0.1.0",
+  "description": "Capture produtos de lojas e envie para o Radar de Oferta.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": ["https://radarfertas.shop/*", "https://*.shopee.com.br/*", "https://*.mercadolivre.com.br/*", "https://*.amazon.com.br/*", "https://*.magazineluiza.com.br/*", "https://*.magazinevoce.com.br/*"],
+  "action": { "default_popup": "popup.html", "default_title": "Radar de Oferta" },
+  "content_scripts": [{
+    "matches": ["https://*.shopee.com.br/*", "https://*.mercadolivre.com.br/*", "https://*.amazon.com.br/*", "https://*.magazineluiza.com.br/*", "https://*.magazinevoce.com.br/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

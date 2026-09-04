@@ -27,6 +27,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 
 const notifiedSaleIds = new Set();
+const importedExtensionProducts = [];
 
 /**
  * Backend interno do PWA de afiliados.
@@ -301,6 +302,26 @@ export function createApp() {
         const subscription = await readJsonBody(req);
         const saved = saveSubscription(subscription);
         sendJson(res, saved ? 201 : 400, saved ? { ok: true } : { error: { code: 'INVALID_SUBSCRIPTION', message: 'Assinatura de notificação inválida.' } });
+        return;
+      }
+
+      if (req.method === 'POST' && pathOnly === '/api/extension/import') {
+        const expectedToken = String(process.env.EXTENSION_INGEST_TOKEN || '').trim();
+        const receivedToken = String(req.headers['x-extension-token'] || '').trim();
+        if (!expectedToken || receivedToken !== expectedToken) {
+          sendJson(res, 401, { error: { code: 'INVALID_EXTENSION_TOKEN', message: 'Token da extensao invalido.' } });
+          return;
+        }
+        const body = await readJsonBody(req);
+        const products = Array.isArray(body?.products) ? body.products.slice(0, 100) : [];
+        const valid = products.filter((item) => item && typeof item.name === 'string' && typeof item.productUrl === 'string').map((item) => ({
+          name: item.name.slice(0, 240), imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl.slice(0, 500) : '',
+          price: typeof item.price === 'string' ? item.price.slice(0, 40) : '', productUrl: item.productUrl.slice(0, 500),
+          marketplace: typeof item.marketplace === 'string' ? item.marketplace.slice(0, 80) : 'unknown', importedAt: new Date().toISOString(),
+        }));
+        importedExtensionProducts.push(...valid);
+        while (importedExtensionProducts.length > 500) importedExtensionProducts.shift();
+        sendJson(res, 201, { ok: true, imported: valid.length });
         return;
       }
 
