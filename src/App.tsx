@@ -478,6 +478,22 @@ export function App() {
         {/* Step 4: Seus Grupos */}
         <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />
 
+        {/* Extensão do Radar */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-black text-slate-900">🧩 Extensão Radar de Oferta</h2>
+              <p className="mt-1 text-xs text-slate-500">Capture produtos nas lojas e envie para sua fila de ofertas.</p>
+            </div>
+            <a href="/radar-oferta-connect-v1.zip" download className="inline-flex items-center justify-center rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white shadow-sm hover:bg-orange-600">⬇️ Baixar extensão</a>
+          </div>
+          <ol className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+            <li><b>1.</b> Baixe e descompacte o ZIP.</li>
+            <li><b>2.</b> Abra <code className="rounded bg-slate-100 px-1">chrome://extensions</code> e ative o modo desenvolvedor.</li>
+            <li><b>3.</b> Clique em “Carregar sem compactação” e selecione a pasta.</li>
+          </ol>
+        </section>
+
       </main>
 
       {/* Offer Preview Modal */}
