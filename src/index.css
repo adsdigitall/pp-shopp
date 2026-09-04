@@ -32,7 +32,7 @@
   padding-top: env(safe-area-inset-top, 1rem);
 }
 
-body.app-dark { background: #0a0a0c; color: #e4e4e7; }
+body.app-dark { background: #151518; color: #e4e4e7; }
 body.app-dark .bg-white { background-color: #111114 !important; }
 body.app-dark [class*="bg-white/"] { background-color: #111114 !important; }
 body.app-dark [class*="bg-gradient-"] { background-image: none !important; background-color: #111114 !important; }
