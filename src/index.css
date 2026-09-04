@@ -59,3 +59,6 @@ body .bg-white { background-color: #292a2f !important; }
 body [class*="bg-white/"] { background-color: #292a2f !important; opacity: 1 !important; }
 body .text-slate-900 { color: #f8fafc !important; }
 body .text-slate-800 { color: #f1f5f9 !important; }
+body .min-h-screen { background: #202124 !important; }
+body [class*="radial-gradient"] { background-image: none !important; background-color: #202124 !important; }
+body .bg-slate-50, body .bg-slate-100, body .bg-slate-100\/70 { background-color: #303136 !important; }
