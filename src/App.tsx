@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
   defaultFormat: 'standard',
   includeHashtags: true,
   showPrivateCommission: true,
-  theme: 'light',
+  theme: 'dark',
 };
 
 const REFRESH_PAGE_KEY = 'radar:last-refresh-page';
@@ -79,7 +79,7 @@ export function App() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('top_sales');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
-  const [activeSection, setActiveSection] = useState('garimpar');
+  const [activeSection, setActiveSection] = useState('visao-geral');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const seenSalesRef = useRef<Set<string>>(new Set());
 

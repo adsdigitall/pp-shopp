@@ -32,10 +32,11 @@
   padding-top: env(safe-area-inset-top, 1rem);
 }
 
-body.app-dark { background: #0b1120; color: #e2e8f0; }
-body.app-dark .bg-white { background-color: #111827 !important; }
-body.app-dark .bg-slate-50, body.app-dark .bg-slate-100\/70 { background-color: #172033 !important; }
+body.app-dark { background: #0a0a0c; color: #e4e4e7; }
+body.app-dark .bg-white { background-color: #111114 !important; }
+body.app-dark .bg-white\/80, body.app-dark .bg-white\/65 { background-color: rgba(17,17,20,.88) !important; }
+body.app-dark .bg-slate-50, body.app-dark .bg-slate-100\/70, body.app-dark .bg-slate-100 { background-color: #18181b !important; }
 body.app-dark .text-slate-900 { color: #f8fafc !important; }
 body.app-dark .text-slate-700, body.app-dark .text-slate-600 { color: #cbd5e1 !important; }
 body.app-dark .text-slate-500, body.app-dark .text-slate-400 { color: #94a3b8 !important; }
-body.app-dark .border-slate-100, body.app-dark .border-slate-200 { border-color: #334155 !important; }
+body.app-dark .border-slate-100, body.app-dark .border-slate-200 { border-color: #27272a !important; }
