@@ -1,24 +1,28 @@
 import React from 'react';
-import { BarChart3, Bell, Boxes, FileText, LayoutDashboard, PlugZap, Send, Settings, Users, WandSparkles } from 'lucide-react';
+import { Bell, Boxes, BookOpen, FileText, Gauge, LayoutDashboard, LifeBuoy, PlugZap, Radio, Send, Settings, Users, WandSparkles } from 'lucide-react';
 
 interface DesktopSidebarProps {
   onNavigate: (section: string) => void;
+  onDispatch: () => void;
   onGroups: () => void;
   onSettings: () => void;
   onNotifications: () => void;
   onAnalytics: () => void;
 }
 
-export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ onNavigate, onGroups, onSettings, onNotifications, onAnalytics }) => {
+export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ onNavigate, onDispatch, onGroups, onSettings, onNotifications, onAnalytics }) => {
   const items = [
     ['Visão geral', LayoutDashboard, () => onNavigate('visao-geral')],
     ['Garimpar ofertas', WandSparkles, () => onNavigate('garimpar')],
-    ['Disparar grupos', Send, onGroups],
+    ['Disparar grupos', Send, onDispatch],
     ['Ofertas / fila', Boxes, () => onNavigate('ofertas')],
     ['Templates e páginas', FileText, () => onNavigate('templates')],
     ['Meus grupos', Users, onGroups],
     ['Extensão', PlugZap, () => onNavigate('extensao')],
-    ['Analytics', BarChart3, onAnalytics],
+    ['Métricas', Gauge, onAnalytics],
+    ['Espelhamento', Radio, () => onNavigate('espelhamento')],
+    ['Tutoriais', BookOpen, () => onNavigate('tutoriais')],
+    ['Suporte', LifeBuoy, () => onNavigate('suporte')],
   ] as const;
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200/80 bg-white/85 p-4 shadow-sm backdrop-blur-xl lg:block">
     <div className="mb-7 flex items-center gap-2 px-2"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#EE4D2D] text-xl text-white">📡</div><div><div className="text-sm font-black text-slate-900">Radar de Oferta</div><div className="text-[10px] font-semibold text-slate-500">Painel de afiliados</div></div></div>

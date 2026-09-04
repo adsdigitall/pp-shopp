@@ -15,6 +15,7 @@ import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
 import { MercadoLivreSearch } from './components/MercadoLivreSearch';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { DesktopSidebar } from './components/DesktopSidebar';
+import { DispatchWizardModal } from './components/DispatchWizardModal';
 import {
   getPullRefreshDistance,
   mergeFreshProducts,
@@ -87,6 +88,7 @@ export function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isGroupsModalOpen, setIsGroupsModalOpen] = useState<boolean>(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
+  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState<boolean>(false);
   const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState<boolean>(false);
 
   // Settings & Toasts
@@ -353,6 +355,7 @@ export function App() {
           if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           else window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
+        onDispatch={() => setIsDispatchModalOpen(true)}
         onGroups={() => setIsGroupsModalOpen(true)}
         onSettings={() => setIsSettingsModalOpen(true)}
         onNotifications={() => setIsNotificationsModalOpen(true)}
@@ -530,6 +533,13 @@ export function App() {
       <GroupsModal
         isOpen={isGroupsModalOpen}
         onClose={() => setIsGroupsModalOpen(false)}
+        onShowToast={showToast}
+      />
+
+      <DispatchWizardModal
+        isOpen={isDispatchModalOpen}
+        offers={products}
+        onClose={() => setIsDispatchModalOpen(false)}
         onShowToast={showToast}
       />
 
