@@ -36,6 +36,9 @@ body.app-dark { background: #0a0a0c; color: #e4e4e7; }
 body.app-dark .bg-white { background-color: #111114 !important; }
 body.app-dark .bg-white\/80, body.app-dark .bg-white\/65 { background-color: rgba(17,17,20,.88) !important; }
 body.app-dark .bg-slate-50, body.app-dark .bg-slate-100\/70, body.app-dark .bg-slate-100 { background-color: #18181b !important; }
+body.app-dark .bg-orange-50, body.app-dark .bg-orange-100 { background-color: #2a1915 !important; }
+body.app-dark .bg-emerald-50 { background-color: #10231d !important; }
+body.app-dark .bg-orange-50\/80 { background-color: rgba(42,25,21,.9) !important; }
 body.app-dark .text-slate-900 { color: #f8fafc !important; }
 body.app-dark .text-slate-700, body.app-dark .text-slate-600 { color: #cbd5e1 !important; }
 body.app-dark .text-slate-500, body.app-dark .text-slate-400 { color: #94a3b8 !important; }
