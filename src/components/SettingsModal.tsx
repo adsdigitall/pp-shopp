@@ -409,7 +409,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         )}
       </div>
-  );
+    );
+  };
 
   if (!isOpen) return null;
 
@@ -600,5 +601,4 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       </div>
     </div>
   );
-  }
 };

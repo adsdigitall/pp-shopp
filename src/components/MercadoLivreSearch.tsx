@@ -54,6 +54,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
   const [autoSearch, setAutoSearch] = useState({
     isActive: false,
     name: '',
+    filters: {} as Record<string, unknown>,
     minOfferScore: 7.0,
     cooldownHours: 24,
     targetChannels: [] as string[],
@@ -184,6 +185,7 @@ export const MercadoLivreSearch: React.FC<MercadoLivreSearchProps> = ({
         setAutoSearch({
           isActive: false,
           name: '',
+          filters: {},
           minOfferScore: 7.0,
           cooldownHours: 24,
           targetChannels: [],

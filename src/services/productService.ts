@@ -66,8 +66,13 @@ function formatSoldCount(sold: number | null): string | null {
 }
 
 function mapDtoToProduct(dto: ApiProductDto): Product {
+  const id = dto.id !== undefined && dto.id !== null ? String(dto.id) : '';
+  const productUrl = dto.productUrl ?? '';
+
   return {
-    id: dto.id !== undefined && dto.id !== null ? String(dto.id) : '',
+    id,
+    marketplace: 'shopee',
+    marketplaceProductId: id,
     name: typeof dto.title === 'string' ? dto.title : '',
     imageUrl: typeof dto.imageUrl === 'string' ? dto.imageUrl : '',
     currentPrice: dto.currentPrice ?? null,
@@ -77,9 +82,16 @@ function mapDtoToProduct(dto: ApiProductDto): Product {
     salesCountText: formatSoldCount(dto.soldCount ?? null),
     rating: dto.rating ?? null,
     reviewsCount: null,
-    category: null,
-    shopeeUrl: dto.productUrl ?? null,
-    affiliateUrl: dto.affiliateUrl ?? null,
+    category: '',
+    categoryId: null,
+    productUrl,
+    affiliateUrl: dto.affiliateUrl ?? productUrl,
+    sellerId: '',
+    sellerName: '',
+    sellerReputation: null,
+    isFreeShipping: false,
+    shippingCost: null,
+    stock: null,
     // PRIVATE DATA — somente para o painel privado, nunca para compartilhamento
     privateCommission: {
       percentage: dto.commissionRate ?? null,
@@ -89,6 +101,12 @@ function mapDtoToProduct(dto: ApiProductDto): Product {
     highlightPoints: [],
     categoryIds: Array.isArray(dto.categoryIds) ? dto.categoryIds : [],
     isFlashSale: dto.isFlashSale === true,
+    affiliateProvider: 'official',
+    affiliateStatus: dto.affiliateUrl ? 'generated' : 'pending',
+    commissionRate: dto.commissionRate ?? null,
+    commissionAmount: dto.commissionAmount ?? null,
+    offerScore: null,
+    fetchedAt: new Date().toISOString(),
   };
 }
 

@@ -1,6 +1,6 @@
 import { Product } from '../types/product';
 
-export const MOCK_PRODUCTS: Product[] = [
+const LEGACY_MOCK_PRODUCTS = [
   {
     id: 'prod-000',
     name: 'Máquina de Café Portátil 3 em 1 com Extração de Alta Pressão, Suporta Cápsulas e Pó',
@@ -140,3 +140,24 @@ export const MOCK_PRODUCTS: Product[] = [
     highlightPoints: ['Entrada USB externa para carregar celular', 'Bolsos secretos nas costas', 'Material resistente a cortes e água'],
   }
 ];
+
+export const MOCK_PRODUCTS: Product[] = LEGACY_MOCK_PRODUCTS.map((product) => ({
+  ...product,
+  marketplace: 'shopee',
+  marketplaceProductId: product.id,
+  categoryId: null,
+  productUrl: product.shopeeUrl,
+  originalUrl: product.shopeeUrl,
+  sellerId: '',
+  sellerName: '',
+  sellerReputation: null,
+  shippingCost: null,
+  stock: null,
+  isFlashSale: false,
+  affiliateProvider: 'official',
+  affiliateStatus: 'generated',
+  commissionRate: product.privateCommission.percentage,
+  commissionAmount: product.privateCommission.estimatedValue,
+  offerScore: null,
+  fetchedAt: new Date().toISOString(),
+}));
