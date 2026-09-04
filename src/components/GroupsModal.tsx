@@ -8,6 +8,8 @@ interface GroupsModalProps {
 }
 
 export const GroupsModal: React.FC<GroupsModalProps> = ({ isOpen, onClose, onShowToast }) => {
+  const [selectedGroups, setSelectedGroups] = React.useState<string[]>(['g1']);
+  const [message, setMessage] = React.useState('RADAR ENCONTROU!\nConfira esta oferta antes que acabe.\n\nCompre aqui: ');
   if (!isOpen) return null;
 
   const connectedGroups = [
@@ -73,6 +75,7 @@ export const GroupsModal: React.FC<GroupsModalProps> = ({ isOpen, onClose, onSho
               className="p-4 bg-slate-50 hover:bg-emerald-50/40 border border-slate-200 hover:border-emerald-200 rounded-2xl transition-all flex items-center justify-between gap-3"
             >
               <div className="flex items-center gap-3 min-w-0">
+                <input type="checkbox" checked={selectedGroups.includes(grp.id)} onChange={() => setSelectedGroups((prev) => prev.includes(grp.id) ? prev.filter((id) => id !== grp.id) : [...prev, grp.id])} className="h-4 w-4 accent-[#EE4D2D]" aria-label={`Selecionar ${grp.name}`} />
                 <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <MessageCircle className="w-5 h-5" />
                 </div>
@@ -104,6 +107,12 @@ export const GroupsModal: React.FC<GroupsModalProps> = ({ isOpen, onClose, onSho
               </div>
             </div>
           ))}
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
+            <label className="text-xs font-black text-slate-700" htmlFor="dispatch-message">Mensagem do disparo</label>
+            <textarea id="dispatch-message" value={message} onChange={(event) => setMessage(event.target.value)} rows={4} className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 outline-none focus:border-orange-400" />
+            <button type="button" disabled={!selectedGroups.length || !message.trim()} onClick={async () => { await navigator.clipboard?.writeText(message); onShowToast('Disparo preparado', `${selectedGroups.length} grupo(s) selecionado(s). Mensagem copiada para o WhatsApp.`, 'success'); }} className="mt-2 w-full rounded-xl bg-[#EE4D2D] px-3 py-2.5 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">📤 Preparar disparo ({selectedGroups.length})</button>
+          </div>
 
           {/* Info Banner */}
           <div className="p-3.5 bg-orange-50 border border-orange-200 rounded-2xl flex items-start gap-2.5 text-xs text-orange-950 mt-4">
