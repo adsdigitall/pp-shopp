@@ -351,7 +351,7 @@ export function App() {
       <DesktopSidebar
         onNavigate={(section) => {
           window.history.pushState({}, '', `#${section}`);
-          const target = section === 'garimpar' || section === 'ofertas' ? 'produtos' : section === 'extensao' || section === 'templates' ? 'extensao-radar' : ['espelhamento', 'tutoriais', 'suporte'].includes(section) ? section : null;
+          const target = section === 'visao-geral' ? 'visao-geral' : section === 'garimpar' ? 'produtos' : section === 'ofertas' ? 'ofertas-fila' : section === 'templates' ? 'templates-radar' : section === 'extensao' ? 'extensao-radar' : ['espelhamento', 'tutoriais', 'suporte'].includes(section) ? section : null;
           if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           else window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
@@ -370,6 +370,17 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6 lg:ml-72">
+
+        <section id="visao-geral" className="rounded-3xl border border-orange-100 bg-gradient-to-br from-white via-orange-50/60 to-white p-5 shadow-sm backdrop-blur-md sm:p-6">
+          <div className="flex flex-col gap-1"><h1 className="text-xl font-black tracking-tight text-slate-900">Visão geral</h1><p className="text-xs text-slate-500">Central rápida do Radar de Oferta para organizar e disparar suas ofertas.</p></div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-2xl bg-[#EE4D2D] p-4 text-left text-white shadow-lg shadow-orange-200 hover:bg-orange-600"><span className="text-lg">📤</span><span className="mt-2 block text-sm font-black">Disparar em grupo</span><span className="mt-1 block text-[11px] text-orange-100">Preparar e copiar manualmente</span></button>
+            <button type="button" onClick={() => setIsGroupsModalOpen(true)} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-left hover:border-orange-300"><span className="text-lg">💬</span><span className="mt-2 block text-sm font-black text-slate-800">Conectar WhatsApp</span><span className="mt-1 block text-[11px] text-slate-500">Gerenciar grupos e canais</span></button>
+            <button type="button" onClick={() => setIsNotificationsModalOpen(true)} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-left hover:border-orange-300"><span className="text-lg">🔔</span><span className="mt-2 block text-sm font-black text-slate-800">Notificações</span><span className="mt-1 block text-[11px] text-slate-500">Acompanhar alertas de vendas</span></button>
+            <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-left hover:border-orange-300"><span className="text-lg">🌗</span><span className="mt-2 block text-sm font-black text-slate-800">Tema e conta</span><span className="mt-1 block text-[11px] text-slate-500">Claro ou escuro com laranja</span></button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500"><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">● Integrações configuradas no servidor</span><span className="rounded-full bg-slate-100 px-3 py-1.5">Envio automático desativado por segurança</span></div>
+        </section>
         
         {/* Step 1: Como Funciona */}
         {!searchQuery && activeMarketplace === 'shopee' && (
@@ -508,6 +519,17 @@ export function App() {
             <li><b>2.</b> Abra <code className="rounded bg-slate-100 px-1">chrome://extensions</code> e ative o modo desenvolvedor.</li>
             <li><b>3.</b> Clique em “Carregar sem compactação” e selecione a pasta.</li>
           </ol>
+        </section>
+
+        <section id="ofertas-fila" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-black text-slate-900">Ofertas / fila</h2><p className="mt-1 text-xs text-slate-500">Ofertas prontas para revisar e preparar para os grupos.</p></div><button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white hover:bg-orange-600">Abrir disparo</button></div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-orange-50 p-3"><b className="block text-lg text-orange-700">{products.length}</b><span className="text-[11px] text-orange-700">na fila</span></div><div className="rounded-2xl bg-emerald-50 p-3"><b className="block text-lg text-emerald-700">0</b><span className="text-[11px] text-emerald-700">disparadas hoje</span></div><div className="rounded-2xl bg-slate-100 p-3"><b className="block text-lg text-slate-700">Manual</b><span className="text-[11px] text-slate-600">modo seguro</span></div></div>
+        </section>
+
+        <section id="templates-radar" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+          <h2 className="text-base font-black text-slate-900">Templates e páginas</h2>
+          <p className="mt-1 text-xs text-slate-500">Modelos de copy e prévias públicas para padronizar suas divulgações.</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Radar encontrou</div><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Oferta relâmpago</div><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Preço + desconto</div></div>
         </section>
 
         <section id="espelhamento" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
