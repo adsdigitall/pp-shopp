@@ -14,7 +14,13 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
 import { MercadoLivreSearch } from './components/MercadoLivreSearch';
 import { AnalyticsModal } from './components/AnalyticsModal';
-import { nextRefreshPage } from './services/productRefresh';
+import {
+  getPullRefreshDistance,
+  mergeFreshProducts,
+  nextRefreshPage,
+  nextRefreshQuery,
+  shouldTriggerPullRefresh,
+} from './services/productRefresh';
 import { SearchX, Layers3, ShoppingBag, Zap, LayoutGrid, RefreshCw, ArrowDown, BarChart2 } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AffiliateSettings = {
@@ -24,6 +30,24 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
   showPrivateCommission: true,
   theme: 'light',
 };
+
+const REFRESH_PAGE_KEY = 'radar:last-refresh-page';
+const DISCOVERY_INDEX_KEY = 'radar:discovery-index';
+const RECENT_PRODUCTS_KEY = 'radar:recent-product-ids';
+
+function readStoredNumber(key: string, fallback: number) {
+  const value = Number.parseInt(localStorage.getItem(key) || '', 10);
+  return Number.isInteger(value) ? value : fallback;
+}
+
+function readRecentProductIds() {
+  try {
+    const value = JSON.parse(localStorage.getItem(RECENT_PRODUCTS_KEY) || '[]');
+    return new Set<string>(Array.isArray(value) ? value.filter((id) => typeof id === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+}
 
 type Marketplace = 'shopee' | 'mercado_livre';
 
@@ -40,7 +64,14 @@ export function App() {
   const [hasNextPage, setHasNextPage] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState(1);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const refreshPageRef = useRef(1);
+  const refreshPageRef = useRef(readStoredNumber(REFRESH_PAGE_KEY, 0));
+  const discoveryIndexRef = useRef(readStoredNumber(DISCOVERY_INDEX_KEY, 0));
+  const recentProductIdsRef = useRef(readRecentProductIds());
+  const lastQueryKeyRef = useRef<string | null>(null);
+  const lastRefreshAtRef = useRef(0);
+  const touchStartYRef = useRef(0);
+  const pullDistanceRef = useRef(0);
+  const [pullDistance, setPullDistance] = useState(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
@@ -148,13 +179,26 @@ export function App() {
   const loadProducts = useCallback(async (silent = false, rotatePage = false) => {
     if (!silent) setLoading(true);
     try {
-      const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
+      const selectedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
       const targetPage = rotatePage ? nextRefreshPage(refreshPageRef.current) : 1;
-      const result = await productService.getProductsPage(activeFilter, combinedQuery, targetPage);
-      setProducts(result.products);
+      const discovery = nextRefreshQuery(selectedQuery, discoveryIndexRef.current);
+      const query = rotatePage ? discovery.query : selectedQuery;
+      const result = await productService.getProductsPage(activeFilter, query, targetPage);
+      const nextProducts = rotatePage
+        ? mergeFreshProducts([], result.products, recentProductIdsRef.current, result.products.length)
+        : result.products;
+      setProducts(nextProducts);
       setHasNextPage(result.hasNextPage);
       setCurrentPage(targetPage);
       refreshPageRef.current = targetPage;
+      discoveryIndexRef.current = discovery.nextIndex;
+      nextProducts.forEach((product) => recentProductIdsRef.current.add(product.id));
+      const recentIds = [...recentProductIdsRef.current].slice(-240);
+      recentProductIdsRef.current = new Set(recentIds);
+      localStorage.setItem(REFRESH_PAGE_KEY, String(targetPage));
+      localStorage.setItem(DISCOVERY_INDEX_KEY, String(discovery.nextIndex));
+      localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(recentIds));
+      lastRefreshAtRef.current = Date.now();
     } catch (err) {
       if (!silent) {
         showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
@@ -166,10 +210,62 @@ export function App() {
 
   useEffect(() => {
     if (activeMarketplace === 'shopee') {
-      refreshPageRef.current = 1;
-      loadProducts();
+      const queryKey = `${activeFilter}|${activeCategory}|${searchQuery}`;
+      const firstLoad = lastQueryKeyRef.current === null;
+      const queryChanged = !firstLoad && lastQueryKeyRef.current !== queryKey;
+      if (queryChanged) {
+        refreshPageRef.current = 0;
+        discoveryIndexRef.current = 0;
+      }
+      lastQueryKeyRef.current = queryKey;
+      loadProducts(false, !queryChanged);
     }
   }, [loadProducts, activeMarketplace]);
+
+  useEffect(() => {
+    if (activeMarketplace !== 'shopee') return;
+    const refreshAfterReturn = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastRefreshAtRef.current > 5_000) {
+        void loadProducts(true, true);
+      }
+    };
+    window.addEventListener('pageshow', refreshAfterReturn);
+    document.addEventListener('visibilitychange', refreshAfterReturn);
+    return () => {
+      window.removeEventListener('pageshow', refreshAfterReturn);
+      document.removeEventListener('visibilitychange', refreshAfterReturn);
+    };
+  }, [activeMarketplace, loadProducts]);
+
+  useEffect(() => {
+    if (activeMarketplace !== 'shopee') return;
+    const handleTouchStart = (event: TouchEvent) => {
+      if (window.scrollY <= 0) touchStartYRef.current = event.touches[0]?.clientY || 0;
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const distance = getPullRefreshDistance(
+        touchStartYRef.current,
+        event.touches[0]?.clientY || 0,
+        window.scrollY,
+      );
+      pullDistanceRef.current = distance;
+      setPullDistance(distance);
+    };
+    const handleTouchEnd = () => {
+      const refresh = shouldTriggerPullRefresh(pullDistanceRef.current);
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      if (refresh) void loadProducts(false, true);
+    };
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [activeMarketplace, loadProducts]);
 
   const loadMoreProducts = useCallback(async () => {
     if (loading || loadingMore || !hasNextPage) return;
@@ -238,6 +334,15 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff7ed_0%,#f8fafc_42%,#eef2ff_100%)] flex flex-col pb-24 sm:pb-16 text-slate-900 font-sans">
+      <div
+        className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center transition-opacity"
+        style={{ opacity: pullDistance > 0 ? 1 : 0 }}
+      >
+        <div className="flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2 text-xs font-bold text-white shadow-xl">
+          <RefreshCw className={`h-4 w-4 ${pullDistance >= 60 ? 'rotate-180' : ''}`} />
+          {pullDistance >= 60 ? 'Solte para ver novas ofertas' : 'Puxe para atualizar'}
+        </div>
+      </div>
       
       {/* Top Header */}
       <Header
@@ -306,8 +411,9 @@ export function App() {
               >
                 <option value="">Todos os nichos</option>
                 <option value="eletrônicos">Eletrônicos</option>
-                <option value="casa">Casa e cozinha</option>
-                <option value="moda">Moda</option>
+                <option value="moda feminina">Moda feminina</option>
+                <option value="casa e banho">Casa, cozinha e banho</option>
+                <option value="infantil">Infantil e crianças</option>
                 <option value="beleza">Beleza</option>
                 <option value="acessórios">Acessórios</option>
                 <option value="celular">Celulares e informática</option>

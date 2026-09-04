@@ -1,4 +1,4 @@
-import { Product } from '../types/product';
+import type { Product } from '../types/product';
 
 export type CopyReaction = 'love' | 'look' | 'urgent' | 'found';
 export type ImageStyle = 'original' | 'badge_discount' | 'badge_shipping' | 'badge_full';
@@ -19,10 +19,10 @@ export interface GeneratedOffer {
 }
 
 const REACTIONS: { id: CopyReaction; headline: string; label: string }[] = [
-  { id: 'love', headline: 'EU AMEIIII!🤩❤️', label: 'Eu Amei (Viral)' },
-  { id: 'look', headline: 'OLHA ESSA OFERTA!😱🔥', label: 'Olha Essa Oferta' },
-  { id: 'found', headline: 'ACHADINHO PERFEITO!✨🛍️', label: 'Achadinho' },
-  { id: 'urgent', headline: 'BAIXOU MUITO!💥⏳', label: 'Relâmpago / Urgente' },
+  { id: 'love', headline: '😍 OFERTA BOA!', label: 'Oferta boa' },
+  { id: 'look', headline: '👀 OLHA ESSA!', label: 'Olha essa' },
+  { id: 'found', headline: '✨ ACHADINHO!', label: 'Achadinho' },
+  { id: 'urgent', headline: '💥 PREÇO BAIXOU!', label: 'Preço baixou' },
 ];
 
 const IMAGE_STYLES: ImageStyle[] = ['badge_discount', 'badge_full', 'badge_shipping', 'original'];
@@ -80,21 +80,21 @@ export function generateShareableOffer(
   const selectedReaction = REACTIONS.find((r) => r.id === reactionId) || REACTIONS[0];
   const headline = selectedReaction.headline;
 
+  const compactName = product.name.length > 88
+    ? `${product.name.slice(0, 85).trimEnd()}...`
+    : product.name;
+  const priceLine = [
+    origPrice ? `~${origPrice}~` : '',
+    `*${promoPrice}*`,
+    discountBadge ? `(${discountBadge})` : '',
+  ].filter(Boolean).join(' → ');
+
   const copyLines = [
-    '🚨 RADAR ENCONTROU!',
-    ``,
-    product.name,
-    ``,
-    origPrice ? `~De: ${origPrice}~` : '',
-    discountBadge ? `*Desconto: ${discountBadge}*` : '',
-    `*Por ${promoPrice} ✅*`,
-    `🏷️ Oferta na Shopee`,
+    headline,
+    compactName,
+    priceLine,
     couponCode.trim() ? `🎟️ Cupom: *${couponCode.trim()}*` : '',
-    `⚡ Pode acabar a qualquer momento`,
-    isFreeShipping ? `🚚 Frete Grátis disponível` : '',
-    ``,
-    `compre aqui 🛍️`,
-    `🔗 ${link}`,
+    `🛍️ ${link}`,
   ].filter((line) => line !== '');
 
   const copyText = copyLines.join('\n');

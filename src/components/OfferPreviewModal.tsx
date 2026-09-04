@@ -59,7 +59,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setReaction('love');
+      setReaction((current) => getNextReaction(current));
       setImageStyle('badge_discount');
       setCopiedText(false);
       setCopiedLink(false);
@@ -284,57 +284,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
                 <Loader2 className="w-6 h-6 animate-spin" />
                 <span className="text-xs font-semibold">Regenerando texto...</span>
               </div>
-            ) : (
-              <div className="space-y-2 text-xs sm:text-sm font-sans leading-relaxed pt-1">
-                {/* 1. Reaction Headline */}
-                <div className="text-base sm:text-lg font-black text-slate-100 tracking-tight">
-                  🚨 RADAR ENCONTROU!
-                </div>
-
-                {/* 2. Product Title */}
-                <div className="text-slate-200 font-semibold leading-snug">
-                  {offer.productName}
-                </div>
-
-                {/* 3. Pricing */}
-                <div className="pt-1 text-xs sm:text-sm space-y-0.5">
-                  {offer.originalPriceFormatted && (
-                    <div className="text-slate-400 line-through decoration-slate-400/80 decoration-2">
-                      De: {offer.originalPriceFormatted}
-                    </div>
-                  )}
-                  {offer.discountBadge && (
-                    <div className="text-orange-300 font-bold">
-                      Desconto: {offer.discountBadge}
-                    </div>
-                  )}
-                  <div className="text-sm sm:text-base font-extrabold text-white flex items-center gap-1.5">
-                    <span>Por {offer.promotionalPriceFormatted}</span>
-                    <span className="text-emerald-400 text-base">✅</span>
-                  </div>
-                  {offer.isFreeShipping && (
-                    <div className="text-emerald-400 font-semibold text-xs pt-0.5 flex items-center gap-1">
-                      <Truck className="w-3.5 h-3.5" />
-                      <span>Frete Grátis disponível</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 4. Call to Action & Link */}
-                <div className="pt-2">
-                  <div className="text-slate-300 font-bold">
-                    compre aqui 🛍️
-                  </div>
-                  <div className="text-[#38bdf8] font-semibold underline break-all text-xs pt-0.5">
-                    🔗 {offer.affiliateLink}
-                  </div>
-                </div>
-
-                <div className="text-right text-[10px] text-slate-400 pt-1">
-                  14:26
-                </div>
-              </div>
-            )}
+            ) : null}
 
           </div>
 
