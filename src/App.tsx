@@ -79,6 +79,7 @@ export function App() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('top_sales');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
+  const [selectedPlatform, setSelectedPlatform] = useState<'shopee' | 'mercado_livre' | 'amazon' | 'magalu' | 'tiktok'>('shopee');
   const [shopeeConfigured, setShopeeConfigured] = useState(true);
   const [activeSection, setActiveSection] = useState('visao-geral');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -402,7 +403,7 @@ export function App() {
         
         <div className={activeSection === 'garimpar' ? '' : 'hidden'}>
         <div className="rounded-3xl border border-orange-100 bg-white/75 p-4 shadow-sm backdrop-blur-md">
-          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setActiveMarketplace('shopee')} className={`rounded-full px-4 py-2 text-xs font-black ${activeMarketplace === 'shopee' ? 'bg-[#EE4D2D] text-white' : 'bg-slate-100 text-slate-600'}`}>🟠 Shopee</button><button type="button" onClick={() => showToast('Mercado Livre', 'Conecte seu token OAuth em Configurações para ativar.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-600">🟡 Mercado Livre · conectar</button><button type="button" onClick={() => showToast('Amazon', 'Integração preparada para uma próxima etapa.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-600">🟢 Amazon · conectar</button><span className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-400">🔵 Magalu · em breve</span><button type="button" onClick={() => showToast('TikTok Shop', 'Integração preparada para uma próxima etapa.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-500">⚫ TikTok Shop · em breve</button></div>
+          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectedPlatform('shopee'); setActiveMarketplace('shopee'); }} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'shopee' ? 'bg-[#EE4D2D] text-white' : 'bg-slate-100 text-slate-600'}`}>🟠 Shopee</button><button type="button" onClick={() => { setSelectedPlatform('mercado_livre'); setActiveMarketplace('mercado_livre'); }} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'mercado_livre' ? 'bg-yellow-500 text-slate-950' : 'bg-slate-100 text-slate-600'}`}>🟡 Mercado Livre · conectar</button><button type="button" onClick={() => { setSelectedPlatform('amazon'); showToast('Amazon', 'Integração preparada para uma próxima etapa.', 'info'); }} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'amazon' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600'}`}>🟢 Amazon · conectar</button><button type="button" onClick={() => setSelectedPlatform('magalu')} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'magalu' ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-400'}`}>🔵 Magalu · em breve</button><button type="button" onClick={() => setSelectedPlatform('tiktok')} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'tiktok' ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-500'}`}>⚫ TikTok Shop · em breve</button></div>
           {!shopeeConfigured && <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-orange-300 bg-orange-50 p-3 text-xs text-orange-800"><span>Shopee ainda não está configurada neste servidor.</span><button type="button" onClick={() => setIsSettingsModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-3 py-2 font-black text-white">Configurar chave</button></div>}
           <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-xl bg-orange-100 px-3 py-2 text-xs font-black text-orange-700">Buscar</span><button type="button" onClick={() => showToast('Categorias', 'Escolha uma categoria abaixo para atualizar os produtos.', 'info')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Categorias</button><button type="button" onClick={() => setActiveFilter('trending')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Mais buscados</button><button type="button" onClick={() => setIsGroupsModalOpen(true)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Lojas favoritas</button><button type="button" onClick={() => showToast('Buscar por link', 'Cole um link Shopee no campo de busca acima.', 'info')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Por links</button></div>
           <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-slate-500">Categorias:</span>{[['🏠','Casa'],['🍳','Cozinha'],['💻','Eletrônico'],['👗','Moda'],['💄','Beleza'],['🛠️','Ferramenta'],['⚽','Esporte'],['🐾','Pet'],['👶','Bebê']].map(([emoji,label]) => <button key={label} type="button" onClick={() => { setActiveCategory(label.toLowerCase()); void loadProducts(false, true); }} className="rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:border-orange-300">{emoji} {label}</button>)}</div>
@@ -428,7 +429,7 @@ export function App() {
           ))}
         </div>
 
-        {activeMarketplace === 'shopee' ? (
+        {selectedPlatform === 'shopee' ? (
           <>  
             {/* Shopee Filters */}
             <FilterTabs
@@ -515,12 +516,14 @@ export function App() {
               {loadingMore ? 'Carregando mais ofertas reais…' : hasNextPage ? 'Role para carregar mais' : 'Você chegou ao fim desta lista'}
             </div>
           </>
-        ) : (
+        ) : selectedPlatform === 'mercado_livre' ? (
           // Mercado Livre Search
           <MercadoLivreSearch
             onProductSelect={handleGenerateOffer}
             onShowToast={showToast}
           />
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-white/80 p-8 text-center"><h3 className="text-base font-black text-slate-900">Integração em preparação</h3><p className="mt-2 text-xs text-slate-500">Esta plataforma ficará disponível assim que a conexão oficial for configurada.</p></div>
         )}
 
         </div>
