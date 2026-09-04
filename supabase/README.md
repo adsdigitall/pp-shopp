@@ -1,16 +1,14 @@
 # Banco do backend
 
-Esta pasta contém a migration inicial do PP Shopp. Ela ainda não foi aplicada em um projeto remoto porque este repositório não possui um projeto Supabase conectado.
+As migrations desta pasta já foram aplicadas no projeto Supabase `nqgbygurplruthoihwrl`.
 
-1. Crie um projeto em [supabase.com](https://supabase.com).
-2. Abra **SQL Editor** e execute o arquivo `migrations/20260904000000_backend_marketplace.sql`.
-3. Crie uma chave de criptografia forte para os tokens no backend.
-4. Cadastre no ambiente da Vercel:
+Para configurar o backend local ou na Vercel, defina:
 
 ```text
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<somente-backend>
 TOKEN_ENCRYPTION_KEY=<32-byte-key>
+SUPABASE_DEFAULT_USER_ID=<UUID do usuario em auth.users>
 ```
 
-A `SUPABASE_SERVICE_ROLE_KEY` nunca deve ser colocada no frontend ou em variável `VITE_*`. As tabelas têm RLS habilitado e as políticas restringem linhas ao usuário autenticado.
+`SUPABASE_SERVICE_ROLE_KEY` nunca deve ser colocada no frontend ou em variável `VITE_*`. `SUPABASE_DEFAULT_USER_ID` é o UUID do usuário autenticado usado pelo backend enquanto o fluxo de autenticação do app não estiver completo. As tabelas têm RLS habilitado.
