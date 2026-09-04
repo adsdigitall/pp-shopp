@@ -378,7 +378,7 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6 lg:ml-72">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6 md:ml-72">
 
         <section id="visao-geral" className={`${activeSection === 'visao-geral' ? '' : 'hidden'} rounded-3xl border border-orange-100 bg-gradient-to-br from-white via-orange-50/60 to-white p-5 shadow-sm backdrop-blur-md sm:p-6`}>
           <div className="flex flex-col gap-1"><h1 className="text-xl font-black tracking-tight text-slate-900">Visão geral</h1><p className="text-xs text-slate-500">Central rápida do Radar de Oferta para organizar e disparar suas ofertas.</p></div>
