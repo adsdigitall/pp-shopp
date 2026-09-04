@@ -5,6 +5,7 @@ import { Sparkles, DollarSign, ExternalLink, Star, Truck, Zap, ShoppingBag, Awar
 interface ProductCardProps {
   product: Product;
   onGenerateOffer: (product: Product) => void;
+  onAddToQueue?: (product: Product) => void;
 }
 
 const MARKETPLACE_STYLES: Record<MarketplaceType, { color: string; bgColor: string; icon: React.ReactNode; gradient: string; hoverShadow: string }> = {
@@ -57,6 +58,7 @@ const DEFAULT_STYLE = MARKETPLACE_STYLES.shopee;
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onGenerateOffer,
+  onAddToQueue,
 }) => {
   const style = MARKETPLACE_STYLES[product.marketplace] || DEFAULT_STYLE;
   
@@ -208,6 +210,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Zap className="w-4 h-4" />
             <span>Divulgar</span>
           </button>
+          {onAddToQueue && <button type="button" onClick={() => onAddToQueue(product)} className="w-full rounded-2xl border border-orange-300 bg-orange-50/80 py-2 text-xs font-black text-orange-700 hover:bg-orange-100">＋ Jogar na fila</button>}
 
           <a
             href={product.productUrl}

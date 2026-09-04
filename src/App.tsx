@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, FilterType, AffiliateSettings } from './types/product';
 import { productService } from './services/productService';
 import { Header } from './components/Header';
-import { HowItWorks } from './components/HowItWorks';
 import { FilterTabs } from './components/FilterTabs';
 import { ProductCard } from './components/ProductCard';
 import { GroupsShortcutCard } from './components/GroupsShortcutCard';
@@ -61,6 +60,7 @@ function decodeVapidKey(value: string) {
 
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [queuedProductIds, setQueuedProductIds] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [hasNextPage, setHasNextPage] = useState<boolean>(true);
@@ -79,6 +79,7 @@ export function App() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('top_sales');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
+  const [shopeeConfigured, setShopeeConfigured] = useState(true);
   const [activeSection, setActiveSection] = useState('visao-geral');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -96,6 +97,10 @@ export function App() {
   // Settings & Toasts
   const [settings, setSettings] = useState<AffiliateSettings>(DEFAULT_SETTINGS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  useEffect(() => {
+    fetch('/api/health').then((response) => response.json()).then((body) => setShopeeConfigured(body?.shopeeConfigured !== false)).catch(() => setShopeeConfigured(true));
+  }, []);
 
   useEffect(() => {
     document.body.classList.toggle('app-dark', settings.theme === 'dark');
@@ -396,16 +401,9 @@ export function App() {
         </section>
         
         <div className={activeSection === 'garimpar' ? '' : 'hidden'}>
-        {/* Step 1: Como Funciona */}
-        {!searchQuery && activeMarketplace === 'shopee' && (
-          <HowItWorks onStepClick={(step) => {
-            if (step <= 2) window.scrollTo({ top: 280, behavior: 'smooth' });
-            if (step === 3) showToast('Escolha um produto para compartilhar', undefined, 'info');
-          }} />
-        )}
-
         <div className="rounded-3xl border border-orange-100 bg-white/75 p-4 shadow-sm backdrop-blur-md">
           <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setActiveMarketplace('shopee')} className={`rounded-full px-4 py-2 text-xs font-black ${activeMarketplace === 'shopee' ? 'bg-[#EE4D2D] text-white' : 'bg-slate-100 text-slate-600'}`}>🟠 Shopee</button><button type="button" onClick={() => showToast('Mercado Livre', 'Conecte seu token OAuth em Configurações para ativar.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-600">🟡 Mercado Livre · conectar</button><button type="button" onClick={() => showToast('Amazon', 'Integração preparada para uma próxima etapa.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-600">🟢 Amazon · conectar</button><span className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-400">🔵 Magalu · em breve</span></div>
+          {!shopeeConfigured && <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-orange-300 bg-orange-50 p-3 text-xs text-orange-800"><span>Shopee ainda não está configurada neste servidor.</span><button type="button" onClick={() => setIsSettingsModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-3 py-2 font-black text-white">Configurar chave</button></div>}
           <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-xl bg-orange-100 px-3 py-2 text-xs font-black text-orange-700">Buscar</span><button type="button" onClick={() => showToast('Categorias', 'Escolha uma categoria abaixo para atualizar os produtos.', 'info')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Categorias</button><button type="button" onClick={() => setActiveFilter('trending')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Mais buscados</button><button type="button" onClick={() => setIsGroupsModalOpen(true)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Lojas favoritas</button><button type="button" onClick={() => showToast('Buscar por link', 'Cole um link Shopee no campo de busca acima.', 'info')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Por links</button></div>
           <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-slate-500">Categorias:</span>{[['🏠','Casa'],['🍳','Cozinha'],['💻','Eletrônico'],['👗','Moda'],['💄','Beleza'],['🛠️','Ferramenta'],['⚽','Esporte'],['🐾','Pet'],['👶','Bebê']].map(([emoji,label]) => <button key={label} type="button" onClick={() => { setActiveCategory(label.toLowerCase()); void loadProducts(false, true); }} className="rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:border-orange-300">{emoji} {label}</button>)}</div>
           <p className="mt-3 text-[11px] text-slate-500">🇧🇷 Produtos brasileiros por padrão. Produtos internacionais: em breve.</p>
@@ -494,6 +492,7 @@ export function App() {
                     key={product.id}
                     product={product}
                     onGenerateOffer={handleGenerateOffer}
+                    onAddToQueue={(item) => { setQueuedProductIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]); showToast('Oferta adicionada à fila', 'Disponível em Ofertas / fila para disparo manual.', 'success'); }}
                   />
                 ))}
               </div>
@@ -548,7 +547,7 @@ export function App() {
 
         <section id="ofertas-fila" className={`${activeSection === 'ofertas' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-black text-slate-900">Ofertas / fila</h2><p className="mt-1 text-xs text-slate-500">Ofertas prontas para revisar e preparar para os grupos.</p></div><button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white hover:bg-orange-600">Abrir disparo</button></div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-orange-50 p-3"><b className="block text-lg text-orange-700">{products.length}</b><span className="text-[11px] text-orange-700">na fila</span></div><div className="rounded-2xl bg-emerald-50 p-3"><b className="block text-lg text-emerald-700">0</b><span className="text-[11px] text-emerald-700">disparadas hoje</span></div><div className="rounded-2xl bg-slate-100 p-3"><b className="block text-lg text-slate-700">Manual</b><span className="text-[11px] text-slate-600">modo seguro</span></div></div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-orange-50 p-3"><b className="block text-lg text-orange-700">{queuedProductIds.length}</b><span className="text-[11px] text-orange-700">na fila</span></div><div className="rounded-2xl bg-emerald-50 p-3"><b className="block text-lg text-emerald-700">0</b><span className="text-[11px] text-emerald-700">disparadas hoje</span></div><div className="rounded-2xl bg-slate-100 p-3"><b className="block text-lg text-slate-700">Manual</b><span className="text-[11px] text-slate-600">modo seguro</span></div></div>
         </section>
 
         <section id="templates-radar" className={`${activeSection === 'templates' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
