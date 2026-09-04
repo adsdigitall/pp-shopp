@@ -24,6 +24,7 @@ import {
   ClickTrackingStore,
 } from './services/storage/DataStore.mjs';
 import { dataStore } from './services/storage/DataStore.mjs';
+import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 
 const notifiedSaleIds = new Set();
 
@@ -388,6 +389,18 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
 
       // ========== ANALYTICS ENDPOINTS ==========
+
+      // GET /api/analytics - visão consolidada de todos os marketplaces
+      if (req.method === 'GET' && pathOnly === '/api/analytics') {
+        await handleUnifiedAnalytics(req, res);
+        return;
+      }
+
+      // POST /api/analytics/events - ingestão server-side de clique/comissão
+      if (req.method === 'POST' && pathOnly === '/api/analytics/events') {
+        await handleAnalyticsEvent(req, res);
+        return;
+      }
       
       // GET /api/analytics/shopee - Analytics Shopee (cliques + conversões)
       if (req.method === 'GET' && pathOnly === '/api/analytics/shopee') {
@@ -854,6 +867,112 @@ async function handleMercadoLivrePublicationHistory(req, res) {
 }
 
 // ========== ANALYTICS HANDLERS ==========
+
+const ANALYTICS_MARKETPLACES = new Set(['shopee', 'mercado_livre', 'tiktok_shop', 'chain']);
+const COMMISSION_STATUSES = new Set(['unknown', 'pending', 'validated', 'rejected', 'cancelled']);
+
+function emptyAnalyticsProduct(event) {
+  return {
+    id: `${event.marketplace}:${event.marketplace_product_id || 'unknown'}`,
+    productId: event.marketplace_product_id || '',
+    productName: event.product_name || 'Produto',
+    marketplace: event.marketplace,
+    clicks: 0,
+    conversions: 0,
+    commission: 0,
+    lastClickAt: event.occurred_at,
+    affiliateUrl: event.metadata?.affiliate_url || '',
+  };
+}
+
+function summarizeAnalyticsEvents(events, marketplace = 'all') {
+  const products = new Map();
+  const statusCounts = { unknown: 0, pending: 0, validated: 0, rejected: 0, cancelled: 0 };
+  let totalClicks = 0;
+  let totalConversions = 0;
+  let totalCommission = 0;
+  for (const event of events || []) {
+    if (!ANALYTICS_MARKETPLACES.has(event.marketplace)) continue;
+    const key = `${event.marketplace}:${event.marketplace_product_id || 'unknown'}`;
+    const product = products.get(key) || emptyAnalyticsProduct(event);
+    if (event.event_type === 'click') {
+      product.clicks += 1;
+      totalClicks += 1;
+      if (!product.lastClickAt || new Date(event.occurred_at) > new Date(product.lastClickAt)) product.lastClickAt = event.occurred_at;
+    }
+    if (event.event_type === 'conversion' || event.event_type === 'commission') {
+      product.conversions += 1;
+      totalConversions += 1;
+      product.commission += Number(event.commission || 0);
+      totalCommission += Number(event.commission || 0);
+      const status = COMMISSION_STATUSES.has(event.commission_status) ? event.commission_status : 'unknown';
+      statusCounts[status] += 1;
+    }
+    products.set(key, product);
+  }
+  const allProducts = [...products.values()].sort((a, b) => b.clicks - a.clicks || b.commission - a.commission);
+  const filteredProducts = marketplace === 'all' ? allProducts : allProducts.filter((item) => item.marketplace === marketplace);
+  return {
+    totalClicks,
+    totalConversions,
+    totalCommission,
+    conversionRate: totalClicks ? (totalConversions / totalClicks) * 100 : 0,
+    commissionStatus: statusCounts,
+    topProducts: filteredProducts.slice(0, 20),
+    recentConversions: [],
+    marketplaces: [...new Set(allProducts.map((item) => item.marketplace))],
+  };
+}
+
+async function handleUnifiedAnalytics(req, res) {
+  const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+  const marketplace = parsed.searchParams.get('marketplace') || 'all';
+  if (marketplace !== 'all' && !ANALYTICS_MARKETPLACES.has(marketplace)) {
+    sendJson(res, 400, { error: { code: 'INVALID_MARKETPLACE', message: 'Marketplace inválido.' } });
+    return;
+  }
+  const hoursRaw = Number.parseInt(parsed.searchParams.get('hours') || '168', 10);
+  const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 720) : 168;
+  const since = Date.now() - hours * 3_600_000;
+  const store = createSupabaseAnalyticsStore();
+  const events = store.enabled ? await store.list({ marketplace, since }) : [];
+  const summary = summarizeAnalyticsEvents(events, marketplace);
+  sendJson(res, 200, { ...summary, meta: { source: store.enabled ? 'supabase' : 'local-fallback', hours, marketplace } });
+}
+
+async function handleAnalyticsEvent(req, res) {
+  const body = await readJsonBody(req);
+  const marketplace = String(body.marketplace || '');
+  const eventType = String(body.event_type || body.eventType || '');
+  if (!ANALYTICS_MARKETPLACES.has(marketplace) || !['click', 'conversion', 'commission'].includes(eventType)) {
+    sendJson(res, 400, { error: { code: 'INVALID_ANALYTICS_EVENT', message: 'Marketplace ou tipo de evento inválido.' } });
+    return;
+  }
+  const status = String(body.commission_status || body.commissionStatus || 'unknown');
+  if (!COMMISSION_STATUSES.has(status)) {
+    sendJson(res, 400, { error: { code: 'INVALID_COMMISSION_STATUS', message: 'Status de comissão inválido.' } });
+    return;
+  }
+  const store = createSupabaseAnalyticsStore();
+  if (!store.enabled) {
+    sendJson(res, 503, { error: { code: 'SUPABASE_NOT_CONFIGURED', message: 'Analytics do Supabase ainda não está configurado no backend.' } });
+    return;
+  }
+  await store.insert({
+    external_event_id: typeof body.external_event_id === 'string' ? body.external_event_id.slice(0, 160) : null,
+    marketplace,
+    event_type: eventType,
+    marketplace_product_id: typeof body.marketplace_product_id === 'string' ? body.marketplace_product_id.slice(0, 160) : null,
+    product_name: typeof body.product_name === 'string' ? body.product_name.slice(0, 240) : null,
+    amount: Number.isFinite(Number(body.amount)) ? Number(body.amount) : null,
+    commission: Number.isFinite(Number(body.commission)) ? Number(body.commission) : null,
+    commission_status: status,
+    source: typeof body.source === 'string' ? body.source.slice(0, 80) : 'app',
+    occurred_at: body.occurred_at || new Date().toISOString(),
+    metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+  });
+  sendJson(res, 201, { ok: true });
+}
 
 async function handleShopeeAnalytics(req, res) {
   try {

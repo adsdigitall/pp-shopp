@@ -45,6 +45,14 @@ interface AnalyticsSummary {
   conversionRate: number;
   topProducts: ClickData[];
   recentConversions: ConversionData[];
+  commissionStatus: {
+    unknown: number;
+    pending: number;
+    validated: number;
+    rejected: number;
+    cancelled: number;
+  };
+  marketplaces: string[];
 }
 
 export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
@@ -60,6 +68,8 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
     conversionRate: 0,
     topProducts: [],
     recentConversions: [],
+    commissionStatus: { unknown: 0, pending: 0, validated: 0, rejected: 0, cancelled: 0 },
+    marketplaces: [],
   });
   const [loading, setLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
@@ -70,15 +80,10 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
     try {
       const hours = timeRange === '24h' ? 24 : timeRange === '7d' ? 168 : 720;
       
-      if (activeMarketplace === 'shopee') {
-        const res = await fetch(`/api/analytics/shopee?hours=${hours}`);
-        const data = await res.json();
-        setSummary(data);
-      } else {
-        const res = await fetch(`/api/analytics/mercadolivre?hours=${hours}`);
-        const data = await res.json();
-        setSummary(data);
-      }
+      const res = await fetch(`/api/analytics?marketplace=all&hours=${hours}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || 'analytics');
+      setSummary(data);
     } catch {
       onShowToast('Erro ao carregar analytics', 'Tente novamente', 'error');
     } finally {
@@ -118,7 +123,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             </div>
             <div>
               <h2 className="font-extrabold text-base sm:text-lg text-slate-900">
-                Analytics - {activeMarketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'}
+                Analytics - Todos os marketplaces
               </h2>
               <p className="text-xs text-slate-500">Cliques, conversões e comissões em tempo real</p>
             </div>
@@ -187,6 +192,15 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             color="text-purple-600"
             bgColor="bg-purple-50"
           />
+        </div>
+
+        <div className="px-4 py-3 bg-white border-b border-slate-100 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+          <span className="font-bold text-slate-700">Comissões:</span>
+          <span className="text-emerald-700">Validadas: {summary.commissionStatus.validated}</span>
+          <span className="text-amber-700">Pendentes: {summary.commissionStatus.pending}</span>
+          <span className="text-slate-600">Não validadas: {summary.commissionStatus.unknown}</span>
+          <span className="text-red-700">Rejeitadas: {summary.commissionStatus.rejected}</span>
+          {summary.marketplaces.length > 0 && <span className="text-slate-500">Fontes: {summary.marketplaces.join(', ')}</span>}
         </div>
 
         {/* Content Tabs */}
