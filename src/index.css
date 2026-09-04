@@ -35,6 +35,10 @@
 body.app-dark { background: #0a0a0c; color: #e4e4e7; }
 body.app-dark .bg-white { background-color: #111114 !important; }
 body.app-dark [class*="bg-white/"] { background-color: #111114 !important; }
+body.app-dark [class*="bg-gradient-"] { background-image: none !important; background-color: #111114 !important; }
+body.app-dark .bg-orange-50\/80 { background-color: #2a1915 !important; }
+body.app-dark input, body.app-dark textarea, body.app-dark select { background-color: #18181b !important; color: #f4f4f5 !important; border-color: #3f3f46 !important; }
+body.app-dark .shadow-orange-200 { --tw-shadow-color: rgba(238,77,45,.25) !important; }
 body.app-dark .bg-white\/80, body.app-dark .bg-white\/65 { background-color: rgba(17,17,20,.88) !important; }
 body.app-dark .bg-slate-50, body.app-dark .bg-slate-100\/70, body.app-dark .bg-slate-100 { background-color: #18181b !important; }
 body.app-dark .bg-orange-50, body.app-dark .bg-orange-100 { background-color: #2a1915 !important; }
