@@ -8,6 +8,15 @@ interface AnalyticsModalProps {
   activeMarketplace: 'shopee' | 'mercado_livre';
 }
 
+type PlatformFilter = 'all' | 'shopee' | 'mercado_livre' | 'tiktok_shop';
+
+const PLATFORMS: { value: PlatformFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'shopee', label: 'Shopee' },
+  { value: 'mercado_livre', label: 'Mercado Livre' },
+  { value: 'tiktok_shop', label: 'TikTok Shop' },
+];
+
 interface ClickData {
   id: string;
   productId: string;
@@ -74,13 +83,14 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
       const hours = timeRange === '24h' ? 24 : timeRange === '7d' ? 168 : 720;
-      
-      const res = await fetch(`/api/analytics?marketplace=all&hours=${hours}`);
+
+      const res = await fetch(`/api/analytics?marketplace=${platformFilter}&hours=${hours}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'analytics');
       setSummary(data);
@@ -89,7 +99,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [activeMarketplace, timeRange, onShowToast]);
+  }, [activeMarketplace, timeRange, platformFilter, onShowToast]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -125,7 +135,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               <h2 className="font-extrabold text-base sm:text-lg text-slate-900">
                 Analytics - Todos os marketplaces
               </h2>
-              <p className="text-xs text-slate-500">Cliques, conversões e comissões em tempo real</p>
+              <p className="text-xs text-slate-500">Cliques, conversões e comissões por plataforma</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -158,6 +168,23 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               }`}
             >
               {range === '24h' ? '24h' : range === '7d' ? '7 dias' : '30 dias'}
+            </button>
+          ))}
+        </div>
+
+        {/* Platform Tabs */}
+        <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-white px-4 py-2.5">
+          {PLATFORMS.map((platform) => (
+            <button
+              key={platform.value}
+              onClick={() => setPlatformFilter(platform.value)}
+              className={`py-1.5 px-3 text-xs font-bold rounded-full border transition-colors ${
+                platformFilter === platform.value
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+              }`}
+            >
+              {platform.label}
             </button>
           ))}
         </div>
@@ -215,8 +242,16 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             {summary.topProducts.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
                 <Eye className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                <p className="text-sm">Nenhum clique registrado neste período</p>
-                <p className="text-xs text-slate-400 mt-1">Compartilhe links para começar a rastrear</p>
+                <p className="text-sm">
+                  {platformFilter === 'tiktok_shop'
+                    ? 'TikTok Shop ainda não tem integração ativa'
+                    : 'Nenhum clique registrado neste período'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {platformFilter === 'tiktok_shop'
+                    ? 'Assim que a integração for configurada, os dados aparecem aqui'
+                    : 'Compartilhe links para começar a rastrear'}
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
