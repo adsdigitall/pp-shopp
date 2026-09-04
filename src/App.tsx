@@ -79,6 +79,7 @@ export function App() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
+  const [activeSection, setActiveSection] = useState('garimpar');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const seenSalesRef = useRef<Set<string>>(new Set());
 
@@ -212,7 +213,7 @@ export function App() {
   }, [activeFilter, activeCategory, searchQuery, showToast]);
 
   useEffect(() => {
-    if (activeMarketplace === 'shopee') {
+    if (activeMarketplace === 'shopee' && activeSection === 'garimpar') {
       const queryKey = `${activeFilter}|${activeCategory}|${searchQuery}`;
       const firstLoad = lastQueryKeyRef.current === null;
       const queryChanged = !firstLoad && lastQueryKeyRef.current !== queryKey;
@@ -223,7 +224,13 @@ export function App() {
       lastQueryKeyRef.current = queryKey;
       loadProducts(false, !queryChanged);
     }
-  }, [loadProducts, activeMarketplace]);
+  }, [loadProducts, activeMarketplace, activeSection]);
+
+  useEffect(() => {
+    const targetId = activeSection === 'garimpar' ? 'produtos' : activeSection === 'ofertas' ? 'ofertas-fila' : activeSection === 'templates' ? 'templates-radar' : activeSection === 'extensao' ? 'extensao-radar' : activeSection;
+    const timer = window.setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSection]);
 
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
@@ -350,6 +357,7 @@ export function App() {
       {/* Top Header */}
       <DesktopSidebar
         onNavigate={(section) => {
+          setActiveSection(section);
           window.history.pushState({}, '', `#${section}`);
           const target = section === 'visao-geral' ? 'visao-geral' : section === 'garimpar' ? 'produtos' : section === 'ofertas' ? 'ofertas-fila' : section === 'templates' ? 'templates-radar' : section === 'extensao' ? 'extensao-radar' : ['espelhamento', 'tutoriais', 'suporte'].includes(section) ? section : null;
           if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -371,7 +379,7 @@ export function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6 lg:ml-72">
 
-        <section id="visao-geral" className="rounded-3xl border border-orange-100 bg-gradient-to-br from-white via-orange-50/60 to-white p-5 shadow-sm backdrop-blur-md sm:p-6">
+        <section id="visao-geral" className={`${activeSection === 'visao-geral' ? '' : 'hidden'} rounded-3xl border border-orange-100 bg-gradient-to-br from-white via-orange-50/60 to-white p-5 shadow-sm backdrop-blur-md sm:p-6`}>
           <div className="flex flex-col gap-1"><h1 className="text-xl font-black tracking-tight text-slate-900">Visão geral</h1><p className="text-xs text-slate-500">Central rápida do Radar de Oferta para organizar e disparar suas ofertas.</p></div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-2xl bg-[#EE4D2D] p-4 text-left text-white shadow-lg shadow-orange-200 hover:bg-orange-600"><span className="text-lg">📤</span><span className="mt-2 block text-sm font-black">Disparar em grupo</span><span className="mt-1 block text-[11px] text-orange-100">Preparar e copiar manualmente</span></button>
@@ -382,6 +390,7 @@ export function App() {
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500"><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">● Integrações configuradas no servidor</span><span className="rounded-full bg-slate-100 px-3 py-1.5">Envio automático desativado por segurança</span></div>
         </section>
         
+        <div className={activeSection === 'garimpar' ? '' : 'hidden'}>
         {/* Step 1: Como Funciona */}
         {!searchQuery && activeMarketplace === 'shopee' && (
           <HowItWorks onStepClick={(step) => {
@@ -389,6 +398,13 @@ export function App() {
             if (step === 3) showToast('Escolha um produto para compartilhar', undefined, 'info');
           }} />
         )}
+
+        <div className="rounded-3xl border border-orange-100 bg-white/75 p-4 shadow-sm backdrop-blur-md">
+          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setActiveMarketplace('shopee')} className={`rounded-full px-4 py-2 text-xs font-black ${activeMarketplace === 'shopee' ? 'bg-[#EE4D2D] text-white' : 'bg-slate-100 text-slate-600'}`}>🟠 Shopee</button><button type="button" onClick={() => showToast('Mercado Livre', 'Conecte seu token OAuth em Configurações para ativar.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-600">🟡 Mercado Livre · conectar</button><button type="button" onClick={() => showToast('Amazon', 'Integração preparada para uma próxima etapa.', 'info')} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-600">🟢 Amazon · conectar</button><span className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-400">🔵 Magalu · em breve</span></div>
+          <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-xl bg-orange-100 px-3 py-2 text-xs font-black text-orange-700">Buscar</span><button type="button" onClick={() => showToast('Categorias', 'Escolha uma categoria abaixo para atualizar os produtos.', 'info')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Categorias</button><button type="button" onClick={() => setActiveFilter('trending')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Mais buscados</button><button type="button" onClick={() => setIsGroupsModalOpen(true)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Lojas favoritas</button><button type="button" onClick={() => showToast('Buscar por link', 'Cole um link Shopee no campo de busca acima.', 'info')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Por links</button></div>
+          <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-slate-500">Categorias:</span>{[['🏠','Casa'],['🍳','Cozinha'],['💻','Eletrônico'],['👗','Moda'],['💄','Beleza'],['🛠️','Ferramenta'],['⚽','Esporte'],['🐾','Pet'],['👶','Bebê']].map(([emoji,label]) => <button key={label} type="button" onClick={() => { setActiveCategory(label.toLowerCase()); void loadProducts(false, true); }} className="rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:border-orange-300">{emoji} {label}</button>)}</div>
+          <p className="mt-3 text-[11px] text-slate-500">🇧🇷 Produtos brasileiros por padrão. Produtos internacionais: em breve.</p>
+        </div>
 
         {/* Marketplace Selector Tabs */}
         <div className="flex gap-2 bg-white/65 border border-white/70 rounded-2xl p-1.5 shadow-sm backdrop-blur-md">
@@ -502,11 +518,14 @@ export function App() {
           />
         )}
 
-        {/* Step 4: Seus Grupos */}
+        </div>
+
+        <div className={activeSection === 'ofertas' ? '' : 'hidden'}>
         <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />
+        </div>
 
         {/* Extensão do Radar */}
-        <section id="extensao-radar" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="extensao-radar" className={`${activeSection === 'extensao' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-black text-slate-900">🧩 Extensão Radar de Oferta</h2>
@@ -521,30 +540,30 @@ export function App() {
           </ol>
         </section>
 
-        <section id="ofertas-fila" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="ofertas-fila" className={`${activeSection === 'ofertas' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-black text-slate-900">Ofertas / fila</h2><p className="mt-1 text-xs text-slate-500">Ofertas prontas para revisar e preparar para os grupos.</p></div><button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white hover:bg-orange-600">Abrir disparo</button></div>
           <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-orange-50 p-3"><b className="block text-lg text-orange-700">{products.length}</b><span className="text-[11px] text-orange-700">na fila</span></div><div className="rounded-2xl bg-emerald-50 p-3"><b className="block text-lg text-emerald-700">0</b><span className="text-[11px] text-emerald-700">disparadas hoje</span></div><div className="rounded-2xl bg-slate-100 p-3"><b className="block text-lg text-slate-700">Manual</b><span className="text-[11px] text-slate-600">modo seguro</span></div></div>
         </section>
 
-        <section id="templates-radar" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="templates-radar" className={`${activeSection === 'templates' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <h2 className="text-base font-black text-slate-900">Templates e páginas</h2>
           <p className="mt-1 text-xs text-slate-500">Modelos de copy e prévias públicas para padronizar suas divulgações.</p>
           <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Radar encontrou</div><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Oferta relâmpago</div><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Preço + desconto</div></div>
         </section>
 
-        <section id="espelhamento" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="espelhamento" className={`${activeSection === 'espelhamento' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <h2 className="text-base font-black text-slate-900">Espelhamento</h2>
           <p className="mt-1 text-xs text-slate-500">Acompanhe a captura de ofertas da extensão em um único painel. A conexão de grupos será habilitada quando você instalar a extensão Radar.</p>
           <span className="mt-3 inline-flex rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600">Preparação disponível</span>
         </section>
 
-        <section id="tutoriais" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="tutoriais" className={`${activeSection === 'tutoriais' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <h2 className="text-base font-black text-slate-900">Tutoriais</h2>
           <p className="mt-1 text-xs text-slate-500">Aprenda a garimpar, revisar e copiar ofertas para seus grupos com o fluxo manual seguro.</p>
           <ol className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3"><li><b>1.</b> Escolha um produto.</li><li><b>2.</b> Gere e revise a mensagem.</li><li><b>3.</b> Copie e envie no WhatsApp.</li></ol>
         </section>
 
-        <section id="suporte" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <section id="suporte" className={`${activeSection === 'suporte' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <h2 className="text-base font-black text-slate-900">Suporte</h2>
           <p className="mt-1 text-xs text-slate-500">Precisa de ajuda? Confira as instruções da extensão e valide suas configurações de integração antes de solicitar atendimento.</p>
           <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="mt-3 rounded-xl bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-700 hover:bg-orange-100">Abrir configurações</button>
