@@ -75,27 +75,34 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [weekendPause, setWeekendPause] = useState(false);
   const [expirePause, setExpirePause] = useState(true);
   const [searchGroups, setSearchGroups] = useState('');
+  const [activeTab, setActiveTab] = useState<'new' | 'ongoing'>('new');
+  const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
+
+  const refreshHistory = useCallback(() => fetch('/api/dispatch/history', { cache: 'no-store' })
+    .then(response => response.ok ? response.json() : null)
+    .then(body => {
+      const history = Array.isArray(body?.history) ? body.history : [];
+      setDispatchHistory(history);
+      return history;
+    })
+    .catch(() => []), []);
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/dispatch/history')
-      .then(response => response.ok ? response.json() : null)
-      .then(body => {
+    refreshHistory()
+      .then(history => {
         if (cancelled) return;
-        const latest = body?.history?.[0];
-        if (!latest?.id) return;
-        setDispatchJob(latest);
-        setSelectedOffers((latest.offers || []).map((offer: Product) => offer.id));
-        setSelectedGroups((latest.destinations?.groups || []).map((group: Group | string) => typeof group === 'string' ? group : group.id));
-        if (latest.destinations?.interval) {
-          setIntervalValue(latest.destinations.interval.value || 30);
-          setIntervalUnit(latest.destinations.interval.unit || 'seconds');
-        }
-        setStep(5);
+        if (history.some((job: any) => ['pending', 'running', 'waiting_connection'].includes(job.status))) setActiveTab('ongoing');
       })
-      .catch(() => undefined);
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshHistory]);
+
+  useEffect(() => {
+    if (activeTab !== 'ongoing') return;
+    void refreshHistory();
+    const timer = window.setInterval(() => void refreshHistory(), 3000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, refreshHistory]);
 
   const allTemplates = [...defaultTemplates, ...(userTemplates || [])];
   const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId) || defaultTemplates[0];
@@ -175,6 +182,8 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     setDispatching(false);
     if (created?.jobId) {
       setDispatchJob({ id: created.jobId, status: created.status, stats: { sent: 0, failed: 0, pending: totalEnvios } });
+      await refreshHistory();
+      setActiveTab('ongoing');
     }
   };
 
@@ -209,10 +218,42 @@ export const DispararPage: React.FC<DispararPageProps> = ({
 
   const selectedGroupsData = groups.filter(g => selectedGroups.includes(g.id));
   const totalEnvios = selectedOffers.length * selectedGroups.length;
+  const activeJobs = dispatchHistory.filter(job => ['pending', 'running', 'waiting_connection'].includes(job.status));
+  const recentJobs = dispatchHistory.filter(job => !['pending', 'running', 'waiting_connection'].includes(job.status));
+  const dispatchTabs = (
+    <div className="flex gap-5 border-b border-[var(--border)] px-3 pt-3 text-[12px]">
+      <button type="button" onClick={() => setActiveTab('new')} className={`pb-2.5 font-semibold ${activeTab === 'new' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Novo Disparo</button>
+      <button type="button" onClick={() => setActiveTab('ongoing')} className={`flex items-center gap-1.5 pb-2.5 font-semibold ${activeTab === 'ongoing' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Em andamento <span className="grid min-w-5 place-items-center rounded-full bg-[var(--primary)] px-1 text-[9px] text-white">{activeJobs.length}</span></button>
+    </div>
+  );
+
+  if (activeTab === 'ongoing') return (
+    <section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)]">
+      {dispatchTabs}
+      <div className="space-y-5 px-3 py-4 pb-24">
+        <header><h2 className="text-xl font-black text-[var(--text-primary)]">Disparos em andamento</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado.</p></header>
+        <div className="space-y-2.5">
+          {activeJobs.map(job => {
+            const total = Math.max(1, (job.offers?.length || 0) * (job.destinations?.groups?.length || 0));
+            const done = (job.stats?.sent || 0) + (job.stats?.failed || 0);
+            const percent = Math.min(100, Math.round(done / total * 100));
+            return <article key={job.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+              <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3></div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--primary)] transition-[width]" style={{ width: `${percent}%` }} /></div>
+              <div className="mt-2 flex justify-between text-[10px] text-[var(--text-secondary)]"><span>{job.stats?.sent || 0} enviados · {job.stats?.failed || 0} falhas</span><span>{percent}% · intervalo {job.destinations?.interval?.value || 30} {job.destinations?.interval?.unit === 'minutes' ? 'min' : job.destinations?.interval?.unit === 'hours' ? 'h' : 's'}</span></div>
+            </article>;
+          })}
+          {!activeJobs.length && <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[11px] text-[var(--text-secondary)]">Nenhum disparo em andamento.</div>}
+        </div>
+        <div><h3 className="mb-2 text-[13px] font-bold text-[var(--text-primary)]">Histórico recente</h3><div className="space-y-2">{recentJobs.slice(0, 10).map(job => <article key={job.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) · {job.destinations?.groups?.length || 0} grupo(s)</p><p className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.stats?.sent || 0} enviados</p></div><span className={`text-[10px] font-bold ${job.status === 'completed' ? 'text-[var(--success)]' : 'text-[var(--error)]'}`}>{job.status === 'completed' ? 'Concluído' : 'Falhou'}</span></article>)}</div></div>
+      </div>
+    </section>
+  );
 
   return (
     <section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)]">
       <div className="flex min-h-[calc(100dvh-5rem)] flex-col overflow-hidden">
+        {dispatchTabs}
         {/* Step Indicator - Top Fixed */}
         <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur-xl overflow-x-auto no-scrollbar">
           {steps.map((s, i) => (

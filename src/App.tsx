@@ -1,20 +1,29 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Product, FilterType, AffiliateSettings } from './types/product';
+import { Product, FilterType, AffiliateSettings, SectionId, QueueItem, Template, Group, Settings as SettingsType, Coupon, GarimparTab, GarimparPlatform, GarimparFilter, DispatchStep, PageType } from './types/product';
 import { productService } from './services/productService';
 import { Header } from './components/Header';
 import { FilterTabs } from './components/FilterTabs';
 import { ProductCard } from './components/ProductCard';
-import { GroupsShortcutCard } from './components/GroupsShortcutCard';
 import { OfferPreviewModal } from './components/OfferPreviewModal';
 import { SettingsModal } from './components/SettingsModal';
-import { GroupsModal } from './components/GroupsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
 import { MercadoLivreSearch } from './components/MercadoLivreSearch';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { DesktopSidebar } from './components/DesktopSidebar';
-import { DispatchWizardModal } from './components/DispatchWizardModal';
+import { VisaoGeral } from './components/VisaoGeral';
+import { GarimparPage } from './components/GarimparPage';
+import { FilaPage } from './components/FilaPage';
+import { PaginasPage } from './components/PaginasPage';
+import { EspelhamentoPage } from './components/EspelhamentoPage';
+import GruposPage from './components/GruposPage';
+import { MetricasPage } from './components/MetricasPage';
+import { ExtensaoPage } from './components/ExtensaoPage';
+import { ConfiguracoesPage } from './components/ConfiguracoesPage';
+import { WhatsAppPage } from './components/WhatsAppPage';
+import { DispararPage } from './components/DispararPage';
+import { FloatingActionButtons } from './components/FloatingActionButtons';
 import {
   getPullRefreshDistance,
   mergeFreshProducts,
@@ -35,6 +44,16 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
 const REFRESH_PAGE_KEY = 'radar:last-refresh-page';
 const DISCOVERY_INDEX_KEY = 'radar:discovery-index';
 const RECENT_PRODUCTS_KEY = 'radar:recent-product-ids';
+
+const sectionFromLocation = (): SectionId => {
+  const raw = window.location.hash.replace(/^#/, '').toLowerCase();
+  const aliases: Record<string, SectionId> = {
+    '': 'visao-geral', 'visao-geral': 'visao-geral', garimpar: 'garimpar', disparar: 'disparar', disparos: 'disparar',
+    fila: 'fila', ofertas: 'fila', paginas: 'paginas', espelhamento: 'espelhamento', grupos: 'grupos', metricas: 'metricas',
+    extensao: 'extensao', tutoriais: 'tutoriais', suporte: 'suporte', configuracoes: 'configuracoes', whatsapp: 'whatsapp',
+  };
+  return aliases[raw] || 'visao-geral';
+};
 
 function readStoredNumber(key: string, fallback: number) {
   const value = Number.parseInt(localStorage.getItem(key) || '', 10);
@@ -60,7 +79,7 @@ function decodeVapidKey(value: string) {
 
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [queuedProductIds, setQueuedProductIds] = useState<string[]>([]);
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [hasNextPage, setHasNextPage] = useState<boolean>(true);
@@ -73,40 +92,160 @@ export function App() {
   const lastRefreshAtRef = useRef(0);
   const touchStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
+  const sidebarTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [pullDistance, setPullDistance] = useState(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('top_sales');
   const [activeNav, setActiveNav] = useState<MainNavTab>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
-  const [selectedPlatform, setSelectedPlatform] = useState<'shopee' | 'mercado_livre' | 'amazon' | 'magalu' | 'tiktok'>('shopee');
-  const [garimparTab, setGarimparTab] = useState<'buscar' | 'categorias' | 'mais-buscados' | 'lojas' | 'links'>('buscar');
+  const [selectedPlatform, setSelectedPlatform] = useState<GarimparPlatform>('shopee');
+  const [garimparTab, setGarimparTab] = useState<GarimparTab>('buscar');
   const [shopeeConfigured, setShopeeConfigured] = useState(true);
-  const [activeSection, setActiveSection] = useState('visao-geral');
+  const [activeSection, setActiveSection] = useState<SectionId>(() => sectionFromLocation());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const seenSalesRef = useRef<Set<string>>(new Set());
 
-  // Modal States
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState<boolean>(false);
+  // Restaura a fila persistida para que as ofertas não desapareçam ao recarregar.
+  useEffect(() => {
+    let cancelled = false;
+    const restoreQueue = async () => {
+      try {
+        const response = await fetch('/api/queue', { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json();
+        const items = Array.isArray(body?.items) ? body.items : [];
+        if (!cancelled) setQueueItems(items as QueueItem[]);
+      } catch {
+        // Mantém a fila local caso a API esteja temporariamente indisponível.
+      }
+    };
+    void restoreQueue();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const navBySection: Partial<Record<SectionId, MainNavTab>> = {
+      'visao-geral': 'home',
+      garimpar: 'products',
+      disparar: 'dispatch',
+      grupos: 'groups',
+      configuracoes: 'config',
+    };
+    const nextNav = navBySection[activeSection];
+    if (nextNav) setActiveNav(nextNav);
+  }, [activeSection]);
+
+  useEffect(() => {
+    const syncRoute = () => setActiveSection(sectionFromLocation());
+    window.addEventListener('hashchange', syncRoute);
+    window.addEventListener('popstate', syncRoute);
+    return () => {
+      window.removeEventListener('hashchange', syncRoute);
+      window.removeEventListener('popstate', syncRoute);
+    };
+  }, []);
+
+  // Modal States (kept for secondary, quick actions only)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
   const [isGroupsModalOpen, setIsGroupsModalOpen] = useState<boolean>(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
-  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState<boolean>(false);
   const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState<boolean>(false);
+  const [dispatchDraft, setDispatchDraft] = useState<any>({ message: null, destinations: null });
 
-  // Settings & Toasts
+  // The sidebar is a real mobile drawer: pull from the left edge to open and
+  // swipe it back to the left to close. This keeps the primary screens free of
+  // floating controls and preserves the same navigation on touch devices.
+  useEffect(() => {
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      if (touch.clientX <= 40 || mobileSidebarOpen) {
+        sidebarTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      }
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      const start = sidebarTouchStartRef.current;
+      const touch = event.changedTouches[0];
+      sidebarTouchStartRef.current = null;
+      if (!start || !touch) return;
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      if (dx > 0 && start.x <= 48) setMobileSidebarOpen(true);
+      if (dx < 0 && mobileSidebarOpen) setMobileSidebarOpen(false);
+    };
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [mobileSidebarOpen]);
+
+  // Settings & Data
   const [settings, setSettings] = useState<AffiliateSettings>(DEFAULT_SETTINGS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [groups, setGroups] = useState<Group[]>([
+    { id: '1', name: 'Grupo Imersão Ofertas Dinâmicas 06/06', memberCount: 389, isAdmin: true, status: 'healthy', messagesSent30d: 4, messagesReceived30d: 0, lastActivity: '2026-09-04', addedAt: '2026-06-06' },
+    { id: '2', name: 'SYNC PAY', memberCount: 6, isAdmin: false, status: 'healthy', messagesSent30d: 2, messagesReceived30d: 1, lastActivity: '2026-09-03', addedAt: '2026-07-01' },
+    { id: '3', name: 'Fornecedor Tiktok ADS', memberCount: 3, isAdmin: false, status: 'active', messagesSent30d: 1, messagesReceived30d: 2, lastActivity: '2026-09-02', addedAt: '2026-08-15' },
+    { id: '4', name: 'Utmify', memberCount: 2, isAdmin: false, status: 'active', messagesSent30d: 0, messagesReceived30d: 0, lastActivity: '2026-09-01', addedAt: '2026-08-20' },
+    { id: '5', name: 'Scale ADS- Pro Comunidade', memberCount: 1600, isAdmin: false, status: 'healthy', messagesSent30d: 50, messagesReceived30d: 10, lastActivity: '2026-09-04', addedAt: '2026-07-10' },
+  ]);
+  const [pages, setPages] = useState<any[]>([]);
+  const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([
+    { id: 'mirror-demo', name: 'Ofertas TOP Brasil', sourceGroupId: '1', destinationGroupIds: ['2', '3'], type: 'instant', status: 'active', onlyOffers: true, templateIds: [], mirroredMessages: 128, failedMessages: 2, createdAt: '2026-09-04' },
+  ]);
+  const [extensionToken, setExtensionToken] = useState('b0882c9dcbb9fda04d9ac0f896a2a50f0df55472f166475c');
+  const [panelUrl, setPanelUrl] = useState('https://app.garimpalinks.com.br');
+  // Integrações reais entram no back-end; nesta etapa o estado é explicitamente mockado.
+  const [whatsappConnected, setWhatsAppConnected] = useState(false);
+
+  // App Settings State
+  const [appSettings, setAppSettings] = useState<SettingsType>({
+    channels: { whatsapp: { connected: false, phone: '', instanceId: '' }, telegram: { connected: false } },
+    platforms: { shopee: { appId: '18349490069', secret: 'I326BKMYMZMEHEVI25JDJP26PJRUIAZF', validated: true }, mercadoLivre: { affiliateTag: '', accessToken: '' }, amazon: { associateTag: '' }, magalu: { storeSlug: '' } },
+    templates: [],
+    coupons: [],
+    security: { safeInterval: true },
+    account: { name: 'Carolina de assunção macedo', email: 'macedoc50@gmail.com', plan: 'viral', subscriptionStatus: 'active' },
+  });
 
   useEffect(() => {
     fetch('/api/health').then((response) => response.json()).then((body) => setShopeeConfigured(body?.shopeeConfigured !== false)).catch(() => setShopeeConfigured(true));
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle('app-dark', settings.theme === 'dark');
-    return () => document.body.classList.remove('app-dark');
+    const root = document.documentElement;
+    const theme = settings.theme;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else if (theme === 'light') {
+      root.classList.remove('dark');
+    } else {
+      // system preference
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    }
+    // listen for system changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      if (settings.theme === 'system') {
+        if (e.matches) root.classList.add('dark');
+        else root.classList.remove('dark');
+      }
+    };
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
   }, [settings.theme]);
 
   const enableSaleNotifications = useCallback(async () => {
@@ -141,9 +280,7 @@ export function App() {
         await registration.showNotification('Nova venda Shopee (teste)', options);
         return;
       }
-    } catch {
-      // Fallback para a notificacao do navegador quando o service worker nao estiver pronto.
-    }
+    } catch { }
     new Notification('Nova venda Shopee (teste)', options);
   }, []);
 
@@ -162,32 +299,44 @@ export function App() {
             new Notification('Nova venda Shopee', { body: `Comissão registrada: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
           }
         }
-      } catch { /* falha silenciosa para não interromper o app */ }
+      } catch { }
     };
     checkSales();
     const intervalId = window.setInterval(checkSales, 120_000);
     return () => window.clearInterval(intervalId);
   }, [notificationsEnabled]);
 
-  // Toast handler
-  const showToast = useCallback((
-    title: string,
-    description?: string,
-    type: 'success' | 'info' | 'error' = 'success'
-  ) => {
+  const showToast = useCallback((title: string, description?: string, type: 'success' | 'info' | 'error' = 'success') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, title, description, type }]);
-
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3500);
+    setTimeout(() => { setToasts((prev) => prev.filter((t) => t.id !== id)); }, 3500);
   }, []);
 
   const handleDismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch products via service (Shopee only)
+  useEffect(() => {
+    fetch('/api/whatsapp/groups?session=default')
+      .then(response => response.ok ? response.json() : null)
+      .then(body => {
+        if (!Array.isArray(body?.groups) || body.groups.length === 0) return;
+        setGroups(body.groups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const refreshWhatsAppStatus = () => {
+      fetch('/api/whatsapp/status').then(response => response.ok ? response.json() : null).then(body => {
+        if (body) setWhatsAppConnected(body.status === 'connected' || body.status === 'working');
+      }).catch(() => undefined);
+    };
+    refreshWhatsAppStatus();
+    const intervalId = window.setInterval(refreshWhatsAppStatus, 10_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const loadProducts = useCallback(async (silent = false, rotatePage = false) => {
     if (!silent) setLoading(true);
     try {
@@ -212,12 +361,8 @@ export function App() {
       localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(recentIds));
       lastRefreshAtRef.current = Date.now();
     } catch (err) {
-      if (!silent) {
-        showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
+      if (!silent) { showToast('Erro ao carregar produtos', 'Tente novamente mais tarde.', 'error'); }
+    } finally { setLoading(false); }
   }, [activeFilter, activeCategory, searchQuery, showToast]);
 
   useEffect(() => {
@@ -225,14 +370,11 @@ export function App() {
       const queryKey = `${activeFilter}|${activeCategory}|${searchQuery}`;
       const firstLoad = lastQueryKeyRef.current === null;
       const queryChanged = !firstLoad && lastQueryKeyRef.current !== queryKey;
-      if (queryChanged) {
-        refreshPageRef.current = 0;
-        discoveryIndexRef.current = 0;
-      }
+      if (queryChanged) { refreshPageRef.current = 0; discoveryIndexRef.current = 0; }
       lastQueryKeyRef.current = queryKey;
       loadProducts(false, !queryChanged);
     }
-  }, [loadProducts, activeMarketplace, activeSection]);
+  }, [loadProducts, activeMarketplace, activeSection, activeFilter, activeCategory, searchQuery]);
 
   useEffect(() => {
     const targetId = activeSection === 'garimpar' ? 'produtos' : activeSection === 'ofertas' ? 'ofertas-fila' : activeSection === 'templates' ? 'templates-radar' : activeSection === 'extensao' ? 'extensao-radar' : activeSection;
@@ -242,47 +384,21 @@ export function App() {
 
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
-    const refreshAfterReturn = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastRefreshAtRef.current > 5_000) {
-        void loadProducts(true, true);
-      }
-    };
+    const refreshAfterReturn = () => { if (document.visibilityState === 'visible' && Date.now() - lastRefreshAtRef.current > 5_000) { void loadProducts(true, true); } };
     window.addEventListener('pageshow', refreshAfterReturn);
     document.addEventListener('visibilitychange', refreshAfterReturn);
-    return () => {
-      window.removeEventListener('pageshow', refreshAfterReturn);
-      document.removeEventListener('visibilitychange', refreshAfterReturn);
-    };
+    return () => { window.removeEventListener('pageshow', refreshAfterReturn); document.removeEventListener('visibilitychange', refreshAfterReturn); };
   }, [activeMarketplace, loadProducts]);
 
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
-    const handleTouchStart = (event: TouchEvent) => {
-      if (window.scrollY <= 0) touchStartYRef.current = event.touches[0]?.clientY || 0;
-    };
-    const handleTouchMove = (event: TouchEvent) => {
-      const distance = getPullRefreshDistance(
-        touchStartYRef.current,
-        event.touches[0]?.clientY || 0,
-        window.scrollY,
-      );
-      pullDistanceRef.current = distance;
-      setPullDistance(distance);
-    };
-    const handleTouchEnd = () => {
-      const refresh = shouldTriggerPullRefresh(pullDistanceRef.current);
-      pullDistanceRef.current = 0;
-      setPullDistance(0);
-      if (refresh) void loadProducts(false, true);
-    };
+    const handleTouchStart = (event: TouchEvent) => { if (window.scrollY <= 0) touchStartYRef.current = event.touches[0]?.clientY || 0; };
+    const handleTouchMove = (event: TouchEvent) => { const distance = getPullRefreshDistance(touchStartYRef.current, event.touches[0]?.clientY || 0, window.scrollY); pullDistanceRef.current = distance; setPullDistance(distance); };
+    const handleTouchEnd = () => { const refresh = shouldTriggerPullRefresh(pullDistanceRef.current); pullDistanceRef.current = 0; setPullDistance(0); if (refresh) void loadProducts(false, true); };
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
+    return () => { window.removeEventListener('touchstart', handleTouchStart); window.removeEventListener('touchmove', handleTouchMove); window.removeEventListener('touchend', handleTouchEnd); };
   }, [activeMarketplace, loadProducts]);
 
   const loadMoreProducts = useCallback(async () => {
@@ -292,57 +408,188 @@ export function App() {
       const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
       const nextPage = currentPage + 1;
       const result = await productService.getProductsPage(activeFilter, combinedQuery, nextPage);
-      setProducts((current) => {
-        const ids = new Set(current.map((product) => product.id));
-        return [...current, ...result.products.filter((product) => !ids.has(product.id))];
-      });
+      setProducts((current) => { const ids = new Set(current.map((p) => p.id)); return [...current, ...result.products.filter((p) => !ids.has(p.id))]; });
       setHasNextPage(result.hasNextPage);
       setCurrentPage(nextPage);
-    } catch {
-      showToast('Não foi possível carregar mais ofertas', 'Tente novamente em instantes.', 'error');
-    } finally {
-      setLoadingMore(false);
-    }
+    } catch { showToast('Não foi possível carregar mais ofertas', 'Tente novamente em instantes.', 'error'); }
+    finally { setLoadingMore(false); }
   }, [activeFilter, activeCategory, searchQuery, hasNextPage, loading, loadingMore, currentPage, showToast]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
     if (!target) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) loadMoreProducts();
-    }, { rootMargin: '500px 0px' });
+    const observer = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) loadMoreProducts(); }, { rootMargin: '500px 0px' });
     observer.observe(target);
     return () => observer.disconnect();
   }, [loadMoreProducts]);
 
-  // Atualiza ofertas a cada 2 minutos sem interromper a navegação do usuário.
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
-    const refresh = () => {
-      if (document.visibilityState === 'visible') loadProducts(true, true);
-    };
-    const intervalId = window.setInterval(refresh, 120_000);
+    const intervalId = window.setInterval(() => { if (document.visibilityState === 'visible') loadProducts(true, true); }, 30_000);
     return () => window.clearInterval(intervalId);
   }, [loadProducts, activeMarketplace]);
 
-  // Open Offer Modal
+  const handleAddToQueue = (product?: Product) => {
+    if (product) {
+      const exists = queueItems.some(item => item.product.id === product.id);
+      if (!exists) {
+        const newItem: QueueItem = { id: `queue-${Date.now()}`, product, addedAt: new Date().toISOString(), selected: true };
+        setQueueItems(prev => [...prev, newItem]);
+        void fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product }),
+        }).catch(() => {
+          showToast('Oferta adicionada localmente', 'Não foi possível sincronizar a fila agora.', 'info');
+        });
+        showToast('Oferta adicionada à fila', 'Disponível em Ofertas / fila para disparo manual.', 'success');
+      }
+    } else {
+      // Open Garimpar page to add offers
+      setActiveSection('garimpar');
+      setMobileSidebarOpen(false);
+      window.history.pushState({}, '', `#garimpar`);
+      document.getElementById('produtos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleGenerateOffer = (product: Product) => {
+    // Sharing an offer now enters the full dispatch flow instead of opening a
+    // centered preview modal. The selected product is added to the existing
+    // queue, while all dispatch rules and API calls remain unchanged.
+    handleAddToQueue(product);
+    setActiveSection('disparar');
+    setMobileSidebarOpen(false);
+    window.history.pushState({}, '', '#disparar');
+  };
+
+  const handlePreviewProduct = (product: Product) => {
     setSelectedProduct(product);
     setIsOfferModalOpen(true);
   };
 
-  // Nav handler from bottom bar
+  const handleCopyProductLink = async (product: Product) => {
+    const link = product.affiliateUrl || product.productUrl;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('Link copiado', 'O link de afiliado está pronto para compartilhar.', 'success');
+    } catch {
+      showToast('Não foi possível copiar', 'Abra o produto e copie o link manualmente.', 'error');
+    }
+  };
+
+  const handleShareProduct = async (product: Product) => {
+    const link = product.affiliateUrl || product.productUrl;
+    const shareData = { title: product.name, text: `${product.name} — ${product.currentPrice != null ? product.currentPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Confira a oferta'}`, url: link };
+    try {
+      if (navigator.share) await navigator.share(shareData);
+      else await navigator.clipboard.writeText(`${shareData.text}\n${link}`);
+      showToast('Oferta compartilhada', 'O link de afiliado está pronto para enviar.', 'success');
+    } catch (error) {
+      if ((error as DOMException)?.name !== 'AbortError') showToast('Não foi possível compartilhar', 'Tente copiar o link manualmente.', 'error');
+    }
+  };
+
+  const handleRemoveFromQueue = (queueId: string) => {
+    setQueueItems(prev => prev.filter(item => item.id !== queueId));
+    void fetch(`/api/queue/${encodeURIComponent(queueId)}`, { method: 'DELETE' }).catch(() => {
+      showToast('Oferta removida localmente', 'Não foi possível sincronizar a fila agora.', 'info');
+    });
+    showToast('Oferta removida da fila', undefined, 'info');
+  };
+
+  const handleClearQueue = () => {
+    setQueueItems([]);
+    void fetch('/api/queue/clear', { method: 'POST' }).catch(() => {
+      showToast('Fila limpa localmente', 'Não foi possível sincronizar a fila agora.', 'info');
+    });
+    showToast('Fila limpa', undefined, 'info');
+  };
+
+  const handleSelectAllQueue = (selected: boolean) => {
+    setQueueItems(prev => prev.map(item => ({ ...item, selected })));
+  };
+
+  const handleSaveQueueSelection = (selectedIds: string[]) => {
+    setQueueItems(prev => prev.map(item => ({ ...item, selected: selectedIds.includes(item.id) })));
+  };
+
+  const handleSaveMessage = (message: any) => {
+    setDispatchDraft((prev: any) => ({ ...prev, message }));
+  };
+
+  const handleSaveDestinations = (destinations: any) => {
+    setDispatchDraft((prev: any) => ({ ...prev, destinations }));
+  };
+
+  const handleExecuteDispatch = async (): Promise<{ jobId: string; status: string } | null> => {
+    const selectedQueue = queueItems.filter(q => q.selected);
+    const destinations = dispatchDraft.destinations;
+    if (!selectedQueue.length || !destinations?.groups?.length) {
+      showToast('Disparo incompleto', 'Selecione ofertas e grupos antes de confirmar.', 'error');
+      return null;
+    }
+    try {
+      const response = await fetch('/api/dispatch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          offers: selectedQueue.map(item => { const raw: any = item as any; const product: any = raw.product || raw; return ({ id: product.productId || product.id, name: product.productName || product.name, currentPrice: product.price ?? product.currentPrice, originalPrice: product.originalPrice, affiliateUrl: product.affiliateUrl, productUrl: product.originalUrl || product.productUrl, imageUrl: product.imageUrl }); }),
+          message: dispatchDraft.message || { whatsapp: { customMessage: '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
+          destinations: { ...destinations, groups: destinations.groups.map((group: any) => ({ id: group.id, sessionId: group.sessionId })) },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error?.message || 'Não foi possível criar a fila.');
+      showToast('Disparo adicionado à fila', `Job ${data.jobId} criado no servidor.`, 'success');
+      const dispatchedIds = new Set(selectedQueue.map(item => item.id));
+      setQueueItems(prev => prev.filter(item => !dispatchedIds.has(item.id)));
+      await Promise.allSettled(selectedQueue.map(item => fetch(`/api/queue/${encodeURIComponent(item.id)}`, { method: 'DELETE' })));
+      return { jobId: data.jobId, status: data.status || 'pending' };
+    } catch (error) {
+      showToast('Erro ao criar disparo', error instanceof Error ? error.message : 'Tente novamente.', 'error');
+      return null;
+    }
+  };
+
+  const handleCreatePage = (page: any) => {
+    const newPage = { ...page, id: `page-${Date.now()}`, createdAt: new Date().toISOString() };
+    setPages(prev => [...prev, newPage]);
+    showToast('Página criada', 'Agora adicione ofertas e personalize.', 'success');
+  };
+
+  const handleDeletePage = (pageId: string) => { setPages(prev => prev.filter(p => p.id !== pageId)); showToast('Página excluída', undefined, 'info'); };
+
+  const handleEditPage = (page: any) => { showToast('Editar página', 'Funcionalidade em desenvolvimento', 'info'); };
+
+  const handlePublishPage = (pageId: string) => { setPages(prev => prev.map(p => p.id === pageId ? { ...p, status: 'published', publishedAt: new Date().toISOString() } : p)); showToast('Página publicada', 'Link público gerado.', 'success'); };
+
+  const handleCreateMirroring = (config: any) => {
+    const newConfig = { ...config, id: `mirror-${Date.now()}`, status: 'active', createdAt: new Date().toISOString() };
+    setMirroringConfigs(prev => [...prev, newConfig]);
+    showToast('Espelhamento criado', 'Configuração salva com sucesso.', 'success');
+  };
+
+  const handleSaveSettings = (newSettings: Partial<SettingsType>) => { setAppSettings(prev => ({ ...prev, ...newSettings })); showToast('Configurações salvas', undefined, 'success'); };
+
+  const handleSaveTemplate = (template: Template) => { setTemplates(prev => { const exists = prev.find(t => t.id === template.id); return exists ? prev.map(t => t.id === template.id ? template : t) : [...prev, template]; }); };
+
+  const handleDeleteTemplate = (templateId: string) => { setTemplates(prev => prev.filter(t => t.id !== templateId)); };
+
+  const handleSaveCoupon = (coupon: Coupon) => { setCoupons(prev => [...prev, coupon]); };
+
+  const handleDisconnectWhatsApp = () => { setWhatsAppConnected(false); showToast('WhatsApp desconectado', undefined, 'info'); };
+
+  const handleOpenWhatsApp = () => { setActiveSection('whatsapp'); setMobileSidebarOpen(false); };
+
+  const handleToggleTheme = () => { setSettings(prev => { const themes = ['light', 'dark', 'system'] as const; const current = themes.indexOf(prev.theme); return { ...prev, theme: themes[(current + 1) % themes.length] }; }); };
+
   const handleSelectNav = (nav: MainNavTab) => {
     setActiveNav(nav);
-    if (nav === 'groups') {
-      setIsGroupsModalOpen(true);
-    } else if (nav === 'config') {
-      setIsSettingsModalOpen(true);
-    } else if (nav === 'products') {
-      window.scrollTo({ top: 280, behavior: 'smooth' });
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    const section: SectionId = nav === 'groups' ? 'grupos' : nav === 'config' ? 'configuracoes' : nav === 'dispatch' ? 'disparar' : nav === 'products' ? 'garimpar' : nav === 'whatsapp' ? 'whatsapp' : 'visao-geral';
+    setActiveSection(section);
+    setMobileSidebarOpen(false);
+    window.history.pushState({}, '', `#${section}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const marketplaceTabs: { id: Marketplace; label: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
@@ -351,223 +598,140 @@ export function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff7ed_0%,#f8fafc_42%,#eef2ff_100%)] flex flex-col pb-24 sm:pb-16 text-slate-900 font-sans">
-      <div
-        className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center transition-opacity"
-        style={{ opacity: pullDistance > 0 ? 1 : 0 }}
-      >
-        <div className="flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2 text-xs font-bold text-white shadow-xl">
+    <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal">
+      <div className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center transition-opacity" style={{ opacity: pullDistance > 0 ? 1 : 0 }}>
+        <div className="flex items-center gap-2 rounded-full bg-neutral-900 dark:bg-neutral-50 px-3 py-2 text-xs font-bold text-white dark:text-neutral-950 shadow-xl">
           <RefreshCw className={`h-4 w-4 ${pullDistance >= 60 ? 'rotate-180' : ''}`} />
           {pullDistance >= 60 ? 'Solte para ver novas ofertas' : 'Puxe para atualizar'}
         </div>
       </div>
-      
-      {/* Top Header */}
+
       <DesktopSidebar
         activeSection={activeSection}
         mobileOpen={mobileSidebarOpen}
         onToggleMobile={() => setMobileSidebarOpen((open) => !open)}
-        onNavigate={(section) => {
-          setMobileSidebarOpen(false);
-          setActiveSection(section);
-          window.history.pushState({}, '', `#${section}`);
-          const target = section === 'visao-geral' ? 'visao-geral' : section === 'garimpar' ? 'produtos' : section === 'ofertas' ? 'ofertas-fila' : section === 'templates' ? 'templates-radar' : section === 'extensao' ? 'extensao-radar' : ['espelhamento', 'tutoriais', 'suporte'].includes(section) ? section : null;
-          if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          else window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onDispatch={() => setIsDispatchModalOpen(true)}
-        onGroups={() => setIsGroupsModalOpen(true)}
-        onSettings={() => setIsSettingsModalOpen(true)}
+        onNavigate={(section) => { setMobileSidebarOpen(false); setActiveSection(section as SectionId); window.history.pushState({}, '', `#${section}`); const target = section; if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); else window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onDispatch={() => setActiveSection('disparar')}
+        onGroups={() => setActiveSection('grupos')}
+        onSettings={() => { setActiveSection('configuracoes'); setMobileSidebarOpen(false); }}
         onNotifications={() => setIsNotificationsModalOpen(true)}
-        onAnalytics={() => setIsAnalyticsModalOpen(true)}
+        onAnalytics={() => { setActiveSection('metricas'); setMobileSidebarOpen(false); }}
       />
-      <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onOpenSettings={() => setIsSettingsModalOpen(true)}
-        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
-      />
+      <Header searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenSettings={() => setIsSettingsModalOpen(true)} onOpenNotifications={() => setIsNotificationsModalOpen(true)} whatsappConnected={whatsappConnected} onOpenWhatsApp={() => { setActiveSection('whatsapp'); window.history.pushState({}, '', '#whatsapp'); }} variant={activeSection === 'garimpar' ? 'garimpar' : 'default'} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6 md:ml-72">
+      <main className="min-w-0 w-full max-w-5xl flex-1 space-y-5 px-5 pb-28 pt-5 sm:space-y-6 sm:px-6 sm:pb-10 sm:pt-6 lg:px-8 md:ml-72">
+        <div className={activeSection === 'visao-geral' ? '' : 'hidden'}><VisaoGeral
+          onNavigateToGarimpar={() => { setActiveSection('garimpar'); setMobileSidebarOpen(false); }}
+          onNavigateToDispatch={() => { setActiveSection('disparar'); }}
+          onNavigateToGroups={() => { setActiveSection('grupos'); setMobileSidebarOpen(false); }}
+          onNavigateToQueue={() => { setActiveSection('fila'); setMobileSidebarOpen(false); }}
+          queuedCount={queueItems.length}
+          dispatchCount={0}
+          groupsCount={groups.length}
+          clicksCount={0}
+        /></div>
 
-        <section id="visao-geral" className={`${activeSection === 'visao-geral' ? '' : 'hidden'} rounded-3xl border border-orange-100 bg-gradient-to-br from-white via-orange-50/60 to-white p-5 shadow-sm backdrop-blur-md sm:p-6`}>
-          <div className="flex flex-col gap-1"><h1 className="text-xl font-black tracking-tight text-slate-900">Visão geral</h1><p className="text-xs text-slate-500">Central rápida do Radar de Oferta para organizar e disparar suas ofertas.</p></div>
-          <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-            <button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-2xl bg-[#EE4D2D] p-3 text-left text-white shadow-lg shadow-orange-200 hover:bg-orange-600 sm:p-4"><span className="text-lg">📤</span><span className="mt-1 block text-xs font-black sm:mt-2 sm:text-sm">Disparar em grupo</span><span className="mt-1 hidden text-[11px] text-orange-100 sm:block">Preparar e copiar manualmente</span></button>
-            <button type="button" onClick={() => setIsGroupsModalOpen(true)} className="rounded-2xl border border-slate-200 bg-white/80 p-3 text-left hover:border-orange-300 sm:p-4"><span className="text-lg">💬</span><span className="mt-1 block text-xs font-black text-slate-800 sm:mt-2 sm:text-sm">Conectar WhatsApp</span><span className="mt-1 hidden text-[11px] text-slate-500 sm:block">Gerenciar grupos e canais</span></button>
-            <button type="button" onClick={() => setIsNotificationsModalOpen(true)} className="rounded-2xl border border-slate-200 bg-white/80 p-3 text-left hover:border-orange-300 sm:p-4"><span className="text-lg">🔔</span><span className="mt-1 block text-xs font-black text-slate-800 sm:mt-2 sm:text-sm">Notificações</span><span className="mt-1 hidden text-[11px] text-slate-500 sm:block">Acompanhar alertas de vendas</span></button>
-            <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="rounded-2xl border border-slate-200 bg-white/80 p-3 text-left hover:border-orange-300 sm:p-4"><span className="text-lg">🌗</span><span className="mt-1 block text-xs font-black text-slate-800 sm:mt-2 sm:text-sm">Tema e conta</span><span className="mt-1 hidden text-[11px] text-slate-500 sm:block">Claro ou escuro com laranja</span></button>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500"><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">● Integrações configuradas no servidor</span><span className="rounded-full bg-slate-100 px-3 py-1.5">Envio automático desativado por segurança</span></div>
-        </section>
-        
-        <div className={activeSection === 'garimpar' ? '' : 'hidden'}>
-        <div className="space-y-4">
-          <div className="mb-4"><h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">Garimpar</h1><p className="mt-1 text-xs text-slate-500 sm:text-sm">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p></div>
-          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectedPlatform('shopee'); setActiveMarketplace('shopee'); }} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'shopee' ? 'bg-[#EE4D2D] text-white' : 'bg-slate-100 text-slate-600'}`}>🟠 Shopee</button><button type="button" onClick={() => { setSelectedPlatform('mercado_livre'); setActiveMarketplace('mercado_livre'); }} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'mercado_livre' ? 'bg-yellow-500 text-slate-950' : 'bg-slate-100 text-slate-600'}`}>🟡 Mercado Livre · conectar</button><button type="button" onClick={() => { setSelectedPlatform('amazon'); showToast('Amazon', 'Integração preparada para uma próxima etapa.', 'info'); }} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'amazon' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600'}`}>🟢 Amazon · conectar</button><button type="button" onClick={() => setSelectedPlatform('magalu')} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'magalu' ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-400'}`}>🔵 Magalu · em breve</button><button type="button" onClick={() => setSelectedPlatform('tiktok')} className={`rounded-full px-4 py-2 text-xs font-black ${selectedPlatform === 'tiktok' ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-500'}`}>⚫ TikTok Shop · em breve</button></div>
-          {!shopeeConfigured && <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-orange-300 bg-orange-50 p-3 text-xs text-orange-800"><span>Shopee ainda não está configurada neste servidor.</span><button type="button" onClick={() => setIsSettingsModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-3 py-2 font-black text-white">Configurar chave</button></div>}
-          <div className="flex gap-5 overflow-x-auto border-b border-slate-300/40 pb-0">{[['buscar','Buscar'],['categorias','Categorias'],['mais-buscados','Mais buscados'],['lojas','Lojas favoritas'],['links','Por links']].map(([id,label]) => <button key={id} type="button" onClick={() => setGarimparTab(id as typeof garimparTab)} className={`whitespace-nowrap border-b-2 px-0 pb-2.5 text-xs font-bold transition ${garimparTab === id ? 'border-[#EE4D2D] text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>)}</div>
-          {garimparTab === 'categorias' && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3"><span className="col-span-full text-xs font-bold text-slate-500">Escolha uma categoria para buscar ofertas reais:</span>{[['🏠','Casa'],['🍳','Cozinha'],['💻','Eletrônico'],['👗','Moda'],['💄','Beleza'],['🛠️','Ferramenta'],['⚽','Esporte'],['🐾','Pet'],['👶','Bebê']].map(([emoji,label]) => <button key={label} type="button" onClick={() => { setActiveCategory(label.toLowerCase()); setSearchQuery(''); setGarimparTab('categorias'); }} className={`rounded-2xl border px-3 py-3 text-left text-xs font-bold transition ${activeCategory === label.toLowerCase() ? 'border-[#EE4D2D] bg-orange-100 text-orange-700 ring-2 ring-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'}`}>{emoji} {label}{activeCategory === label.toLowerCase() && <span className="ml-1 text-[10px]">✓ selecionada</span>}<span className="mt-1 block text-[10px] font-medium text-slate-400">Buscar agora →</span></button>)}</div>}
-          {garimparTab === 'mais-buscados' && <div className="mt-3 flex flex-wrap gap-2">{['air fryer','fone de ouvido','kit organizador','potes de cozinha','celular'].map((term) => <button key={term} type="button" onClick={() => { setSearchQuery(term); setGarimparTab('buscar'); }} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">🔎 {term}</button>)}</div>}
-          {garimparTab === 'lojas' && <div className="mt-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 p-3 text-xs text-slate-500"><span>Gerencie suas lojas e grupos favoritos.</span><button type="button" onClick={() => setIsGroupsModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-3 py-2 font-black text-white">Abrir grupos</button></div>}
-          <p className="mt-3 text-[11px] text-slate-500">🇧🇷 Produtos brasileiros por padrão. Produtos internacionais: em breve.</p>
-          {(garimparTab === 'buscar' || garimparTab === 'links') && <div className="mt-4 flex gap-2"><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void loadProducts(false, true); }} placeholder={garimparTab === 'links' ? 'Cole um link Shopee ou Mercado Livre' : 'Buscar produto (ex.: air fryer)'} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-700 outline-none focus:border-orange-400" /><button type="button" onClick={() => loadProducts(false, true)} className="rounded-xl bg-[#EE4D2D] px-5 py-2.5 text-xs font-black text-white hover:bg-orange-600">🔎 Garimpar</button></div>}
-        </div>
+        <div className={activeSection === 'whatsapp' ? '' : 'hidden'}><WhatsAppPage
+          onShowToast={showToast}
+        /></div>
 
-        {/* Marketplace Selector Tabs */}
-        <div className="hidden flex gap-2 bg-white/65 border border-white/70 rounded-2xl p-1.5 shadow-sm backdrop-blur-md">
-          {marketplaceTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveMarketplace(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeMarketplace === tab.id
-                  ? `${tab.bgColor} ${tab.color} shadow-md`
-                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span className={`${tab.color}`}>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+        <DispararPage
+          isOpen={activeSection === 'disparar'}
+          onClose={() => setActiveSection('visao-geral')}
+          offers={products}
+          queueItems={queueItems}
+          templates={templates}
+          groups={groups}
+          onSaveQueueSelection={handleSaveQueueSelection}
+          onSaveMessage={handleSaveMessage}
+          onSaveDestinations={handleSaveDestinations}
+          onExecuteDispatch={handleExecuteDispatch}
+          onShowToast={showToast}
+        />
 
-        {selectedPlatform === 'shopee' ? (
-          <>  
-            {/* Shopee Filters */}
-            <FilterTabs
-              activeFilter={activeFilter}
-              onSelectFilter={setActiveFilter}
-              resultCount={products.length}
-            />
+        <div className={activeSection === 'garimpar' ? '' : 'hidden'}><GarimparPage
+          activeFilter={activeFilter}
+          onSelectFilter={setActiveFilter}
+          activeCategory={activeCategory}
+          onSelectCategory={setActiveCategory}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSearchSubmit={loadProducts}
+          products={products}
+          loading={loading}
+          loadingMore={loadingMore}
+          hasNextPage={hasNextPage}
+          onLoadMore={loadMoreProducts}
+          onRefresh={loadProducts}
+          selectedPlatform={selectedPlatform}
+          onSelectPlatform={setSelectedPlatform}
+          garimparTab={garimparTab}
+          onSelectGarimparTab={setGarimparTab}
+          shopeeConfigured={shopeeConfigured}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onOpenGroups={() => setActiveSection('grupos')}
+          onAddToQueue={handleAddToQueue}
+          onGenerateOffer={handleGenerateOffer}
+          onShare={handleShareProduct}
+          onPreview={handlePreviewProduct}
+          onCopyLink={handleCopyProductLink}
+          showToast={showToast}
+        /></div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-2xl border border-white/70 bg-white/65 p-2.5 shadow-sm backdrop-blur-md">
-              <div className="flex items-center gap-2 px-1.5 text-xs font-bold text-slate-600">
-                <Layers3 className="h-4 w-4 text-[#EE4D2D]" />
-                <span>Categoria / nicho</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => loadProducts(false, true)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Novas ofertas
-              </button>
-              <select
-                value={activeCategory}
-                onChange={(event) => setActiveCategory(event.target.value)}
-                className="w-full sm:w-auto flex-1 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
-                aria-label="Filtrar por categoria ou nicho"
-              >
-                <option value="">✨ Todos os nichos</option>
-                <option value="eletrônicos">💻 Eletrônicos</option>
-                <option value="moda feminina">👗 Moda feminina</option>
-                <option value="casa e banho">🏠 Casa, cozinha e banho</option>
-                <option value="infantil">🧸 Infantil e crianças</option>
-                <option value="beleza">💄 Beleza</option>
-                <option value="acessórios">👜 Acessórios</option>
-                <option value="celular">📱 Celulares e informática</option>
-              </select>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button type="button" onClick={enableSaleNotifications} className="flex-1 rounded-2xl border border-orange-200 bg-orange-50/80 px-4 py-3 text-left text-xs font-bold text-orange-800 shadow-sm backdrop-blur-md hover:bg-orange-100">
-                {notificationsEnabled ? '🔔 Notificações de vendas ativadas' : '🔔 Ativar notificações quando sair uma venda'}
-              </button>
-              {notificationsEnabled && <button type="button" onClick={sendTestNotification} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs font-bold text-slate-700 shadow-sm backdrop-blur-md hover:bg-slate-50">Enviar teste</button>}
-            </div>
+        <div className={activeSection === 'fila' || activeSection === 'ofertas' ? '' : 'hidden'}><FilaPage
+          queueItems={queueItems}
+          onAddToQueue={handleAddToQueue}
+          onRemoveFromQueue={handleRemoveFromQueue}
+          onClearQueue={handleClearQueue}
+          onSelectAll={handleSelectAllQueue}
+          onOpenDispatch={() => setActiveSection('disparar')}
+          onOpenGroups={() => setActiveSection('grupos')}
+          showToast={showToast}
+        /></div>
 
-            {/* Shopee Product Grid */}
-            {loading ? (
-            <div id="produtos" className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-                {[1, 2, 3, 4].map((idx) => (
-                  <div key={idx} className="bg-white rounded-3xl p-3 sm:p-4 space-y-3 animate-pulse border border-slate-100">
-                    <div className="aspect-square bg-slate-200 rounded-2xl w-full" />
-                    <div className="h-4 bg-slate-200 rounded w-3/4" />
-                    <div className="h-4 bg-slate-200 rounded w-1/2" />
-                    <div className="h-8 bg-slate-200 rounded-xl" />
-                  </div>
-                ))}
-              </div>
-            ) : products.length > 0 ? (
-              <div id="produtos" className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-                {products.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onGenerateOffer={handleGenerateOffer}
-                    onAddToQueue={(item) => { setQueuedProductIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]); showToast('Oferta adicionada à fila', 'Disponível em Ofertas / fila para disparo manual.', 'success'); }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div id="produtos" className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-100 max-w-sm mx-auto space-y-3">
-                <div className="w-12 h-12 bg-orange-100 text-[#EE4D2D] rounded-2xl flex items-center justify-center mx-auto">
-                  <SearchX className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-slate-900">Nenhum produto encontrado</h3>
-                  <p className="text-xs text-slate-500">Não encontramos ofertas para "{searchQuery}".</p>
-                </div>
-                <button onClick={() => setSearchQuery('')} className="px-4 py-2 bg-[#EE4D2D] text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer">
-                  Limpar busca
-                </button>
-              </div>
-            )}
+        <div className={activeSection === 'paginas' || activeSection === 'templates' ? '' : 'hidden'}><PaginasPage
+          pages={pages}
+          onCreatePage={handleCreatePage}
+          onDeletePage={handleDeletePage}
+          onEditPage={handleEditPage}
+          onPublishPage={handlePublishPage}
+          onShowToast={showToast}
+        /></div>
 
-            <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-xs font-semibold text-slate-500">
-              {loadingMore ? 'Carregando mais ofertas reais…' : hasNextPage ? 'Role para carregar mais' : 'Você chegou ao fim desta lista'}
-            </div>
-          </>
-        ) : selectedPlatform === 'mercado_livre' ? (
-          // Mercado Livre Search
-          <MercadoLivreSearch
-            onProductSelect={handleGenerateOffer}
-            onShowToast={showToast}
-          />
-        ) : (
-          <div className="rounded-3xl border border-slate-200 bg-white/80 p-8 text-center"><h3 className="text-base font-black text-slate-900">Integração em preparação</h3><p className="mt-2 text-xs text-slate-500">Esta plataforma ficará disponível assim que a conexão oficial for configurada.</p></div>
-        )}
+        <div className={activeSection === 'espelhamento' ? '' : 'hidden'}><EspelhamentoPage
+          groups={groups}
+          templates={templates}
+          mirroringConfigs={mirroringConfigs}
+          onCreateMirroring={handleCreateMirroring}
+          onShowToast={showToast}
+        /></div>
 
-        </div>
+        <div className={activeSection === 'grupos' ? '' : 'hidden'}><GruposPage
+          groups={groups}
+          onSelectGroups={() => setActiveSection('grupos')}
+          onShowToast={showToast}
+        /></div>
 
-        <div className={activeSection === 'ofertas' ? '' : 'hidden'}>
-        <GroupsShortcutCard onOpenGroups={() => setIsGroupsModalOpen(true)} />
-        </div>
+        <div className={activeSection === 'metricas' ? '' : 'hidden'}><MetricasPage activeMarketplace={activeMarketplace} /></div>
 
-        {/* Extensão do Radar */}
-        <section id="extensao-radar" className={`${activeSection === 'extensao' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-base font-black text-slate-900">🧩 Extensão Radar de Oferta</h2>
-              <p className="mt-1 text-xs text-slate-500">Capture produtos nas lojas e envie para sua fila de ofertas.</p>
-            </div>
-            <a href="/radar-oferta-connect-v1.zip" download className="inline-flex items-center justify-center rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white shadow-sm hover:bg-orange-600">⬇️ Baixar extensão</a>
-          </div>
-          <ol className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
-            <li><b>1.</b> Baixe e descompacte o ZIP.</li>
-            <li><b>2.</b> Abra <code className="rounded bg-slate-100 px-1">chrome://extensions</code> e ative o modo desenvolvedor.</li>
-            <li><b>3.</b> Clique em “Carregar sem compactação” e selecione a pasta.</li>
-          </ol>
-        </section>
+        <div className={activeSection === 'extensao' ? '' : 'hidden'}><ExtensaoPage
+          extensionToken={extensionToken}
+          panelUrl={panelUrl}
+          onShowToast={showToast}
+        /></div>
 
-        <section id="ofertas-fila" className={`${activeSection === 'ofertas' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-black text-slate-900">Ofertas / fila</h2><p className="mt-1 text-xs text-slate-500">Ofertas prontas para revisar e preparar para os grupos.</p></div><button type="button" onClick={() => setIsDispatchModalOpen(true)} className="rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white hover:bg-orange-600">Abrir disparo</button></div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-orange-50 p-3"><b className="block text-lg text-orange-700">{queuedProductIds.length}</b><span className="text-[11px] text-orange-700">na fila</span></div><div className="rounded-2xl bg-emerald-50 p-3"><b className="block text-lg text-emerald-700">0</b><span className="text-[11px] text-emerald-700">disparadas hoje</span></div><div className="rounded-2xl bg-slate-100 p-3"><b className="block text-lg text-slate-700">Manual</b><span className="text-[11px] text-slate-600">modo seguro</span></div></div>
-        </section>
-
-        <section id="templates-radar" className={`${activeSection === 'templates' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
-          <h2 className="text-base font-black text-slate-900">Templates e páginas</h2>
-          <p className="mt-1 text-xs text-slate-500">Modelos de copy e prévias públicas para padronizar suas divulgações.</p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Radar encontrou</div><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Oferta relâmpago</div><div className="rounded-2xl border border-slate-200 p-3 text-xs font-bold text-slate-700">Preço + desconto</div></div>
-        </section>
-
-        <section id="espelhamento" className={`${activeSection === 'espelhamento' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
-          <h2 className="text-base font-black text-slate-900">Espelhamento</h2>
-          <p className="mt-1 text-xs text-slate-500">Acompanhe a captura de ofertas da extensão em um único painel. A conexão de grupos será habilitada quando você instalar a extensão Radar.</p>
-          <span className="mt-3 inline-flex rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-600">Preparação disponível</span>
-        </section>
+        <div className={activeSection === 'configuracoes' ? '' : 'hidden'}><ConfiguracoesPage
+          settings={appSettings}
+          templates={templates}
+          coupons={coupons}
+          onSaveSettings={handleSaveSettings}
+          onSaveTemplate={handleSaveTemplate}
+          onDeleteTemplate={handleDeleteTemplate}
+          onSaveCoupon={handleSaveCoupon}
+          onShowToast={showToast}
+          whatsappConnected={whatsappConnected}
+          onDisconnectWhatsApp={handleDisconnectWhatsApp}
+        /></div>
 
         <section id="tutoriais" className={`${activeSection === 'tutoriais' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
           <h2 className="text-base font-black text-slate-900">Tutoriais</h2>
@@ -580,71 +744,22 @@ export function App() {
           <p className="mt-1 text-xs text-slate-500">Precisa de ajuda? Confira as instruções da extensão e valide suas configurações de integração antes de solicitar atendimento.</p>
           <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="mt-3 rounded-xl bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-700 hover:bg-orange-100">Abrir configurações</button>
         </section>
-
       </main>
 
-      {/* Offer Preview Modal */}
-      <OfferPreviewModal
-        product={selectedProduct}
-        isOpen={isOfferModalOpen}
-        onClose={() => setIsOfferModalOpen(false)}
-        onShowToast={showToast}
-      />
-
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        settings={settings}
-        onSaveSettings={setSettings}
-        onShowToast={showToast}
-      />
-
-      {/* Groups Modal */}
-      <GroupsModal
-        isOpen={isGroupsModalOpen}
-        onClose={() => setIsGroupsModalOpen(false)}
-        onShowToast={showToast}
-      />
-
-      <DispatchWizardModal
-        isOpen={isDispatchModalOpen}
-        offers={products}
-        onClose={() => setIsDispatchModalOpen(false)}
-        onShowToast={showToast}
-      />
-
-{/* Notifications Modal */}
-      <NotificationsModal
-        isOpen={isNotificationsModalOpen}
-        onClose={() => setIsNotificationsModalOpen(false)}
-      />
-
-      {/* Analytics Modal */}
-      <AnalyticsModal
-        isOpen={isAnalyticsModalOpen}
-        onClose={() => setIsAnalyticsModalOpen(false)}
-        onShowToast={showToast}
-        activeMarketplace={activeMarketplace}
-      />
-
-      {/* Toast Notification Container */}
+      <OfferPreviewModal product={selectedProduct} isOpen={isOfferModalOpen} onClose={() => setIsOfferModalOpen(false)} onShowToast={showToast} />
+      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} settings={settings} onSaveSettings={setSettings} onShowToast={showToast} />
+      <NotificationsModal isOpen={isNotificationsModalOpen} onClose={() => setIsNotificationsModalOpen(false)} />
+      <AnalyticsModal isOpen={isAnalyticsModalOpen} onClose={() => setIsAnalyticsModalOpen(false)} onShowToast={showToast} activeMarketplace={activeMarketplace} />
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
-
-      {/* Mobile Bottom Navigation */}
-      <MobileBottomNav
-        activeNav={activeNav}
-        onSelectNav={handleSelectNav}
+      <MobileBottomNav activeNav={activeNav} onSelectNav={handleSelectNav} />
+      <FloatingActionButtons
+        whatsappConnected={whatsappConnected}
+        onOpenWhatsApp={handleOpenWhatsApp}
+        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
+        onToggleTheme={handleToggleTheme}
+        darkMode={settings.theme === 'dark'}
+        onOpenAnalytics={() => setIsAnalyticsModalOpen(true)}
       />
-
-      {/* Floating Analytics Button */}
-      <button
-        onClick={() => setIsAnalyticsModalOpen(true)}
-        className="fixed bottom-28 right-4 z-40 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-500/30 transition-all duration-200 flex items-center justify-center gap-1.5"
-        aria-label="Ver Analytics"
-      >
-        <BarChart2 className="w-5 h-5" />
-      </button>
     </div>
   );
 }
