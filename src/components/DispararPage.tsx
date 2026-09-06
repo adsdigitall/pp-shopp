@@ -1,0 +1,581 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import { Product, QueueItem, Template, Group, DispatchStep, IntervalUnit } from '../types/product';
+import { ChevronLeft, ChevronRight, Check, X, Send, MessageSquare, Users, Clock, Moon, Sun, Calendar, RotateCcw, AlertTriangle, CheckCircle2, Radio, Layers, Zap, Shuffle, List, Copy, Trash2, Plus, Search, AlertCircle, BarChart2, Box, Image, Eye, Ban } from 'lucide-react';
+
+interface DispararPageProps {
+  isOpen: boolean;
+  onClose: () => void;
+  offers: Product[];
+  queueItems: QueueItem[];
+  templates: Template[];
+  groups: Group[];
+  onSaveQueueSelection: (selectedIds: string[]) => void;
+  onSaveMessage: (message: { whatsapp: { enabled: boolean; templateId: string; customMessage: string; showImage: boolean; rotatingCTAs: boolean } }) => void;
+  onSaveDestinations: (destinations: { groups: Group[]; schedule: 'now' | 'scheduled'; scheduledAt?: string; interval: { value: number; unit: 'seconds' | 'minutes' | 'hours' }; nightPause: boolean; weekendPause: boolean; expirePause: boolean }) => void;
+  onExecuteDispatch: () => Promise<{ jobId: string; status: string } | null>;
+  onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
+}
+
+const defaultTemplates: Template[] = [
+  { id: 'humanizado', name: 'Humanizado', message: "💛 *Esse achado vale a pena conferir!* 📦 *{TITULO}* O preço caiu de ~{PRECO_ANTIGO}~ para apenas *{PRECO}* 🔥 Pra quem já estava querendo comprar, essa pode ser uma boa hora 👀 👉 Veja a oferta: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'direto', name: 'Direto e agressivo', message: "🚨 *OFERTA ENCONTRADA!* 🔥 *{TITULO}* ~De: {PRECO_ANTIGO}~ 💰 *Por apenas: {PRECO}* ⚡ Aproveita antes que o preço mude ou o estoque acabe: 👉 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!* *{TITULO}* ❌ De: ~{PRECO_ANTIGO}~ ✅ Agora por: *{PRECO}* Tá com um preço muito bom! 🔥 🛒 Corre pra ver: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'urgencia', name: 'Urgência e escassez', message: "⚠️ *PREÇO BAIXOU!* 🔥 *{TITULO}* Era ~{PRECO_ANTIGO}~ Agora está saindo por apenas *{PRECO}* 😱 ⏳ Não sei até quando esse preço fica disponível. 👉 Pegue aqui: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+];
+
+const variables = [
+  { key: '{TITULO}', label: 'Título do produto' },
+  { key: '{PRECO}', label: 'Preço atual' },
+  { key: '{PRECO_ANTIGO}', label: 'Preço original' },
+  { key: '{LINK}', label: 'Link de afiliado' },
+  { key: '{CUPOM}', label: 'Cupom de desconto' },
+  { key: '{CTA}', label: 'Chamada para ação rotativa' },
+];
+
+const rotatingCtaExamples = [
+  'Confira a oferta antes que o preço mude',
+  'Garanta o seu enquanto ainda está disponível',
+  'Toque no link e aproveite essa oportunidade',
+];
+
+const steps = [
+  { num: 1, label: 'Ofertas' },
+  { num: 2, label: 'Mensagem' },
+  { num: 3, label: 'Destinos' },
+] as const;
+
+export const DispararPage: React.FC<DispararPageProps> = ({
+  isOpen,
+  onClose,
+  offers,
+  queueItems,
+  templates: userTemplates,
+  groups,
+  onSaveQueueSelection,
+  onSaveMessage,
+  onSaveDestinations,
+  onExecuteDispatch,
+  onShowToast,
+}) => {
+  const [step, setStep] = useState<DispatchStep>(1);
+  const [selectedOffers, setSelectedOffers] = useState<string[]>([]);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('humanizado');
+  const [customMessage, setCustomMessage] = useState(defaultTemplates[0].message);
+  const [showImage, setShowImage] = useState(true);
+  const [rotatingCTAs, setRotatingCTAs] = useState(true);
+  const [dispatchJob, setDispatchJob] = useState<any>(null);
+  const [dispatching, setDispatching] = useState(false);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [schedule, setSchedule] = useState<'now' | 'scheduled'>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [intervalValue, setIntervalValue] = useState(30);
+  const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('seconds');
+  const [nightPause, setNightPause] = useState(true);
+  const [weekendPause, setWeekendPause] = useState(false);
+  const [expirePause, setExpirePause] = useState(true);
+  const [searchGroups, setSearchGroups] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/dispatch/history')
+      .then(response => response.ok ? response.json() : null)
+      .then(body => {
+        if (cancelled) return;
+        const latest = body?.history?.[0];
+        if (!latest?.id) return;
+        setDispatchJob(latest);
+        setSelectedOffers((latest.offers || []).map((offer: Product) => offer.id));
+        setSelectedGroups((latest.destinations?.groups || []).map((group: Group | string) => typeof group === 'string' ? group : group.id));
+        if (latest.destinations?.interval) {
+          setIntervalValue(latest.destinations.interval.value || 30);
+          setIntervalUnit(latest.destinations.interval.unit || 'seconds');
+        }
+        setStep(5);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  const allTemplates = [...defaultTemplates, ...(userTemplates || [])];
+  const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId) || defaultTemplates[0];
+
+  const previewMessage = useCallback(() => {
+    const firstOffer = offers.find(o => selectedOffers.includes(o.id)) || offers[0];
+    if (!firstOffer) return customMessage;
+    
+    let msg = customMessage;
+    msg = msg.replace(/{TITULO}/g, firstOffer.name);
+    msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${firstOffer.currentPrice.toFixed(2).replace('.', ',')}` : '—');
+    msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${firstOffer.originalPrice.toFixed(2).replace('.', ',')}` : '—');
+    msg = msg.replace(/{CTA}/g, rotatingCTAs ? rotatingCtaExamples[0] : 'Confira a oferta');
+    msg = msg.replace(/{LINK}/g, firstOffer.affiliateUrl || firstOffer.productUrl);
+    msg = msg.replace(/{CUPOM}/g, 'CUPOM10');
+    if (rotatingCTAs && !customMessage.includes('{CTA}')) msg += `\n\n👉 ${rotatingCtaExamples[0]}`;
+    return msg;
+  }, [customMessage, offers, selectedOffers, rotatingCTAs]);
+
+  const filteredGroups = groups.filter(g => 
+    g.name.toLowerCase().includes(searchGroups.toLowerCase())
+  );
+
+  const handleNext = () => {
+    if (step === 1) {
+      if (selectedOffers.length === 0) {
+        onShowToast('Selecione pelo menos uma oferta', undefined, 'error');
+        return;
+      }
+      onSaveQueueSelection(selectedOffers);
+      setStep(2);
+    } else if (step === 2) {
+      onSaveMessage({
+        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage, showImage, rotatingCTAs }
+      });
+      setStep(3);
+    } else if (step === 3) {
+      if (selectedGroups.length === 0) {
+        onShowToast('Selecione pelo menos um grupo', undefined, 'error');
+        return;
+      }
+      onSaveDestinations({
+        groups: groups.filter(g => selectedGroups.includes(g.id)),
+        schedule,
+        scheduledAt: schedule === 'scheduled' ? scheduledAt : undefined,
+        interval: { value: intervalValue, unit: intervalUnit },
+        nightPause,
+        weekendPause,
+        expirePause,
+      });
+      setStep(4);
+    } else if (step === 4) {
+      setStep(5);
+    }
+  };
+
+  const handleBack = () => {
+    if (step > 1) setStep((step - 1) as DispatchStep);
+  };
+
+  const handleExecute = async () => {
+    if (selectedGroups.length === 0) {
+      onShowToast('Selecione pelo menos um grupo', undefined, 'error');
+      return;
+    }
+    onSaveDestinations({
+      groups: groups.filter(g => selectedGroups.includes(g.id)),
+      schedule,
+      scheduledAt: schedule === 'scheduled' ? scheduledAt : undefined,
+      interval: { value: intervalValue, unit: intervalUnit },
+      nightPause,
+      weekendPause,
+      expirePause,
+    });
+    setDispatching(true);
+    const created = await onExecuteDispatch();
+    setDispatching(false);
+    if (created?.jobId) {
+      setDispatchJob({ id: created.jobId, status: created.status, stats: { sent: 0, failed: 0, pending: totalEnvios } });
+    }
+  };
+
+  useEffect(() => {
+    if (!dispatchJob?.id || ['completed', 'failed', 'cancelled'].includes(dispatchJob.status)) return;
+    const refresh = () => fetch(`/api/dispatch/${encodeURIComponent(dispatchJob.id)}`)
+      .then(response => response.ok ? response.json() : null)
+      .then(job => { if (job) setDispatchJob(job); })
+      .catch(() => undefined);
+    refresh();
+    const timer = window.setInterval(refresh, 3000);
+    return () => window.clearInterval(timer);
+  }, [dispatchJob?.id, dispatchJob?.status]);
+
+  const toggleGroup = (groupId: string) => {
+    setSelectedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]);
+  };
+
+  const handleVariableInsert = (variable: string) => {
+    setCustomMessage(prev => {
+      const textarea = document.querySelector('textarea[role="message-editor"]') as HTMLTextAreaElement;
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        return prev.slice(0, start) + variable + prev.slice(end);
+      }
+      return prev + variable;
+    });
+  };
+
+  if (!isOpen) return null;
+
+  const selectedGroupsData = groups.filter(g => selectedGroups.includes(g.id));
+  const totalEnvios = selectedOffers.length * selectedGroups.length;
+
+  return (
+    <section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)]">
+      <div className="flex min-h-[calc(100dvh-5rem)] flex-col overflow-hidden">
+        {/* Step Indicator - Top Fixed */}
+        <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur-xl overflow-x-auto no-scrollbar">
+          {steps.map((s, i) => (
+            <div key={s.num} className="flex items-center gap-1.5 shrink-0">
+              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition ${step >= s.num ? 'bg-[var(--primary)] text-white' : 'bg-[var(--border)] text-[var(--text-secondary)]'}`}>
+                {step > s.num ? <Check className="w-3.5 h-3.5" /> : s.num}
+              </div>
+              <span className={`text-[11px] font-bold whitespace-nowrap ${step === s.num ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>{s.label}</span>
+              {i < steps.length - 1 && <span className={`h-0.5 w-6 shrink-0 transition ${step > s.num ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'}`} />}
+            </div>
+          ))}
+          <button onClick={onClose} className="ml-auto shrink-0 rounded p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]"><X className="h-4 w-4" /></button>
+        </div>
+
+        {/* Step Content */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 pb-24">
+          {/* Step 1: Ofertas - Compact list with images */}
+          {step === 1 && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-[var(--text-secondary)]">Vindas da fila. Desmarque o que não quer disparar agora.</p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-[var(--primary)]">{selectedOffers.length} selecionadas</span>
+              </div>
+              <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+                {queueItems.map(item => (
+                  <label key={item.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1.5 hover:border-[var(--primary)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedOffers.includes(item.id)}
+                      onChange={(e) => e.target.checked ? setSelectedOffers([...selectedOffers, item.id]) : setSelectedOffers(selectedOffers.filter(id => id !== item.id))}
+                      className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)] shrink-0"
+                    />
+                    <div className="relative h-10 w-10 shrink-0 rounded bg-[var(--surface-elevated)] overflow-hidden">
+                      {item.product.imageUrl ? <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[var(--text-secondary)]"><Box className="h-5 w-5" /></div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-[11px] font-semibold text-[var(--text-primary)]">{item.product.name}</p>
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className={`rounded px-1 py-0.5 font-bold ${item.product.marketplace === 'mercado_livre' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-700'}`}>
+                          {item.product.marketplace === 'shopee' ? 'SH' : item.product.marketplace === 'mercado_livre' ? 'ML' : item.product.marketplace}
+                        </span>
+                        <span className="text-[var(--success)] font-bold">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
+                        {item.product.originalPrice && <span className="line-through text-[var(--text-secondary)]">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {queueItems.length === 0 && (
+                <div className="text-center py-8 text-[var(--text-secondary)]">
+                  <Box className="h-8 w-8 mx-auto mb-2 text-[var(--border)]" />
+                  <p className="text-[11px]">Fila vazia. Garimpe ofertas primeiro.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Mensagem */}
+          {step === 2 && (
+            <div className="space-y-3">
+              <p className="text-[11px] text-[var(--text-secondary)]">Configure a mensagem do WhatsApp.</p>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={whatsappEnabled} onChange={e => setWhatsappEnabled(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-green-100"><MessageSquare className="w-4 h-4 text-green-700" /></span>
+                    <span className="font-bold text-[var(--text-primary)]">WhatsApp</span>
+                  </div>
+                </label>
+              </div>
+
+              {whatsappEnabled && (
+                <>
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Modelo</label>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={e => { setSelectedTemplateId(e.target.value); setCustomMessage(allTemplates.find(t => t.id === e.target.value)?.message || ''); }}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                    >
+                      {allTemplates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Mensagem</label>
+                    <textarea
+                      role="message-editor"
+                      value={customMessage}
+                      onChange={e => setCustomMessage(e.target.value)}
+                      className="w-full min-h-[80px] rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-mono text-[var(--text-primary)] outline-none focus:border-[var(--primary)] resize-none"
+                      placeholder="Digite sua mensagem... Use as variáveis abaixo."
+                    />
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {variables.map(v => (
+                        <button
+                          key={v.key}
+                          type="button"
+                          onClick={() => handleVariableInsert(v.key)}
+                          className="rounded border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-2 py-0.5 text-[9px] font-bold text-[var(--primary)] hover:bg-[var(--primary)]/20"
+                          title={v.label}
+                        >
+                          {v.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Opções</h4>
+                    <div className="space-y-1.5">
+                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
+                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">Mostrar imagem</span><span className="text-[9px] text-[var(--text-secondary)]">Envia a foto original junto com a legenda.</span></span>
+                        <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                      </label>
+                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
+                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">CTAs rotativas</span><span className="text-[9px] text-[var(--text-secondary)]">Alterna a chamada em cada envio para os grupos.</span></span>
+                        <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Prévia no WhatsApp</h4>
+                    <div className="grid gap-2 sm:grid-cols-[80px_1fr]">
+                      {showImage && (
+                        <div className="aspect-square w-full rounded-lg bg-[var(--surface-elevated)] overflow-hidden">
+                          {(() => { const offer = offers.find(o => selectedOffers.includes(o.id)) || offers[0]; return offer?.imageUrl ? <img src={offer.imageUrl} alt={offer.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[9px] text-[var(--text-secondary)]">Sem imagem</div>; })()}
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-[10px] font-medium leading-5 text-white">
+                        {previewMessage()}
+                      </div>
+                    </div>
+                    {rotatingCTAs && <div className="mt-2 flex flex-wrap gap-1">{rotatingCtaExamples.map((cta, index) => <span key={cta} className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[9px] text-[var(--text-secondary)]">CTA {index + 1}: {cta}</span>)}</div>}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Destinos */}
+          {step === 3 && (
+            <div className="space-y-3">
+              <p className="text-[11px] text-[var(--text-secondary)]">Escolha os grupos que vão receber — nenhum vem marcado.</p>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-green-100"><Users className="w-4 h-4 text-green-700" /></span>
+                    <span className="font-bold text-[var(--text-primary)]">WhatsApp · grupos</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    placeholder="Buscar grupos"
+                    value={searchGroups}
+                    onChange={e => setSearchGroups(e.target.value)}
+                    className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGroups(prev => prev.length === filteredGroups.length ? [] : filteredGroups.map(g => g.id))}
+                    className="rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                  >
+                    {selectedGroups.length === filteredGroups.length ? 'desmarcar' : 'selecionar todos'}
+                  </button>
+                </div>
+                <div className="max-h-[45vh] overflow-y-auto space-y-1">
+                  {filteredGroups.map(group => (
+                    <label key={group.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 hover:border-[var(--primary)] cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedGroups.includes(group.id)}
+                          onChange={e => toggleGroup(group.id)}
+                          className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]"
+                        />
+                        <div>
+                          <p className="text-[11px] font-bold text-[var(--text-primary)]">{group.name}</p>
+                          <p className="text-[9px] text-[var(--text-secondary)]">{group.memberCount} membros</p>
+                        </div>
+                      </div>
+                      {!group.isAdmin && (
+                        <span className="flex items-center gap-1 text-[9px] text-red-600">
+                          <AlertTriangle className="w-2.5 h-2.5" /> admin
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2.5">
+                <h4 className="text-[10px] font-bold text-[var(--text-secondary)]">Quando</h4>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setSchedule('now')} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'now' ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agora</button>
+                  <button type="button" onClick={() => setSchedule('scheduled')} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'scheduled' ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agendar</button>
+                </div>
+                {schedule === 'scheduled' && (
+                  <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
+                )}
+
+                <h4 className="text-[10px] font-bold text-[var(--text-secondary)]">Ritmo</h4>
+                <p className="text-[9px] text-[var(--text-secondary)]">Recomendamos intervalos de 20+ min para segurança</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="3600"
+                    value={intervalValue}
+                    onChange={e => setIntervalValue(parseInt(e.target.value) || 1)}
+                    className="w-16 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)] text-center"
+                  />
+                  <select
+                    value={intervalUnit}
+                    onChange={e => setIntervalUnit(e.target.value as IntervalUnit)}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                  >
+                    <option value="seconds">segundos</option>
+                    <option value="minutes">minutos</option>
+                    <option value="hours">horas</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 border-t border-[var(--border)] pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={nightPause} onChange={e => setNightPause(e.target.checked)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                    <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar 23h–6h</span><p className="text-[9px] text-[var(--text-secondary)]">Evita disparos de madrugada.</p></div>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={weekendPause} onChange={e => setWeekendPause(e.target.checked)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                    <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar fim de semana</span><p className="text-[9px] text-[var(--text-secondary)]">Pausa sáb/dom, retoma segunda.</p></div>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={expirePause} onChange={e => setExpirePause(e.target.checked)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                    <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar ofertas expiradas</span><p className="text-[9px] text-[var(--text-secondary)]">Evita mandar link que já saiu da promo.</p></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Revisar */}
+          {step === 4 && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--primary)]">Etapa 3 de 3</p>
+                <h2 className="mt-1 text-xl font-black text-[var(--text-primary)]">Revise antes de disparar</h2>
+                <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">Confira ofertas, grupos e o ritmo.</p>
+              </div>
+              <div className="grid gap-2 grid-cols-3">
+                {[
+                  ['Ofertas', `${selectedOffers.length} selecionada(s)`],
+                  ['Grupos', `${selectedGroups.length} selecionado(s)`],
+                  ['Ritmo', `${intervalValue} ${intervalUnit}`],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
+                    <p className="text-[9px] text-[var(--text-secondary)]">{label}</p>
+                    <p className="mt-1 font-bold text-[var(--text-primary)]">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
+                <p className="text-[9px] font-bold text-[var(--text-secondary)]">Mensagem</p>
+                <p className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-[var(--text-primary)]">{previewMessage()}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Confirmar / Acompanhar */}
+          {step === 5 && (
+            <div className="space-y-3">
+              {dispatchJob ? (
+                <>
+                  {/* Header do disparo em andamento */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-600 animate-pulse" />
+                        Enviando
+                      </span>
+                      <span className="text-[11px] text-[var(--text-secondary)]">criado {new Date(dispatchJob.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <button type="button" onClick={() => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); }} className="pressable inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-red-600 border border-red-200 hover:bg-red-50"><Ban className="w-3.5 h-3.5" />Cancelar</button>
+                  </div>
+
+                  {/* Grupos destinatários */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selectedGroupsData.slice(0, 4).map(group => (
+                      <span key={group.id} className="max-w-[160px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">#{group.id.slice(-4)} {group.name}</span>
+                    ))}
+                    {selectedGroupsData.length > 4 && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">+{selectedGroupsData.length - 4} mais</span>}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--border)]">
+                      <div className="h-full rounded-full transition-[width] duration-500 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)]" style={{ width: `${Math.min(100, ((dispatchJob.stats?.sent || 0) + (dispatchJob.stats?.failed || 0)) / Math.max(1, totalEnvios) * 100)}%` }} />
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">
+                      {dispatchJob.stats?.sent || 0}/{totalEnvios} envios · {Math.round(((dispatchJob.stats?.sent || 0) + (dispatchJob.stats?.failed || 0)) / Math.max(1, totalEnvios) * 100)}%
+                    </span>
+                  </div>
+
+                  {/* Previsão de conclusão */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[var(--text-secondary)]">
+                    <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Previsão: {(() => { const sent = dispatchJob.stats?.sent || 0; const failed = dispatchJob.stats?.failed || 0; const done = sent + failed; const remaining = totalEnvios - done; const intervalMs = (intervalValue * (intervalUnit === 'seconds' ? 1000 : intervalUnit === 'minutes' ? 60000 : 3600000)); const eta = remaining * intervalMs; const etaDate = new Date(Date.now() + eta); return etaDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); })()}</span>
+                    <span className="inline-flex items-center gap-1.5"><Send className="w-3.5 h-3.5" />{selectedGroupsData.length} grupo(s)</span>
+                    <span className="inline-flex items-center gap-1.5"><Box className="w-3.5 h-3.5" />{selectedOffers.length} oferta(s)</span>
+                  </div>
+
+                  {/* Stats detalhadas */}
+                  <div className="mt-3 grid grid-cols-3 gap-1 text-center">
+                    <div className="rounded-lg bg-[var(--success)]/10 p-3"><b className="block text-xl text-[var(--success)]">{dispatchJob.stats?.sent || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Enviados</span></div>
+                    <div className="rounded-lg bg-[var(--error)]/10 p-3"><b className="block text-xl text-[var(--error)]">{dispatchJob.stats?.failed || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Falhas</span></div>
+                    <div className="rounded-lg bg-[var(--warning)]/10 p-3"><b className="block text-xl text-[var(--warning)]">{dispatchJob.stats?.pending || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Pendentes</span></div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--primary)]/10 text-[var(--primary)]"><Send className="h-7 w-7" /></div>
+                  <p className="mt-4 text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--primary)]">Tudo pronto</p>
+                  <h2 className="mt-1 text-2xl font-black text-[var(--text-primary)]">Confirmar disparo</h2>
+                  <p className="mt-2 max-w-md text-[11px] leading-5 text-[var(--text-secondary)]">Ao confirmar, o Radar cria a fila e envia pelo WhatsApp conectado.</p>
+                  <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-[11px] text-[var(--text-secondary)]">{selectedOffers.length} oferta(s) · {selectedGroups.length} grupo(s)</div>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+
+        {/* Footer Actions */}
+        <div className="sticky bottom-0 z-10 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface)]/95 px-3 py-2.5 backdrop-blur-xl safe-bottom">
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={step === 1}
+            className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Voltar
+          </button>
+          <button
+            type="button"
+            onClick={dispatchJob ? () => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); } : step === 5 ? handleExecute : handleNext}
+            disabled={dispatching || (step === 5 && selectedGroups.length === 0)}
+            className="pressable flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-[10px] font-black text-white hover:bg-[var(--primary-hover)]"
+          >
+            {dispatchJob ? <>Novo <Plus className="h-3.5 w-3.5" /></> : step === 5 ? (
+              <>{dispatching ? 'Criando…' : 'Confirmar'} <span className="ml-0.5 px-1 py-0.5 bg-white/20 rounded text-[9px]">{selectedGroups.length}</span></>
+            ) : (
+              <>Continuar <ChevronRight className="w-3.5 h-3.5" /></>
+            )}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default DispararPage;

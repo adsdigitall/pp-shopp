@@ -128,8 +128,11 @@ async function wahaGetQR(sessionName = WAHA_SESSION) {
 }
 
 async function wahaGetGroups(sessionName = WAHA_SESSION) {
-  const payload = await wahaRequest(`/api/${encodeURIComponent(sessionName)}/groups?limit=1000`);
-  return normalizeWahaGroups(payload, sessionName);
+  const [payload, session] = await Promise.all([
+    wahaRequest(`/api/${encodeURIComponent(sessionName)}/groups?limit=1000`),
+    wahaGetSession(sessionName),
+  ]);
+  return normalizeWahaGroups(payload, sessionName, new Date().toISOString(), session?.me);
 }
 
 async function wahaSendMessage(chatId, text, mediaUrl, sessionName = WAHA_SESSION) {

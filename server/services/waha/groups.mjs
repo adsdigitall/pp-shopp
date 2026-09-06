@@ -15,6 +15,12 @@ function jidFrom(value) {
   );
 }
 
+function phoneFromJid(value) {
+  const jid = jidFrom(value);
+  if (!jid) return '';
+  return String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+}
+
 function groupName(group) {
   const candidate = firstDefined(
     group.name,
@@ -30,7 +36,7 @@ function groupName(group) {
   return candidate?.Name || candidate?.name || 'Grupo sem nome';
 }
 
-export function normalizeWahaGroups(payload, sessionId, now = new Date().toISOString()) {
+export function normalizeWahaGroups(payload, sessionId, now = new Date().toISOString(), sessionIdentity = null) {
   const source = Array.isArray(payload)
     ? payload
     : payload?.groups || payload?.data || payload?.items || [];
@@ -41,11 +47,21 @@ export function normalizeWahaGroups(payload, sessionId, now = new Date().toISOSt
     if (!id) return [];
     const participants = firstDefined(group?.participants, group?.Participants, raw?.participants, raw?.Participants);
     const participantList = Array.isArray(participants) ? participants : [];
+    const ownPhone = phoneFromJid(firstDefined(sessionIdentity?.id, sessionIdentity?.JID, sessionIdentity?.jid, sessionIdentity));
+    const ownParticipant = ownPhone
+      ? participantList.find(participant => [participant?.JID, participant?.jid, participant?.id, participant?.PhoneNumber, participant?.phoneNumber]
+        .some(candidate => phoneFromJid(candidate) === ownPhone))
+      : null;
+    const isOwner = Boolean(ownPhone && [group?.OwnerJID, group?.ownerJid, group?.OwnerPN, group?.owner]
+      .some(candidate => phoneFromJid(candidate) === ownPhone));
+    const isAdmin = Boolean(firstDefined(group?.isAdmin, group?.IsAdmin, raw?.isAdmin, false))
+      || Boolean(ownParticipant?.IsAdmin || ownParticipant?.isAdmin || ownParticipant?.IsSuperAdmin || ownParticipant?.isSuperAdmin)
+      || isOwner;
     return [{
       id,
       name: groupName(group),
       memberCount: Number(firstDefined(group?.size, group?.memberCount, raw?.size, raw?.memberCount, participantList.length, 0)),
-      isAdmin: Boolean(firstDefined(group?.isAdmin, group?.IsAdmin, raw?.isAdmin, false)),
+      isAdmin,
       status: 'active',
       messagesSent30d: 0,
       messagesReceived30d: 0,
