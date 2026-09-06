@@ -191,26 +191,18 @@ export function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [groups, setGroups] = useState<Group[]>([
-    { id: '1', name: 'Grupo Imersão Ofertas Dinâmicas 06/06', memberCount: 389, isAdmin: true, status: 'healthy', messagesSent30d: 4, messagesReceived30d: 0, lastActivity: '2026-09-04', addedAt: '2026-06-06' },
-    { id: '2', name: 'SYNC PAY', memberCount: 6, isAdmin: false, status: 'healthy', messagesSent30d: 2, messagesReceived30d: 1, lastActivity: '2026-09-03', addedAt: '2026-07-01' },
-    { id: '3', name: 'Fornecedor Tiktok ADS', memberCount: 3, isAdmin: false, status: 'active', messagesSent30d: 1, messagesReceived30d: 2, lastActivity: '2026-09-02', addedAt: '2026-08-15' },
-    { id: '4', name: 'Utmify', memberCount: 2, isAdmin: false, status: 'active', messagesSent30d: 0, messagesReceived30d: 0, lastActivity: '2026-09-01', addedAt: '2026-08-20' },
-    { id: '5', name: 'Scale ADS- Pro Comunidade', memberCount: 1600, isAdmin: false, status: 'healthy', messagesSent30d: 50, messagesReceived30d: 10, lastActivity: '2026-09-04', addedAt: '2026-07-10' },
-  ]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [pages, setPages] = useState<any[]>([]);
-  const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([
-    { id: 'mirror-demo', name: 'Ofertas TOP Brasil', sourceGroupId: '1', destinationGroupIds: ['2', '3'], type: 'instant', status: 'active', onlyOffers: true, templateIds: [], mirroredMessages: 128, failedMessages: 2, createdAt: '2026-09-04' },
-  ]);
-  const [extensionToken, setExtensionToken] = useState('b0882c9dcbb9fda04d9ac0f896a2a50f0df55472f166475c');
-  const [panelUrl, setPanelUrl] = useState('https://app.garimpalinks.com.br');
-  // Integrações reais entram no back-end; nesta etapa o estado é explicitamente mockado.
+  const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([]);
+  const [extensionToken, setExtensionToken] = useState('');
+  const [panelUrl, setPanelUrl] = useState('https://radarfertas.shop');
   const [whatsappConnected, setWhatsAppConnected] = useState(false);
+  const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
 
   // App Settings State
   const [appSettings, setAppSettings] = useState<SettingsType>({
     channels: { whatsapp: { connected: false, phone: '', instanceId: '' }, telegram: { connected: false } },
-    platforms: { shopee: { appId: '18349490069', secret: 'I326BKMYMZMEHEVI25JDJP26PJRUIAZF', validated: true }, mercadoLivre: { affiliateTag: '', accessToken: '' }, amazon: { associateTag: '' }, magalu: { storeSlug: '' } },
+    platforms: { shopee: { appId: '', secret: '', validated: false }, mercadoLivre: { affiliateTag: '', accessToken: '' }, amazon: { associateTag: '' }, magalu: { storeSlug: '' } },
     templates: [],
     coupons: [],
     security: { safeInterval: true },
@@ -219,6 +211,16 @@ export function App() {
 
   useEffect(() => {
     fetch('/api/health').then((response) => response.json()).then((body) => setShopeeConfigured(body?.shopeeConfigured !== false)).catch(() => setShopeeConfigured(true));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadHistory = () => fetch('/api/dispatch/history').then(response => response.ok ? response.json() : null).then(body => {
+      if (active && Array.isArray(body?.history)) setDispatchHistory(body.history);
+    }).catch(() => undefined);
+    loadHistory();
+    const intervalId = window.setInterval(loadHistory, 15_000);
+    return () => { active = false; window.clearInterval(intervalId); };
   }, []);
 
   useEffect(() => {
@@ -626,9 +628,12 @@ export function App() {
           onNavigateToGroups={() => { setActiveSection('grupos'); setMobileSidebarOpen(false); }}
           onNavigateToQueue={() => { setActiveSection('fila'); setMobileSidebarOpen(false); }}
           queuedCount={queueItems.length}
-          dispatchCount={0}
+          dispatchCount={dispatchHistory.filter((job: any) => job.createdAt && new Date(job.createdAt).toDateString() === new Date().toDateString()).length}
           groupsCount={groups.length}
           clicksCount={0}
+          whatsappConnected={whatsappConnected}
+          shopeeConfigured={shopeeConfigured}
+          latestDispatch={dispatchHistory[0]}
         /></div>
 
         <div className={activeSection === 'whatsapp' ? '' : 'hidden'}><WhatsAppPage

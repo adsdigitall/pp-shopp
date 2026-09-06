@@ -2706,10 +2706,10 @@ async function handleGetTemplates(req, res) {
 
 function getDefaultTemplates() {
   return [
-    { id: 'vendedor', name: 'Vendedor e humanizado', message: "💛 *Esse achado vale a pena conferir!* 📦 *{TITULO}* O preço caiu de ~{PRECO_ANTIGO}~ para apenas *{PRECO}* 🔥 Pra quem já estava querendo comprar, essa pode ser uma boa hora 👀 👉 Veja a oferta: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'direto', name: 'Direto e agressivo', message: "🚨 *OFERTA ENCONTRADA!* 🔥 *{TITULO}* ~De: {PRECO_ANTIGO}~ 💰 *Por apenas: {PRECO}* ⚡ Aproveita antes que o preço mude ou o estoque acabe: 👉 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!* *{TITULO}* ❌ De: ~{PRECO_ANTIGO}~ ✅ Agora por: *{PRECO}* Tá com um preço muito bom! 🔥 🛒 Corre pra ver: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'urgencia', name: 'Urgência e escassez', message: "⚠️ *PREÇO BAIXOU!* 🔥 *{TITULO}* Era ~{PRECO_ANTIGO}~ Agora está saindo por apenas *{PRECO}* 😱 ⏳ Não sei até quando esse preço fica disponível. 👉 Pegue aqui: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'vendedor', name: 'Vendedor e humanizado', message: "💛 *Esse achado vale a pena conferir!*\n📦 *{TITULO}*\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas *{PRECO}* 🔥\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n👉 Veja a oferta: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'direto', name: 'Direto e agressivo', message: "🚨 *OFERTA ENCONTRADA!*\n🔥 *{TITULO}*\n~De: {PRECO_ANTIGO}~ 💰 *Por apenas: {PRECO}*\n⚡ Aproveita antes que o preço mude ou o estoque acabe:\n👉 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n*{TITULO}*\n❌ De: ~{PRECO_ANTIGO}~\n✅ Agora por: *{PRECO}*\nTá com um preço muito bom! 🔥\n🛒 Corre pra ver: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'urgencia', name: 'Urgência e escassez', message: "⚠️ *PREÇO BAIXOU!*\n🔥 *{TITULO}*\nEra ~{PRECO_ANTIGO}~\nAgora está saindo por apenas *{PRECO}* 😱\n⏳ Não sei até quando esse preço fica disponível.\n👉 Pegue aqui: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
   ];
 }
 
@@ -2816,12 +2816,12 @@ async function handleAnalyticsOverview(req, res) {
 
 async function handleAnalyticsDispatch(req, res) {
   try {
-    const jobs = Array.from(dispatchJobs.values());
+    const jobs = await DispatchStore.list('default_user', 200);
     const totalJobs = jobs.length;
     const completedJobs = jobs.filter(j => j.status === 'completed').length;
     const runningJobs = jobs.filter(j => j.status === 'running').length;
-    const totalSent = jobs.reduce((sum, j) => sum + j.stats.sent, 0);
-    const totalFailed = jobs.reduce((sum, j) => sum + j.stats.failed, 0);
+    const totalSent = jobs.reduce((sum, j) => sum + (j.stats?.sent || 0), 0);
+    const totalFailed = jobs.reduce((sum, j) => sum + (j.stats?.failed || 0), 0);
     
     sendJson(res, 200, {
       totalJobs,
@@ -2830,7 +2830,7 @@ async function handleAnalyticsDispatch(req, res) {
       totalSent,
       totalFailed,
       successRate: totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0,
-      jobs: jobs.slice(-10).map(j => ({ id: j.id, status: j.status, sent: j.stats.sent, failed: j.stats.failed, createdAt: j.createdAt })),
+      jobs: jobs.slice(0, 10).map(j => ({ id: j.id, status: j.status, sent: j.stats?.sent || 0, failed: j.stats?.failed || 0, createdAt: j.createdAt })),
     });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics de disparos.' } });
