@@ -280,30 +280,28 @@ export const DispararPage: React.FC<DispararPageProps> = ({
         </div>
 
         {/* Step Content */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 pb-24">
+        <div key={step} className="dispatch-step-enter flex-1 overflow-y-auto px-3 py-3 pb-24">
           {/* Step 1: Ofertas - Compact list with images */}
           {step === 1 && (
-            <div className="space-y-2">
-              <p className="text-[11px] text-[var(--text-secondary)]">Vindas da fila. Desmarque o que não quer disparar agora.</p>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-[var(--primary)]">{selectedOffers.length} selecionadas</span>
-              </div>
-              <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+            <div className="space-y-3">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div className="flex items-center justify-between gap-3"><div><h3 className="text-[13px] font-black text-[var(--text-primary)]">Escolha as ofertas</h3><p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">Toque no card para incluir ou retirar.</p></div><span className="shrink-0 rounded-lg bg-[var(--primary)]/12 px-2 py-1 text-[10px] font-black text-[var(--primary)]">{selectedOffers.length} selecionadas</span></div><button type="button" onClick={() => setSelectedOffers(selectedOffers.length === queueItems.length ? [] : queueItems.map(item => item.id))} className="mt-2 text-[10px] font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--primary)]">{selectedOffers.length === queueItems.length ? 'Desmarcar todas' : 'Selecionar todas'}</button></div>
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
                 {queueItems.map(item => {
                   const isSelected = selectedOffers.includes(item.id);
-                  return <button key={item.id} type="button" aria-pressed={isSelected} onClick={() => setSelectedOffers(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])} className={`flex w-full items-center gap-2 rounded-lg border bg-[var(--surface)] p-1.5 text-left transition-colors ${isSelected ? 'border-[var(--primary)]/70' : 'border-[var(--border)]'} hover:border-[var(--primary)]`}>
-                    <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-transparent'}`}><Check className="h-3 w-3" /></span>
-                    <div className="relative h-10 w-10 shrink-0 rounded bg-[var(--surface-elevated)] overflow-hidden">
+                  const discount = item.product.discountPercentage || (item.product.originalPrice && item.product.currentPrice && item.product.originalPrice > item.product.currentPrice ? Math.round((1 - item.product.currentPrice / item.product.originalPrice) * 100) : null);
+                  return <button key={item.id} type="button" aria-pressed={isSelected} onClick={() => setSelectedOffers(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])} className={`pressable flex w-full items-center gap-3 rounded-xl border bg-[var(--surface)] p-2.5 text-left shadow-[0_8px_20px_rgba(0,0,0,.12)] transition-all duration-200 ${isSelected ? 'border-[var(--primary)]/75 ring-1 ring-[var(--primary)]/20' : 'border-[var(--border)]'} hover:-translate-y-0.5 hover:border-[var(--primary)]/75`}>
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-transparent'}`}><Check className="h-3.5 w-3.5" /></span>
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-elevated)]">
                       {item.product.imageUrl ? <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[var(--text-secondary)]"><Box className="h-5 w-5" /></div>}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-[11px] font-semibold text-[var(--text-primary)]">{item.product.name}</p>
-                      <div className="flex items-center gap-1.5 text-[10px]">
-                        <span className={`rounded px-1 py-0.5 font-bold ${item.product.marketplace === 'mercado_livre' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-700'}`}>
-                          {item.product.marketplace === 'shopee' ? 'SH' : item.product.marketplace === 'mercado_livre' ? 'ML' : item.product.marketplace}
+                      <div className="flex items-start justify-between gap-2"><p className="line-clamp-2 text-[11px] font-bold leading-4 text-[var(--text-primary)]">{item.product.name}</p>{discount && <span className="shrink-0 rounded-md bg-[var(--primary)]/12 px-1.5 py-0.5 text-[9px] font-black text-[var(--primary)]">-{discount}%</span>}</div>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+                        <span className={`rounded px-1.5 py-0.5 font-bold ${item.product.marketplace === 'mercado_livre' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-700'}`}>
+                          {item.product.marketplace === 'shopee' ? 'Shopee' : item.product.marketplace === 'mercado_livre' ? 'Mercado Livre' : item.product.marketplace}
                         </span>
-                        <span className="text-[var(--success)] font-bold">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
                         {item.product.originalPrice && <span className="line-through text-[var(--text-secondary)]">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>}
+                        <span className="font-black text-[var(--success)]">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
                       </div>
                     </div>
                   </button>;

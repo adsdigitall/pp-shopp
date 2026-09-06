@@ -283,6 +283,8 @@ body input, body textarea, body select {
 .app-shell .grid > *, .app-shell main, .app-shell main > *, .app-shell section, .app-shell article { min-width: 0; }
 .app-shell button, .app-shell input, .app-shell textarea, .app-shell select { font: inherit; }
 .app-shell main { padding-bottom: max(5.5rem, env(safe-area-inset-bottom)); }
+.dispatch-step-enter { animation: dispatch-step-enter 220ms cubic-bezier(.2,.8,.2,1) both; }
+@keyframes dispatch-step-enter { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
 @media (max-width: 767px) {
   .app-shell main { padding-inline: 0; }
   .app-shell section { border-radius: 1.25rem; }
