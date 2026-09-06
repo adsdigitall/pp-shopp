@@ -35,6 +35,7 @@ export function mergeFreshProducts<T extends { id: string }>(
   incoming: T[],
   recentlySeen: Set<string>,
   limit: number,
+  allowRecentlySeenFallback = true,
 ): T[] {
   const uniqueIncoming = incoming.filter(
     (product, index, list) => list.findIndex((item) => item.id === product.id) === index,
@@ -43,7 +44,10 @@ export function mergeFreshProducts<T extends { id: string }>(
   const fallback = [...uniqueIncoming, ...current].filter(
     (product, index, list) => list.findIndex((item) => item.id === product.id) === index,
   );
-  return [...unseen, ...fallback.filter((product) => !unseen.some((item) => item.id === product.id))]
+  const ranked = allowRecentlySeenFallback
+    ? [...unseen, ...fallback.filter((product) => !unseen.some((item) => item.id === product.id))]
+    : unseen;
+  return ranked
     .slice(0, Math.max(0, limit));
 }
 

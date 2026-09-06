@@ -29,6 +29,14 @@ test('refresh prioritizes products not shown recently', () => {
   );
 });
 
+test('strict fresh mode never falls back to recently shown products', () => {
+  const incoming = [{ id: 'old-1' }, { id: 'new-1' }, { id: 'old-2' }];
+  assert.deepEqual(
+    mergeFreshProducts([], incoming, new Set(['old-1', 'old-2']), 12, false).map((item) => item.id),
+    ['new-1'],
+  );
+});
+
 test('refresh rotates discovery categories when no category is selected', () => {
   assert.equal(nextRefreshQuery('', 0).query, 'moda feminina');
   assert.equal(nextRefreshQuery('', 1).query, 'casa e banho');

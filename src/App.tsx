@@ -44,6 +44,7 @@ const DEFAULT_SETTINGS: AffiliateSettings = {
 const REFRESH_PAGE_KEY = 'radar:last-refresh-page';
 const DISCOVERY_INDEX_KEY = 'radar:discovery-index';
 const RECENT_PRODUCTS_KEY = 'radar:recent-product-ids';
+const RECENT_PRODUCTS_LIMIT = 720;
 
 const sectionFromLocation = (): SectionId => {
   const raw = window.location.hash.replace(/^#/, '').toLowerCase();
@@ -346,19 +347,34 @@ export function App() {
       const targetPage = rotatePage ? nextRefreshPage(refreshPageRef.current) : 1;
       const discovery = nextRefreshQuery(selectedQuery, discoveryIndexRef.current);
       const query = rotatePage ? discovery.query : selectedQuery;
-      const result = await productService.getProductsPage(activeFilter, query, targetPage);
-      const nextProducts = rotatePage
-        ? mergeFreshProducts([], result.products, recentProductIdsRef.current, result.products.length)
-        : result.products;
+      let resolvedPage = targetPage;
+      let result = await productService.getProductsPage(activeFilter, query, resolvedPage);
+      // A vitrine só apresenta produtos que ainda não foram mostrados nesta
+      // instalação. Quando uma página se esgotar, a próxima atualização troca
+      // página/categoria para buscar novos resultados reais da Shopee.
+      let nextProducts = mergeFreshProducts(
+        [],
+        result.products,
+        recentProductIdsRef.current,
+        result.products.length,
+        false,
+      );
+      // A API pode devolver uma página que o usuário já viu. Caminhamos por
+      // mais páginas imediatamente para não deixar a vitrine vazia/repetida.
+      for (let attempt = 0; nextProducts.length === 0 && result.hasNextPage && attempt < 3; attempt++) {
+        resolvedPage = nextRefreshPage(resolvedPage, 50);
+        result = await productService.getProductsPage(activeFilter, query, resolvedPage);
+        nextProducts = mergeFreshProducts([], result.products, recentProductIdsRef.current, result.products.length, false);
+      }
       setProducts(nextProducts);
       setHasNextPage(result.hasNextPage);
-      setCurrentPage(targetPage);
-      refreshPageRef.current = targetPage;
+      setCurrentPage(resolvedPage);
+      refreshPageRef.current = resolvedPage;
       discoveryIndexRef.current = discovery.nextIndex;
       nextProducts.forEach((product) => recentProductIdsRef.current.add(product.id));
-      const recentIds = [...recentProductIdsRef.current].slice(-240);
+      const recentIds = [...recentProductIdsRef.current].slice(-RECENT_PRODUCTS_LIMIT);
       recentProductIdsRef.current = new Set(recentIds);
-      localStorage.setItem(REFRESH_PAGE_KEY, String(targetPage));
+      localStorage.setItem(REFRESH_PAGE_KEY, String(resolvedPage));
       localStorage.setItem(DISCOVERY_INDEX_KEY, String(discovery.nextIndex));
       localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(recentIds));
       lastRefreshAtRef.current = Date.now();
@@ -410,7 +426,15 @@ export function App() {
       const combinedQuery = [activeCategory, searchQuery].filter(Boolean).join(' ');
       const nextPage = currentPage + 1;
       const result = await productService.getProductsPage(activeFilter, combinedQuery, nextPage);
-      setProducts((current) => { const ids = new Set(current.map((p) => p.id)); return [...current, ...result.products.filter((p) => !ids.has(p.id))]; });
+      const freshProducts = mergeFreshProducts([], result.products, recentProductIdsRef.current, result.products.length, false);
+      freshProducts.forEach((product) => recentProductIdsRef.current.add(product.id));
+      const recentIds = [...recentProductIdsRef.current].slice(-RECENT_PRODUCTS_LIMIT);
+      recentProductIdsRef.current = new Set(recentIds);
+      localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(recentIds));
+      setProducts((current) => {
+        const ids = new Set(current.map((p) => p.id));
+        return [...current, ...freshProducts.filter((p) => !ids.has(p.id))];
+      });
       setHasNextPage(result.hasNextPage);
       setCurrentPage(nextPage);
     } catch { showToast('Não foi possível carregar mais ofertas', 'Tente novamente em instantes.', 'error'); }

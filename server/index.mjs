@@ -46,7 +46,9 @@ const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL || '';
 const WAHA_WEBHOOK_HMAC_KEY = process.env.WAHA_WEBHOOK_HMAC_KEY || '';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
-const WHATSAPP_DEDUP_WINDOW_HOURS = Number(process.env.WHATSAPP_DEDUP_WINDOW_HOURS || 24);
+// Regra comercial: uma mesma oferta não pode voltar para o mesmo grupo antes
+// de três dias. A variável permite aumentar a janela, mas nunca reduzi-la.
+const WHATSAPP_DEDUP_WINDOW_HOURS = Math.max(72, Number(process.env.WHATSAPP_DEDUP_WINDOW_HOURS || 72) || 72);
 const PROCESS_DISPATCH_INLINE = !process.env.VERCEL && process.env.DISPATCH_WORKER !== 'external';
 const apiRateBuckets = new Map();
 
@@ -1943,7 +1945,7 @@ async function processDispatchJob(jobId) {
     for (const offer of offers) {
       const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
       if (await alreadyDispatchedRecently(job.userId, offer, group.id, sessionName)) {
-        job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: sessionName, status: 'deduplicated', sentAt: new Date().toISOString(), attempts: 0 });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: sessionName, status: 'deduplicated', sentAt: new Date().toISOString(), attempts: 0 });
         logLine(`[DISPATCH] Bloqueado por duplicação: ${offer.id} -> ${group.id}`);
         continue;
       }
@@ -1954,10 +1956,10 @@ async function processDispatchJob(jobId) {
         });
         const imageUrl = resolveDispatchImageUrl(offer.imageUrl);
         const result = await sendToWhatsAppGroup(group.id, msg, imageUrl, sessionName);
-        job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
         job.stats.sent++;
       } catch (e) {
-        job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
         job.stats.failed++;
       }
       deliveryIndex++;
@@ -2535,11 +2537,23 @@ async function handleWahaWebhook(req, res) {
   }
 }
 
+function dispatchProductKey(offer) {
+  const marketplace = String(offer?.marketplace || 'shopee').trim().toLowerCase();
+  const productId = String(offer?.marketplaceProductId || offer?.productId || offer?.id || '').trim();
+  return `${marketplace}:${productId}`;
+}
+
 async function alreadyDispatchedRecently(userId, offer, groupId, sessionId) {
   const since = Date.now() - Math.max(1, WHATSAPP_DEDUP_WINDOW_HOURS) * 60 * 60 * 1000;
+  const productKey = dispatchProductKey(offer);
   const jobs = await DispatchStore.list(userId, 500);
   return jobs.some(job => (job.attempts || []).some(attempt =>
-    attempt.status === 'sent' && attempt.groupId === groupId && attempt.sessionId === sessionId && attempt.offerId === offer.id && new Date(attempt.sentAt).getTime() >= since
+    attempt.status === 'sent' &&
+    attempt.groupId === groupId &&
+    // As tentativas antigas não possuem productKey; elas continuam protegidas
+    // pelo offerId para não abrir uma brecha na deduplicação já existente.
+    (attempt.productKey ? attempt.productKey === productKey : String(attempt.offerId) === String(offer?.id)) &&
+    new Date(attempt.sentAt).getTime() >= since
   ));
 }
 
