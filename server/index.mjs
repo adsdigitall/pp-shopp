@@ -225,6 +225,15 @@ function readRawBody(req) {
   });
 }
 
+function resolveDispatchImageUrl(imageUrl) {
+  try {
+    const url = new URL(String(imageUrl || ''));
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readJsonBody(req) {
   const raw = await readRawBody(req);
   try { return JSON.parse(raw || '{}'); } catch { throw new Error('INVALID_JSON'); }
@@ -1768,7 +1777,7 @@ async function handleSendOffer(req, res, pathOnly) {
     const job = {
       id: `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       userId: requestUserId(req), status: 'pending', step: 3, offers: [offer],
-      message: { whatsapp: { customMessage: body.message || '{TITULO}\n{PRECO}\n{LINK}', showImage: body.showImage !== false } },
+      message: { whatsapp: { customMessage: body.message || '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
       destinations: { groups: groupIds.map(id => ({ id })), interval: body.interval || { value: 20, unit: 'seconds' } },
       createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
       stats: { sent: 0, failed: 0, pending: groupIds.length }, currentGroupIndex: 0, attempts: [],
@@ -1810,7 +1819,7 @@ async function handleCreateDispatch(req, res) {
       status: 'pending',
       step: 3,
       offers,
-      message: message?.whatsapp ? message : { whatsapp: { customMessage: '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
+      message: { whatsapp: { ...(message?.whatsapp || {}), customMessage: message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
       destinations: { ...destinations, groups },
       createdAt: new Date().toISOString(),
       startedAt: null,
@@ -1921,7 +1930,8 @@ async function processDispatchJob(jobId) {
           rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
           rotationIndex: deliveryIndex,
         });
-        const result = await sendToWhatsAppGroup(group.id, msg, message.whatsapp.showImage ? offer.imageUrl : null, sessionName);
+        const imageUrl = resolveDispatchImageUrl(offer.imageUrl);
+        const result = await sendToWhatsAppGroup(group.id, msg, imageUrl, sessionName);
         job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
         job.stats.sent++;
       } catch (e) {

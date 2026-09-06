@@ -378,10 +378,10 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Opções</h4>
                     <div className="space-y-1.5">
-                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
-                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">Mostrar imagem</span><span className="text-[9px] text-[var(--text-secondary)]">Envia a foto original junto com a legenda.</span></span>
-                        <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
-                      </label>
+                      <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
+                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">Imagem do produto</span><span className="text-[9px] text-[var(--text-secondary)]">Sempre envia a foto original junto com a legenda.</span></span>
+                        <input type="checkbox" checked readOnly aria-label="Imagem do produto sempre incluída" className="w-4 h-4 accent-[var(--primary)]" />
+                      </div>
                       <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
                         <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">CTAs rotativas</span><span className="text-[9px] text-[var(--text-secondary)]">Alterna a chamada em cada envio para os grupos.</span></span>
                         <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
