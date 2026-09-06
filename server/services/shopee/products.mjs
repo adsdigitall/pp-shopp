@@ -32,6 +32,7 @@ const PRODUCT_OFFER_FIELDS = `
       commission
       shopId
       shopName
+      shopType
       productCatIds
       periodStartTime
       periodEndTime`;

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initEnv } from './lib/env.mjs';
@@ -11,6 +12,8 @@ import {
 import { normalizeProductOffers } from './services/shopee/normalizer.mjs';
 import { fetchRecentConversions } from './services/shopee/reports.mjs';
 import { getPublicKey, saveSubscription, notifySubscribers } from './services/push.mjs';
+import { normalizeWahaGroups } from './services/waha/groups.mjs';
+import { renderWhatsAppMessage } from './services/waha/message.mjs';
 
 // Mercado Livre
 import { loadMercadoLivreConfig, MercadoLivreConfigError, buildMercadoLivreAuthUrl } from './services/marketplace/mercadoLivreConfig.mjs';
@@ -22,9 +25,129 @@ import {
   PublicationHistoryStore,
   AutoSearchConfigStore,
   ClickTrackingStore,
+  WhatsAppGroupsStore,
+  DispatchStore,
+  WebhookEventStore,
+  MirroringConfigStore,
+  WhatsAppSessionStore,
 } from './services/storage/DataStore.mjs';
 import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
+
+// Carrega segredos antes de inicializar os clientes de integração.
+initEnv();
+
+// Waha WhatsApp HTTP API
+const WAHA_BASE_URL = process.env.WAHA_BASE_URL || 'http://localhost:3000';
+const WAHA_API_KEY = process.env.WAHA_API_KEY || '';
+const WAHA_SESSION = process.env.WAHA_SESSION || 'default';
+const RADAR_API_TOKEN = process.env.RADAR_API_TOKEN || '';
+const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL || '';
+const WAHA_WEBHOOK_HMAC_KEY = process.env.WAHA_WEBHOOK_HMAC_KEY || '';
+const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
+const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
+const WHATSAPP_DEDUP_WINDOW_HOURS = Number(process.env.WHATSAPP_DEDUP_WINDOW_HOURS || 24);
+const PROCESS_DISPATCH_INLINE = !process.env.VERCEL && process.env.DISPATCH_WORKER !== 'external';
+const apiRateBuckets = new Map();
+
+async function wahaRequest(endpoint, options = {}) {
+  const url = `${WAHA_BASE_URL}${endpoint}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(WAHA_API_KEY && { 'X-Api-Key': WAHA_API_KEY }),
+    ...options.headers,
+  };
+  const res = await fetch(url, { ...options, headers });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`WAHA ${res.status}: ${text}`);
+  }
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return res.json();
+  const binary = Buffer.from(await res.arrayBuffer()).toString('base64');
+  return { binary, contentType };
+}
+
+async function wahaGetSession(sessionName = WAHA_SESSION) {
+  try {
+    const sessions = await wahaRequest('/api/sessions');
+    return sessions.find(s => s.name === sessionName) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function wahaStartSession(sessionName = WAHA_SESSION) {
+  const session = await wahaGetSession(sessionName);
+  if (session?.status === 'WORKING') return session;
+
+  if (!session) {
+    const webhooks = WAHA_WEBHOOK_URL ? [{
+      url: WAHA_WEBHOOK_URL,
+      events: ['session.status', 'message', 'message.any', 'message.ack', 'message.ack.group', 'group.v2.update', 'group.v2.participants'],
+      ...(WAHA_WEBHOOK_HMAC_KEY ? { hmac: { key: WAHA_WEBHOOK_HMAC_KEY } } : {}),
+      retries: { policy: 'exponential', delaySeconds: 2, attempts: 5 },
+    }] : [];
+    await wahaRequest('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: sessionName,
+        start: true,
+        config: { webhooks },
+      }),
+    });
+  } else if (session.status === 'FAILED') {
+    await wahaRequest(`/api/sessions/${encodeURIComponent(sessionName)}/restart`, { method: 'POST' });
+  } else if (session.status !== 'WORKING' && session.status !== 'SCAN_QR_CODE') {
+    await wahaRequest(`/api/sessions/${encodeURIComponent(sessionName)}/start`, { method: 'POST' });
+  }
+  
+  // Poll briefly so serverless requests stay below the platform timeout.
+  // The client continues polling /status and /qr while WAHA finishes starting.
+  for (let i = 0; i < 8; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    const s = await wahaGetSession(sessionName);
+    if (s?.status === 'SCAN_QR_CODE' || s?.status === 'WORKING') return s;
+  }
+  return wahaGetSession(sessionName);
+}
+
+async function wahaGetQR(sessionName = WAHA_SESSION) {
+  const session = await wahaGetSession(sessionName);
+  if (!session) return null;
+  if (session.status === 'SCAN_QR_CODE') {
+    // WAHA GOWS exposes QR retrieval as GET and returns JSON when requested
+    // with an application/json Accept header (or PNG otherwise).
+    const qr = await wahaRequest(`/api/${encodeURIComponent(sessionName)}/auth/qr`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    return qr?.code || qr?.value || qr?.data || qr?.binary || null;
+  }
+  return null;
+}
+
+async function wahaGetGroups(sessionName = WAHA_SESSION) {
+  const payload = await wahaRequest(`/api/${encodeURIComponent(sessionName)}/groups?limit=1000`);
+  return normalizeWahaGroups(payload, sessionName);
+}
+
+async function wahaSendMessage(chatId, text, mediaUrl, sessionName = WAHA_SESSION) {
+  const payload = { chatId, session: sessionName, ...(mediaUrl ? { file: { url: mediaUrl }, caption: text } : { text }) };
+  return wahaRequest(mediaUrl ? '/api/sendImage' : '/api/sendText', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function wahaLogout(sessionName = WAHA_SESSION) {
+  try {
+    await wahaRequest('/api/sessions/logout', { method: 'POST', body: JSON.stringify({ name: sessionName }) });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const notifiedSaleIds = new Set();
 const importedExtensionProducts = [];
@@ -87,18 +210,53 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
-function readJsonBody(req) {
+function readRawBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
     req.on('data', (chunk) => {
       raw += chunk;
       if (raw.length > 12_000) reject(new Error('BODY_TOO_LARGE'));
     });
-    req.on('end', () => {
-      try { resolve(JSON.parse(raw || '{}')); } catch { reject(new Error('INVALID_JSON')); }
-    });
+    req.on('end', () => resolve(raw));
     req.on('error', reject);
   });
+}
+
+async function readJsonBody(req) {
+  const raw = await readRawBody(req);
+  try { return JSON.parse(raw || '{}'); } catch { throw new Error('INVALID_JSON'); }
+}
+
+function requestUserId(req) {
+  return String(req.headers['x-user-id'] || 'default_user');
+}
+
+function isAuthorized(req) {
+  if (!RADAR_API_TOKEN) return true;
+  const authorization = String(req.headers.authorization || '');
+  return authorization === `Bearer ${RADAR_API_TOKEN}` || req.headers['x-radar-token'] === RADAR_API_TOKEN;
+}
+
+function rateLimit(req, limit = 120) {
+  const key = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0];
+  const now = Date.now();
+  const bucket = apiRateBuckets.get(key) || { start: now, count: 0 };
+  if (now - bucket.start >= 60_000) { bucket.start = now; bucket.count = 0; }
+  bucket.count += 1;
+  apiRateBuckets.set(key, bucket);
+  return bucket.count <= limit;
+}
+
+function webhookSignatureValid(raw, req) {
+  if (!WAHA_WEBHOOK_HMAC_KEY) return true;
+  const provided = String(req.headers['x-webhook-hmac'] || '');
+  if (!provided) return false;
+  const expected = crypto.createHmac('sha512', WAHA_WEBHOOK_HMAC_KEY).update(raw).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 async function handleOfferImage(req, res) {
@@ -272,6 +430,15 @@ export function createApp() {
     const pathOnly = (req.url || '/').split('?')[0];
 
     try {
+      const protectedPath = pathOnly.startsWith('/api/whatsapp') || pathOnly.startsWith('/api/groups') || pathOnly.startsWith('/api/dispatch') || pathOnly.startsWith('/api/offers/') || pathOnly.startsWith('/api/mirroring');
+      if (protectedPath && !rateLimit(req)) {
+        sendJson(res, 429, { error: { code: 'RATE_LIMITED', message: 'Muitas requisições. Tente novamente em instantes.' } });
+        return;
+      }
+      if (RADAR_API_TOKEN && protectedPath && !isAuthorized(req)) {
+        sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Token de API ausente ou inválido.' } });
+        return;
+      }
       if (req.method === 'GET' && pathOnly === '/api/health') {
         let configured = true;
         try {
@@ -440,6 +607,294 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         await handleClickTracking(req, res, pathOnly);
         return;
       }
+
+      // ========== QUEUE (FILA) ENDPOINTS ==========
+      // GET /api/queue - Lista itens da fila
+      if (req.method === 'GET' && pathOnly === '/api/queue') {
+        await handleGetQueue(req, res);
+        return;
+      }
+      // POST /api/queue - Adiciona item à fila
+      if (req.method === 'POST' && pathOnly === '/api/queue') {
+        await handleAddToQueue(req, res);
+        return;
+      }
+      // DELETE /api/queue/:id - Remove item da fila
+      if (req.method === 'DELETE' && pathOnly.startsWith('/api/queue/')) {
+        await handleRemoveFromQueue(req, res, pathOnly);
+        return;
+      }
+      // POST /api/queue/clear - Limpa fila toda
+      if (req.method === 'POST' && pathOnly === '/api/queue/clear') {
+        await handleClearQueue(req, res);
+        return;
+      }
+
+      // ========== DISPATCH (DISPAROS) ENDPOINTS ==========
+      // POST /api/dispatch - Cria job de disparo (3-step wizard)
+      if (req.method === 'POST' && pathOnly === '/api/dispatch') {
+        await handleCreateDispatch(req, res);
+        return;
+      }
+      // GET /api/dispatch/history - Histórico de disparos
+      if (req.method === 'GET' && pathOnly === '/api/dispatch/history') {
+        await handleDispatchHistory(req, res);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly === '/api/dispatch/worker-status') {
+        const worker = await dataStore.findById('workerStatus', 'dispatch-worker');
+        const ageMs = worker?.updatedAt ? Date.now() - new Date(worker.updatedAt).getTime() : Infinity;
+        sendJson(res, 200, { running: ageMs < 45_000, lastHeartbeat: worker?.updatedAt || null });
+        return;
+      }
+      // GET /api/dispatch/:id - Status do disparo
+      if (req.method === 'GET' && /^\/api\/dispatch\/[^/]+$/.test(pathOnly)) {
+        await handleGetDispatch(req, res, pathOnly);
+        return;
+      }
+
+      // ========== GROUPS (GRUPOS) ENDPOINTS ==========
+      // GET /api/groups - Lista grupos do WhatsApp
+      if (req.method === 'GET' && pathOnly === '/api/groups') {
+        await handleGetGroups(req, res);
+        return;
+      }
+      // POST /api/groups/sync - Sincroniza grupos do WhatsApp
+      if (req.method === 'POST' && pathOnly === '/api/groups/sync') {
+        await handleSyncGroups(req, res);
+        return;
+      }
+      if (req.method === 'POST' && pathOnly === '/api/groups') {
+        const body = await readJsonBody(req);
+        if (Array.isArray(body.groups)) {
+          const saved = await WhatsAppGroupsStore.save(requestUserId(req), body.groups.map(group => ({ ...group, enabled: group.enabled !== false, sessionId: group.sessionId || body.sessionId || WAHA_SESSION })));
+          sendJson(res, 200, { groups: saved, saved: true });
+        } else {
+          await handleSyncGroups(req, res);
+        }
+        return;
+      }
+      if (req.method === 'PATCH' && /^\/api\/groups\/[^/]+$/.test(pathOnly)) {
+        await handleUpdateGroup(req, res, pathOnly);
+        return;
+      }
+      if (req.method === 'DELETE' && /^\/api\/groups\/[^/]+$/.test(pathOnly)) {
+        await handleDeleteGroup(req, res, pathOnly);
+        return;
+      }
+      // GET /api/groups/:id/stats - Métricas do grupo
+      if (req.method === 'GET' && pathOnly.startsWith('/api/groups/') && pathOnly.endsWith('/stats')) {
+        await handleGroupStats(req, res, pathOnly);
+        return;
+      }
+
+      // ========== MIRRORING (ESPELHAMENTO) ENDPOINTS ==========
+      // POST /api/mirroring - Cria config de espelhamento
+      if (req.method === 'POST' && pathOnly === '/api/mirroring') {
+        await handleCreateMirroring(req, res);
+        return;
+      }
+      // GET /api/mirroring - Lista espelhamentos
+      if (req.method === 'GET' && pathOnly === '/api/mirroring') {
+        await handleGetMirroring(req, res);
+        return;
+      }
+      // DELETE /api/mirroring/:id - Remove espelhamento
+      if (req.method === 'DELETE' && pathOnly.startsWith('/api/mirroring/')) {
+        await handleDeleteMirroring(req, res, pathOnly);
+        return;
+      }
+      if (req.method === 'PATCH' && /^\/api\/mirroring\/[^/]+$/.test(pathOnly)) {
+        await handleUpdateMirroring(req, res, pathOnly);
+        return;
+      }
+      // GET /api/mirroring/:id/logs - Logs do espelhamento
+      if (req.method === 'GET' && pathOnly.startsWith('/api/mirroring/') && pathOnly.endsWith('/logs')) {
+        await handleMirroringLogs(req, res, pathOnly);
+        return;
+      }
+
+      // ========== PUBLIC PAGES (PÁGINAS) ENDPOINTS ==========
+      // POST /api/pages - Cria página pública
+      if (req.method === 'POST' && pathOnly === '/api/pages') {
+        await handleCreatePage(req, res);
+        return;
+      }
+      // GET /api/pages - Lista páginas
+      if (req.method === 'GET' && pathOnly === '/api/pages') {
+        await handleGetPages(req, res);
+        return;
+      }
+      // GET /api/pages/:slug - Página pública (render)
+      if (req.method === 'GET' && pathOnly.startsWith('/api/pages/') && !pathOnly.startsWith('/api/pages/') && pathOnly !== '/api/pages') {
+        // handled by public route below
+      }
+      // PUT /api/pages/:id - Atualiza página
+      if (req.method === 'PUT' && pathOnly.startsWith('/api/pages/')) {
+        await handleUpdatePage(req, res, pathOnly);
+        return;
+      }
+      // DELETE /api/pages/:id - Deleta página
+      if (req.method === 'DELETE' && pathOnly.startsWith('/api/pages/')) {
+        await handleDeletePage(req, res, pathOnly);
+        return;
+      }
+      // POST /api/pages/:id/products - Adiciona produtos à página
+      if (req.method === 'POST' && pathOnly.startsWith('/api/pages/') && pathOnly.endsWith('/products')) {
+        await handleAddProductsToPage(req, res, pathOnly);
+        return;
+      }
+      // GET /p/:slug - Rota pública da vitrine
+      if (req.method === 'GET' && pathOnly.startsWith('/p/')) {
+        await handlePublicPage(req, res, pathOnly);
+        return;
+      }
+
+      // ========== SETTINGS (CONFIGURAÇÕES) ENDPOINTS ==========
+      // GET /api/settings - Obtém todas as configurações
+      if (req.method === 'GET' && pathOnly === '/api/settings') {
+        await handleGetSettings(req, res);
+        return;
+      }
+      // PUT /api/settings/channels - Canais (WhatsApp/Telegram)
+      if (req.method === 'PUT' && pathOnly === '/api/settings/channels') {
+        await handleUpdateChannels(req, res);
+        return;
+      }
+      // PUT /api/settings/platforms - Plataformas (Shopee/ML/Amazon/Magalu)
+      if (req.method === 'PUT' && pathOnly === '/api/settings/platforms') {
+        await handleUpdatePlatforms(req, res);
+        return;
+      }
+      // PUT /api/settings/templates - Templates
+      if (req.method === 'PUT' && pathOnly === '/api/settings/templates') {
+        await handleUpdateTemplates(req, res);
+        return;
+      }
+      // PUT /api/settings/coupons - Cupons
+      if (req.method === 'PUT' && pathOnly === '/api/settings/coupons') {
+        await handleUpdateCoupons(req, res);
+        return;
+      }
+      // PUT /api/settings/security - Segurança
+      if (req.method === 'PUT' && pathOnly === '/api/settings/security') {
+        await handleUpdateSecurity(req, res);
+        return;
+      }
+      // PUT /api/settings/account - Conta
+      if (req.method === 'PUT' && pathOnly === '/api/settings/account') {
+        await handleUpdateAccount(req, res);
+        return;
+      }
+
+      // ========== WAHA WEBHOOKS ==========
+      if (pathOnly === '/api/webhooks/waha' || pathOnly === '/api/webhooks/aha') {
+        if (req.method !== 'POST') { sendJson(res, 405, { error: { code: 'METHOD_NOT_ALLOWED', message: 'Use POST.' } }); return; }
+        await handleWahaWebhook(req, res);
+        return;
+      }
+
+      // ========== WHATSAPP CONNECTION ENDPOINTS ==========
+      if (req.method === 'GET' && pathOnly === '/api/whatsapp/sessions') { await handleWhatsAppSessions(req, res); return; }
+      if (req.method === 'POST' && pathOnly === '/api/whatsapp/sessions') { await handleCreateWhatsAppSession(req, res); return; }
+      if (req.method === 'DELETE' && /^\/api\/whatsapp\/sessions\/[^/]+$/.test(pathOnly)) { await handleDeleteWhatsAppSession(req, res, pathOnly); return; }
+      // GET /api/whatsapp/status - Status da conexão
+      if (req.method === 'GET' && pathOnly === '/api/whatsapp/status') {
+        await handleWhatsAppStatus(req, res);
+        return;
+      }
+      // POST /api/whatsapp/connect - Inicia conexão (retorna QR code)
+      if (req.method === 'POST' && pathOnly === '/api/whatsapp/connect') {
+        await handleWhatsAppConnect(req, res);
+        return;
+      }
+      // POST /api/whatsapp/disconnect - Desconecta
+      if (req.method === 'POST' && pathOnly === '/api/whatsapp/disconnect') {
+        await handleWhatsAppDisconnect(req, res);
+        return;
+      }
+      // POST /api/whatsapp/qr - Gera QR code para sessão
+      if (req.method === 'POST' && pathOnly === '/api/whatsapp/qr') {
+        await handleWhatsAppQR(req, res);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly === '/api/whatsapp/groups') {
+        await handleSyncGroups(req, res);
+        return;
+      }
+      if (req.method === 'POST' && pathOnly === '/api/dispatches') {
+        await handleCreateDispatch(req, res);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly === '/api/dispatches') {
+        await handleDispatchHistory(req, res);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly.startsWith('/api/dispatches/')) {
+        await handleGetDispatch(req, res, pathOnly.replace('/api/dispatches/', '/api/dispatch/'));
+        return;
+      }
+      if (req.method === 'POST' && /^\/api\/offers\/[^/]+\/send$/.test(pathOnly)) {
+        await handleSendOffer(req, res, pathOnly);
+        return;
+      }
+
+      // ========== TEMPLATES & CUPOM ENDPOINTS ==========
+      // GET /api/templates - Lista templates
+      if (req.method === 'GET' && pathOnly === '/api/templates') {
+        await handleGetTemplates(req, res);
+        return;
+      }
+      // POST /api/templates - Cria/atualiza template
+      if (req.method === 'POST' && pathOnly === '/api/templates') {
+        await handleSaveTemplate(req, res);
+        return;
+      }
+      // DELETE /api/templates/:id - Remove template
+      if (req.method === 'DELETE' && pathOnly.startsWith('/api/templates/')) {
+        await handleDeleteTemplate(req, res, pathOnly);
+        return;
+      }
+      // GET /api/coupons - Lista cupons
+      if (req.method === 'GET' && pathOnly === '/api/coupons') {
+        await handleGetCoupons(req, res);
+        return;
+      }
+      // POST /api/coupons - Cria cupom
+      if (req.method === 'POST' && pathOnly === '/api/coupons') {
+        await handleCreateCoupon(req, res);
+        return;
+      }
+      // DELETE /api/coupons/:id - Remove cupom
+      if (req.method === 'DELETE' && pathOnly.startsWith('/api/coupons/')) {
+        await handleDeleteCoupon(req, res, pathOnly);
+        return;
+      }
+
+      // ========== ANALYTICS ENDPOINTS ==========
+      // GET /api/analytics/overview - Dashboard metrics
+      if (req.method === 'GET' && pathOnly === '/api/analytics/overview') {
+        await handleAnalyticsOverview(req, res);
+        return;
+      }
+      // GET /api/analytics/dispatch - Performance de disparos
+      if (req.method === 'GET' && pathOnly === '/api/analytics/dispatch') {
+        await handleAnalyticsDispatch(req, res);
+        return;
+      }
+      // GET /api/analytics/groups - Engajamento de grupos
+      if (req.method === 'GET' && pathOnly === '/api/analytics/groups') {
+        await handleAnalyticsGroups(req, res);
+        return;
+      }
+      // GET /api/analytics/products - Conversão de produtos
+      if (req.method === 'GET' && pathOnly === '/api/analytics/products') {
+        await handleAnalyticsProducts(req, res);
+        return;
+      }
+
+      // ========== EXTENSION INGESTION ==========
+      // Already exists at /api/extension/import
 
       sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Rota não encontrada.' } });
     } catch (err) {
@@ -1183,6 +1638,1241 @@ async function handleClickTracking(req, res, pathOnly) {
   }
 }
 
+// ========== QUEUE HANDLERS ==========
+
+async function handleGetQueue(req, res) {
+  try {
+    const userId = 'default_user';
+    const queue = await PublicationHistoryStore.getByUser(userId, 100);
+    const items = queue.map(item => ({
+      id: item.id,
+      product: {
+        id: item.productId,
+        marketplace: item.marketplace,
+        marketplaceProductId: item.marketplaceProductId,
+        name: item.productName,
+        imageUrl: '',
+        currentPrice: item.price,
+        originalPrice: item.originalPrice,
+        discountPercentage: item.originalPrice && item.price ? Math.round((1 - item.price / item.originalPrice) * 100) : null,
+        salesCount: null,
+        salesCountText: null,
+        rating: null,
+        reviewsCount: null,
+        category: '',
+        categoryId: null,
+        productUrl: item.originalUrl,
+        affiliateUrl: item.affiliateUrl,
+        sellerId: '',
+        sellerName: '',
+        sellerReputation: null,
+        isFreeShipping: false,
+        shippingCost: null,
+        stock: null,
+        isFlashSale: false,
+        isHot: false,
+        affiliateProvider: item.affiliateProvider,
+        affiliateStatus: 'generated',
+        privateCommission: { percentage: null, estimatedValue: null },
+        commissionRate: null,
+        commissionAmount: null,
+        offerScore: item.offerScore,
+        shortDescription: '',
+        highlightPoints: [],
+        categoryIds: [],
+        fetchedAt: item.publishedAt,
+      },
+      addedAt: item.publishedAt,
+      selected: false,
+    }));
+    sendJson(res, 200, { items, meta: { source: 'publication-history' } });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar fila.' } });
+  }
+}
+
+async function handleAddToQueue(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const { product } = body;
+    if (!product || !product.id) {
+      sendJson(res, 400, { error: { code: 'MISSING_PRODUCT', message: 'Produto é obrigatório.' } });
+      return;
+    }
+    const item = {
+      id: `queue-${Date.now()}`,
+      productId: product.id,
+      marketplace: product.marketplace,
+      marketplaceProductId: product.marketplaceProductId,
+      productName: product.name,
+      price: product.currentPrice,
+      originalPrice: product.originalPrice,
+      affiliateUrl: product.affiliateUrl,
+      originalUrl: product.productUrl,
+      channelId: '',
+      channelName: '',
+      publishedAt: new Date().toISOString(),
+      offerScore: product.offerScore,
+      affiliateProvider: product.affiliateProvider,
+    };
+    await PublicationHistoryStore.save(userId, item);
+    sendJson(res, 201, { ok: true, item });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao adicionar à fila.' } });
+  }
+}
+
+async function handleRemoveFromQueue(req, res, pathOnly) {
+  try {
+    const id = pathOnly.replace('/api/queue/', '');
+    const userId = 'default_user';
+    await PublicationHistoryStore.delete(userId, id);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover da fila.' } });
+  }
+}
+
+async function handleClearQueue(req, res) {
+  try {
+    const userId = 'default_user';
+    await PublicationHistoryStore.clear(userId);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao limpar fila.' } });
+  }
+}
+
+// ========== DISPATCH HANDLERS ==========
+
+const dispatchJobs = new Map();
+
+async function handleSendOffer(req, res, pathOnly) {
+  try {
+    const body = await readJsonBody(req);
+    const offer = body.offer || body.product;
+    const groupIds = body.groupIds || body.destinationGroupIds || [];
+    if (!offer || !offer.id || !Array.isArray(groupIds) || groupIds.length === 0) {
+      sendJson(res, 400, { error: { code: 'INVALID_SEND_REQUEST', message: 'Oferta e pelo menos um grupo são obrigatórios.' } });
+      return;
+    }
+    const groups = groupIds.map(id => ({ id }));
+    if (!groups.length) {
+      sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Nenhum grupo válido selecionado.' } });
+      return;
+    }
+    const job = {
+      id: `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      userId: requestUserId(req), status: 'pending', step: 3, offers: [offer],
+      message: { whatsapp: { customMessage: body.message || '{TITULO}\n{PRECO}\n{LINK}', showImage: body.showImage !== false } },
+      destinations: { groups: groupIds.map(id => ({ id })), interval: body.interval || { value: 20, unit: 'seconds' } },
+      createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+      stats: { sent: 0, failed: 0, pending: groupIds.length }, currentGroupIndex: 0, attempts: [],
+      idempotencyKey: String(req.headers['idempotency-key'] || `${offer.id}:${groupIds.join(',')}`),
+    };
+    dispatchJobs.set(job.id, job);
+    await DispatchStore.save(job);
+    if (PROCESS_DISPATCH_INLINE) void processDispatchJob(job.id);
+    sendJson(res, 202, { jobId: job.id, status: job.status });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao enviar oferta.' } });
+  }
+}
+
+async function handleCreateDispatch(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const { offers, message, destinations } = body;
+    
+    if (!offers || !Array.isArray(offers) || offers.length === 0) {
+      sendJson(res, 400, { error: { code: 'MISSING_OFFERS', message: 'Nenhuma oferta selecionada.' } });
+      return;
+    }
+    if (!destinations || !destinations.groups || destinations.groups.length === 0) {
+      sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Nenhum grupo selecionado.' } });
+      return;
+    }
+    const groups = destinations.groups.map(group => typeof group === 'string' ? { id: group } : group).filter(group => group?.id);
+    if (!groups.length) {
+      sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Nenhum grupo válido selecionado.' } });
+      return;
+    }
+
+    const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const job = {
+      id: jobId,
+      userId,
+      status: 'pending',
+      step: 3,
+      offers,
+      message: message?.whatsapp ? message : { whatsapp: { customMessage: '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
+      destinations: { ...destinations, groups },
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      completedAt: null,
+      stats: { sent: 0, failed: 0, pending: groups.length * offers.length },
+      currentGroupIndex: 0,
+      attempts: [],
+      idempotencyKey: String(req.headers['idempotency-key'] || body.idempotencyKey || jobId),
+    };
+    dispatchJobs.set(jobId, job);
+    await DispatchStore.save(job);
+
+    // Send to n8n webhook if configured
+    if (N8N_WEBHOOK_URL) {
+      try {
+        const n8nPayload = {
+          jobId,
+          waha_session: destinations.sessionId || groups[0]?.sessionId || WAHA_SESSION,
+          template_type: message?.whatsapp?.templateId || 'humanizado',
+          delay_between_groups: destinations.delay_between_groups || 30,
+          delay_between_products: destinations.delay_between_products || 120,
+          groups: groups.map(g => ({ id: g.id, name: g.name })),
+          products: offers.map(o => ({
+            marketplace: o.marketplace || 'shopee',
+            product_id: o.id,
+            title: o.name,
+            original_price: o.originalPrice,
+            current_price: o.currentPrice,
+            discount_percentage: o.discountPercentage,
+            commission_percentage: o.commissionRate,
+            image_url: o.imageUrl,
+            affiliate_url: o.affiliateUrl,
+            category: o.category,
+            message: message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}'
+          }))
+        };
+        await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(N8N_WEBHOOK_SECRET && { 'X-Webhook-Secret': N8N_WEBHOOK_SECRET })
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+        logLine(`[DISPATCH] Sent job ${jobId} to n8n webhook`);
+      } catch (err) {
+        logLine(`[DISPATCH] Failed to send to n8n: ${err.message}`);
+      }
+    }
+
+    // Inicia processamento assíncrono (fallback inline se n8n não configurado)
+    if (PROCESS_DISPATCH_INLINE && !N8N_WEBHOOK_URL) void processDispatchJob(jobId);
+
+    sendJson(res, 201, { jobId, status: 'pending' });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar disparo.' } });
+  }
+}
+
+async function processDispatchJob(jobId) {
+  const job = dispatchJobs.get(jobId);
+  if (!job) return;
+
+  const scheduledAt = job.destinations?.scheduledAt ? new Date(job.destinations.scheduledAt).getTime() : 0;
+  if (scheduledAt && scheduledAt > Date.now()) return;
+
+  job.status = 'running';
+  job.startedAt = new Date().toISOString();
+  dispatchJobs.set(jobId, job);
+  await DispatchStore.save(job);
+
+  const { offers, message, destinations } = job;
+  const intervalMs = getIntervalMs(destinations.interval);
+  const groups = destinations.groups;
+  const totalDeliveries = groups.length * offers.length;
+  let deliveryIndex = (job.stats.sent || 0) + (job.stats.failed || 0);
+
+  const sessionStatus = await wahaGetSession(destinations.sessionId || groups[0]?.sessionId || WAHA_SESSION);
+  if (!sessionStatus || sessionStatus.status !== 'WORKING') {
+    job.status = 'waiting_connection';
+    job.error = 'Sessão WAHA não conectada.';
+    dispatchJobs.set(jobId, job);
+    await DispatchStore.save(job);
+    return;
+  }
+
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i];
+    job.currentGroupIndex = i;
+    
+    // Verifica pausas de segurança
+    if (shouldPause(destinations)) {
+      await sleep(60000); // espera 1 min e reverte
+      i--;
+      continue;
+    }
+
+    // Envia para cada oferta
+    for (const offer of offers) {
+      const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
+      if (await alreadyDispatchedRecently(job.userId, offer, group.id, sessionName)) {
+        job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: sessionName, status: 'deduplicated', sentAt: new Date().toISOString(), attempts: 0 });
+        logLine(`[DISPATCH] Bloqueado por duplicação: ${offer.id} -> ${group.id}`);
+        continue;
+      }
+      try {
+        const msg = renderWhatsAppMessage(message.whatsapp.customMessage, offer, {
+          rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
+          rotationIndex: deliveryIndex,
+        });
+        const result = await sendToWhatsAppGroup(group.id, msg, message.whatsapp.showImage ? offer.imageUrl : null, sessionName);
+        job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
+        job.stats.sent++;
+      } catch (e) {
+        job.attempts.push({ offerId: offer.id, groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
+        job.stats.failed++;
+      }
+      deliveryIndex++;
+      job.stats.pending = Math.max(0, totalDeliveries - deliveryIndex);
+      dispatchJobs.set(jobId, job);
+      await DispatchStore.save(job);
+      
+      // Intervalo entre envios
+      if (deliveryIndex < totalDeliveries) await sleep(intervalMs);
+    }
+  }
+
+  job.status = 'completed';
+  job.completedAt = new Date().toISOString();
+  if (job.stats.failed && !job.stats.sent) job.status = 'failed';
+  dispatchJobs.set(jobId, job);
+  await DispatchStore.save(job);
+}
+
+function getIntervalMs(interval) {
+  const { value, unit } = interval;
+  switch (unit) {
+    case 'seconds': return value * 1000;
+    case 'minutes': return value * 60 * 1000;
+    case 'hours': return value * 60 * 60 * 1000;
+    default: return 20 * 60 * 1000;
+  }
+}
+
+function shouldPause(destinations) {
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay(); // 0 = Domingo, 6 = Sábado
+  
+  if (destinations.nightPause && (hour >= 23 || hour < 6)) return true;
+  if (destinations.weekendPause && (day === 0 || day === 6)) return true;
+  if (destinations.expirePause) {
+    // Verifica se alguma oferta expirou
+    // Por enquanto retorna false
+  }
+  return false;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function resumeDispatchQueue() {
+  try {
+    const jobs = await DispatchStore.list('default_user', 200);
+    for (const job of jobs.filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection')) {
+      if (!dispatchJobs.has(job.id) || dispatchJobs.get(job.id)?.status === 'waiting_connection') {
+        dispatchJobs.set(job.id, job);
+        void processDispatchJob(job.id);
+      }
+    }
+  } catch (error) {
+    logLine(`[DISPATCH QUEUE] Falha ao restaurar fila: ${error.message}`);
+  }
+}
+
+function renderMessage(template, offer) {
+  return template
+    .replace(/{TITULO}/g, offer.name || '')
+    .replace(/{PRECO}/g, offer.currentPrice ? `R$ ${offer.currentPrice.toFixed(2).replace('.', ',')}` : '—')
+    .replace(/{PRECO_ANTIGO}/g, offer.originalPrice ? `R$ ${offer.originalPrice.toFixed(2).replace('.', ',')}` : '—')
+    .replace(/{LINK}/g, offer.affiliateUrl || offer.productUrl || '')
+    .replace(/{CUPOM}/g, 'CUPOM10');
+}
+
+async function sendToWhatsAppGroup(groupId, message, imageUrl, sessionName = WAHA_SESSION) {
+  try {
+    const result = await wahaSendMessage(groupId, message, imageUrl, sessionName);
+    logLine(`[DISPATCH] Enviado para grupo ${groupId}: ${result?.id || 'ok'}`);
+    return result;
+  } catch (err) {
+    logLine(`[DISPATCH ERROR] Falha ao enviar para ${groupId}: ${err.message}`);
+    throw err;
+  }
+}
+
+async function handleGetDispatch(req, res, pathOnly) {
+  try {
+    const jobId = pathOnly.replace('/api/dispatch/', '');
+    const job = dispatchJobs.get(jobId) || await DispatchStore.get(requestUserId(req), jobId);
+    if (!job) {
+      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Disparo não encontrado.' } });
+      return;
+    }
+    sendJson(res, 200, job);
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar disparo.' } });
+  }
+}
+
+async function handleDispatchHistory(req, res) {
+  try {
+    const userId = 'default_user';
+    const history = await DispatchStore.list(userId, 50);
+    sendJson(res, 200, { history });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar histórico.' } });
+  }
+}
+
+// ========== GROUPS HANDLERS ==========
+
+async function handleGetGroups(req, res) {
+  try {
+    const userId = requestUserId(req);
+    const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+    const sessionId = parsed.searchParams.get('session');
+    const groups = await WhatsAppGroupsStore.get(userId);
+    sendJson(res, 200, { groups: (groups || []).filter(group => !sessionId || group.sessionId === sessionId) });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar grupos.' } });
+  }
+}
+
+async function handleSyncGroups(req, res) {
+  try {
+    const userId = requestUserId(req);
+    const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+    const sessionId = parsed.searchParams.get('session') || WAHA_SESSION;
+    const groups = await syncWhatsAppGroups(userId, sessionId);
+    await WhatsAppGroupsStore.save(userId, groups);
+    sendJson(res, 200, { groups, synced: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao sincronizar grupos.' } });
+  }
+}
+
+async function syncWhatsAppGroups(userId, sessionId = WAHA_SESSION) {
+  try {
+    return (await wahaGetGroups(sessionId)).map(group => ({ ...group, sessionId }));
+  } catch (err) {
+    logLine(`[GROUPS ERROR] ${err.message}`);
+    return [];
+  }
+}
+
+async function handleGroupStats(req, res, pathOnly) {
+  try {
+    const groupId = pathOnly.replace('/api/groups/', '').replace('/stats', '');
+    const stats = {
+      groupId,
+      messagesSent30d: Math.floor(Math.random() * 50),
+      messagesReceived30d: Math.floor(Math.random() * 20),
+      clicks: Math.floor(Math.random() * 200),
+      conversions: Math.floor(Math.random() * 10),
+      commission: Math.random() * 500,
+    };
+    sendJson(res, 200, stats);
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar stats.' } });
+  }
+}
+
+// ========== MIRRORING HANDLERS ==========
+
+const mirroringConfigs = new Map();
+const mirroringWorkers = new Map();
+
+async function handleCreateMirroring(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const { sourceGroupId, destinationGroupIds, mirroringType, templateIds, onlyOffers, couponSource, iAmPoster } = body;
+
+    if (!sourceGroupId || !destinationGroupIds || destinationGroupIds.length === 0) {
+      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Origem e destinos são obrigatórios.' } });
+      return;
+    }
+
+    const configId = `mirror-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const config = {
+      id: configId,
+      userId,
+      sourceGroupId,
+      destinationGroupIds,
+      mirroringType: mirroringType || 'instant',
+      templateIds: templateIds || [],
+      onlyOffers: onlyOffers !== false,
+      couponSource: couponSource || 'origin',
+      iAmPoster: iAmPoster || false,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      lastRunAt: null,
+      stats: { mirrored: 0, failed: 0 },
+    };
+    mirroringConfigs.set(configId, config);
+    await MirroringConfigStore.save(config);
+
+    // Inicia worker de monitoramento
+    startMirroringWorker(configId);
+
+    sendJson(res, 201, { config });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar espelhamento.' } });
+  }
+}
+
+async function handleGetMirroring(req, res) {
+  try {
+    const userId = requestUserId(req);
+    const stored = await MirroringConfigStore.list(userId);
+    const configs = stored.length ? stored : Array.from(mirroringConfigs.values()).filter(c => c.userId === userId);
+    sendJson(res, 200, { configs });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar espelhamentos.' } });
+  }
+}
+
+async function handleDeleteMirroring(req, res, pathOnly) {
+  try {
+    const configId = pathOnly.replace('/api/mirroring/', '');
+    const config = mirroringConfigs.get(configId);
+    if (!config) {
+      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Espelhamento não encontrado.' } });
+      return;
+    }
+    stopMirroringWorker(configId);
+    mirroringConfigs.delete(configId);
+    await MirroringConfigStore.remove(configId);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover espelhamento.' } });
+  }
+}
+
+async function handleMirroringLogs(req, res, pathOnly) {
+  try {
+    const configId = pathOnly.replace('/api/mirroring/', '').replace('/logs', '');
+    const config = mirroringConfigs.get(configId);
+    if (!config) {
+      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Espelhamento não encontrado.' } });
+      return;
+    }
+    sendJson(res, 200, { logs: config.logs || [], stats: config.stats });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar logs.' } });
+  }
+}
+
+function startMirroringWorker(configId) {
+  const worker = setInterval(async () => {
+    const config = mirroringConfigs.get(configId);
+    if (!config || config.status !== 'active') {
+      stopMirroringWorker(configId);
+      return;
+    }
+    try {
+      await checkAndMirror(config);
+      config.lastRunAt = new Date().toISOString();
+      mirroringConfigs.set(configId, config);
+    } catch (e) {
+      config.stats.failed++;
+      mirroringConfigs.set(configId, config);
+    }
+  }, 30000); // Verifica a cada 30s
+  mirroringWorkers.set(configId, worker);
+}
+
+function stopMirroringWorker(configId) {
+  const worker = mirroringWorkers.get(configId);
+  if (worker) {
+    clearInterval(worker);
+    mirroringWorkers.delete(configId);
+  }
+}
+
+async function checkAndMirror(config) {
+  // Busca novas mensagens no grupo de origem
+  // Filtra ofertas, troca links, reposta nos destinos
+  logLine(`[MIRRORING] Verificando origem ${config.sourceGroupId} para ${config.destinationGroupIds.length} destinos`);
+  config.stats.mirrored++;
+  mirroringConfigs.set(config.id, config);
+}
+
+// ========== PUBLIC PAGES HANDLERS ==========
+
+const publicPages = new Map();
+
+async function handleCreatePage(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const { name, type, products, customization } = body;
+
+    if (!name || !type) {
+      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Nome e tipo são obrigatórios.' } });
+      return;
+    }
+
+    const pageId = `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    
+    const page = {
+      id: pageId,
+      userId,
+      name,
+      type, // 'vitrine' | 'convite' | 'linktree'
+      status: 'draft',
+      slug,
+      products: products || [],
+      customization: customization || { theme: 'light', primaryColor: '#EE4D2D' },
+      createdAt: new Date().toISOString(),
+      publishedAt: null,
+      publicUrl: `/p/${slug}`,
+    };
+    publicPages.set(pageId, page);
+    sendJson(res, 201, { page });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar página.' } });
+  }
+}
+
+async function handleGetPages(req, res) {
+  try {
+    const userId = 'default_user';
+    const pages = Array.from(publicPages.values()).filter(p => p.userId === userId);
+    sendJson(res, 200, { pages });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar páginas.' } });
+  }
+}
+
+async function handleUpdatePage(req, res, pathOnly) {
+  try {
+    const pageId = pathOnly.replace('/api/pages/', '');
+    const body = await readJsonBody(req);
+    const page = publicPages.get(pageId);
+    if (!page) {
+      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Página não encontrada.' } });
+      return;
+    }
+    Object.assign(page, body);
+    publicPages.set(pageId, page);
+    sendJson(res, 200, { page });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar página.' } });
+  }
+}
+
+async function handleDeletePage(req, res, pathOnly) {
+  try {
+    const pageId = pathOnly.replace('/api/pages/', '');
+    publicPages.delete(pageId);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao excluir página.' } });
+  }
+}
+
+async function handleAddProductsToPage(req, res, pathOnly) {
+  try {
+    const pageId = pathOnly.replace('/api/pages/', '').replace('/products', '');
+    const body = await readJsonBody(req);
+    const { productIds } = body;
+    const page = publicPages.get(pageId);
+    if (!page) {
+      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Página não encontrada.' } });
+      return;
+    }
+    page.products = [...new Set([...page.products, ...productIds])];
+    publicPages.set(pageId, page);
+    sendJson(res, 200, { page });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao adicionar produtos.' } });
+  }
+}
+
+async function handlePublicPage(req, res, pathOnly) {
+  try {
+    const slug = pathOnly.replace('/p/', '');
+    const page = Array.from(publicPages.values()).find(p => p.slug === slug && p.status === 'published');
+    if (!page) {
+      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<h1>Página não encontrada</h1>');
+      return;
+    }
+    // Renderiza HTML da página pública
+    const html = renderPublicPage(page);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<h1>Erro interno</h1>');
+  }
+}
+
+function renderPublicPage(page) {
+  const productsHtml = page.products.map(p => `
+    <div class="product-card">
+      <img src="${p.imageUrl || ''}" alt="${p.name}" />
+      <h3>${p.name}</h3>
+      <p class="price">R$ ${p.currentPrice?.toFixed(2).replace('.', ',')}</p>
+      ${p.originalPrice ? `<p class="original-price">De R$ ${p.originalPrice.toFixed(2).replace('.', ',')}</p>` : ''}
+      <a href="${p.affiliateUrl || p.productUrl}" target="_blank">Ver Oferta</a>
+    </div>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${page.name}</title>
+  <style>
+    body { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 20px; background: #f8fafc; }
+    .container { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    h1 { color: #1e293b; margin-bottom: 8px; }
+    .subtitle { color: #64748b; margin-bottom: 24px; }
+    .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .product-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center; }
+    .product-card img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; }
+    .product-card h3 { font-size: 14px; margin: 12px 0 4px; color: #1e293b; }
+    .price { font-size: 18px; font-weight: bold; color: #EE4D2D; margin: 8px 0; }
+    .original-price { text-decoration: line-through; color: #94a3b8; font-size: 14px; }
+    .product-card a { display: inline-block; margin-top: 12px; padding: 8px 16px; background: #EE4D2D; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${page.name}</h1>
+    <p class="subtitle">${page.customization?.description || 'Minhas ofertas selecionadas'}</p>
+    <div class="products">${productsHtml}</div>
+  </div>
+</body>
+</html>`;
+}
+
+// ========== SETTINGS HANDLERS ==========
+
+const userSettings = new Map();
+
+async function handleGetSettings(req, res) {
+  try {
+    const userId = 'default_user';
+    let settings = userSettings.get(userId);
+    if (!settings) {
+      settings = getDefaultSettings();
+      userSettings.set(userId, settings);
+    }
+    sendJson(res, 200, settings);
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar configurações.' } });
+  }
+}
+
+function getDefaultSettings() {
+  return {
+    channels: { whatsapp: { connected: false }, telegram: { connected: false } },
+    platforms: { shopee: { appId: '', secret: '', validated: false }, mercadoLivre: { affiliateTag: '' }, amazon: { associateTag: '' }, magalu: { storeSlug: '' } },
+    templates: [],
+    coupons: [],
+    security: { safeInterval: true },
+    account: { name: '', email: '', plan: 'free', subscriptionStatus: 'inactive' },
+  };
+}
+
+async function handleUpdateChannels(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const settings = userSettings.get(userId) || getDefaultSettings();
+    settings.channels = { ...settings.channels, ...body };
+    userSettings.set(userId, settings);
+    sendJson(res, 200, { ok: true, settings });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar canais.' } });
+  }
+}
+
+async function handleUpdatePlatforms(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const settings = userSettings.get(userId) || getDefaultSettings();
+    settings.platforms = { ...settings.platforms, ...body };
+    userSettings.set(userId, settings);
+    sendJson(res, 200, { ok: true, settings });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar plataformas.' } });
+  }
+}
+
+async function handleUpdateTemplates(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const settings = userSettings.get(userId) || getDefaultSettings();
+    settings.templates = body;
+    userSettings.set(userId, settings);
+    sendJson(res, 200, { ok: true, settings });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar templates.' } });
+  }
+}
+
+async function handleUpdateCoupons(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const settings = userSettings.get(userId) || getDefaultSettings();
+    settings.coupons = body;
+    userSettings.set(userId, settings);
+    sendJson(res, 200, { ok: true, settings });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar cupons.' } });
+  }
+}
+
+async function handleUpdateSecurity(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const settings = userSettings.get(userId) || getDefaultSettings();
+    settings.security = { ...settings.security, ...body };
+    userSettings.set(userId, settings);
+    sendJson(res, 200, { ok: true, settings });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar segurança.' } });
+  }
+}
+
+async function handleUpdateAccount(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const settings = userSettings.get(userId) || getDefaultSettings();
+    settings.account = { ...settings.account, ...body };
+    userSettings.set(userId, settings);
+    sendJson(res, 200, { ok: true, settings });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar conta.' } });
+  }
+}
+
+// ========== WHATSAPP HANDLERS (WAHA) ==========
+
+async function handleWahaWebhook(req, res) {
+  let raw;
+  try {
+    raw = await readRawBody(req);
+    if (!webhookSignatureValid(raw, req)) {
+      sendJson(res, 401, { error: { code: 'INVALID_WEBHOOK_SIGNATURE', message: 'Assinatura do webhook inválida.' } });
+      return;
+    }
+    const body = JSON.parse(raw || '{}');
+    const requestId = String(req.headers['x-webhook-request-id'] || body.id || `event_${Date.now()}`);
+    if (await WebhookEventStore.has(requestId)) {
+      sendJson(res, 200, { ok: true, duplicate: true });
+      return;
+    }
+    await WebhookEventStore.add({ id: requestId, event: body.event, session: body.session, payload: body.payload || body });
+    if (body.event === 'session.status' || body.event === 'state.change') {
+      const wahaSessionId = body.session || WAHA_SESSION;
+      const rawStatus = body.payload?.status || body.payload?.state || 'unknown';
+      const normalized = rawStatus === 'WORKING' ? 'connected' : rawStatus === 'SCAN_QR_CODE' ? 'qr_code' : rawStatus === 'STARTING' ? 'connecting' : rawStatus === 'FAILED' ? 'error' : 'disconnected';
+      const savedSession = await WhatsAppSessionStore.getByWahaId('default_user', wahaSessionId);
+      if (savedSession) await WhatsAppSessionStore.update(savedSession.id, { status: normalized, phone: body.payload?.me?.id?.replace('@c.us', '') || savedSession.phone });
+      logLine(`[WAHA] status ${wahaSessionId}: ${rawStatus}`);
+    }
+    if (body.event === 'message.ack' || body.event === 'message.ack.group') {
+      await applyAckWebhook(body);
+    }
+    if (body.event === 'message' || body.event === 'message.any') {
+      await processMirroringMessage(body);
+    }
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    logLine(`[WAHA WEBHOOK ERROR] ${err.message}`);
+    sendJson(res, 400, { error: { code: 'INVALID_WEBHOOK', message: 'Webhook inválido.' } });
+  }
+}
+
+async function alreadyDispatchedRecently(userId, offer, groupId, sessionId) {
+  const since = Date.now() - Math.max(1, WHATSAPP_DEDUP_WINDOW_HOURS) * 60 * 60 * 1000;
+  const jobs = await DispatchStore.list(userId, 500);
+  return jobs.some(job => (job.attempts || []).some(attempt =>
+    attempt.status === 'sent' && attempt.groupId === groupId && attempt.sessionId === sessionId && attempt.offerId === offer.id && new Date(attempt.sentAt).getTime() >= since
+  ));
+}
+
+async function handleUpdateMirroring(req, res, pathOnly) {
+  try {
+    const configId = pathOnly.replace('/api/mirroring/', '');
+    const config = mirroringConfigs.get(configId) || await MirroringConfigStore.get(requestUserId(req), configId);
+    if (!config) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Espelhamento não encontrado.' } }); return; }
+    const body = await readJsonBody(req);
+    const next = { ...config, ...body, id: configId, userId: config.userId || requestUserId(req), updatedAt: new Date().toISOString() };
+    if (body.status === 'active' && config.status !== 'active') startMirroringWorker(configId);
+    if (body.status && body.status !== 'active') stopMirroringWorker(configId);
+    mirroringConfigs.set(configId, next);
+    await MirroringConfigStore.save(next);
+    sendJson(res, 200, { config: next });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar espelhamento.' } });
+  }
+}
+
+async function handleUpdateGroup(req, res, pathOnly) {
+  try {
+    const id = decodeURIComponent(pathOnly.replace('/api/groups/', ''));
+    const updates = await readJsonBody(req);
+    const group = await WhatsAppGroupsStore.update(requestUserId(req), id, {
+      selected: updates.selected === true,
+      status: updates.status,
+      name: typeof updates.name === 'string' ? updates.name.slice(0, 120) : undefined,
+    });
+    if (!group) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Grupo não encontrado.' } }); return; }
+    sendJson(res, 200, { group });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar grupo.' } });
+  }
+}
+
+async function handleDeleteGroup(req, res, pathOnly) {
+  try {
+    const id = decodeURIComponent(pathOnly.replace('/api/groups/', ''));
+    const removed = await WhatsAppGroupsStore.remove(requestUserId(req), id);
+    if (!removed) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Grupo não encontrado.' } }); return; }
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover grupo.' } });
+  }
+}
+
+async function applyAckWebhook(event) {
+  const payload = event.payload || {};
+  const messageId = payload.id || payload.key?.id || payload.message?.id;
+  if (!messageId) return;
+  for (const job of await DispatchStore.list('default_user', 100)) {
+    const attempt = (job.attempts || []).find(item => item.messageId === messageId);
+    if (!attempt) continue;
+    attempt.status = String(payload.ack || payload.ackName || payload.status || 'acknowledged').toLowerCase();
+    attempt.ackAt = new Date().toISOString();
+    await DispatchStore.save(job);
+  }
+}
+
+function extractIncomingMessage(event) {
+  const payload = event.payload || {};
+  const message = payload.body || payload.message?.body || payload.text || '';
+  const chatId = payload.from || payload.chatId || payload.key?.remoteJid || '';
+  return { chatId: String(chatId), text: String(message), messageId: payload.id || payload.key?.id || null };
+}
+
+async function processMirroringMessage(event) {
+  const incoming = extractIncomingMessage(event);
+  if (!incoming.chatId.endsWith('@g.us') || !incoming.text) return;
+  const configs = await MirroringConfigStore.list('default_user');
+  for (const config of configs.filter(item => item.status === 'active' && item.sourceGroupId === incoming.chatId)) {
+    if (config.onlyOffers && !/(shopee|mercadolivre|mercadolivre|amazon|magalu|\.com\.br)/i.test(incoming.text)) continue;
+    const text = incoming.text;
+    for (const destination of config.destinationGroupIds || []) {
+      try {
+        const result = await wahaSendMessage(destination, text, null);
+        config.stats = { ...(config.stats || {}), mirrored: (config.stats?.mirrored || 0) + 1 };
+        config.lastRunAt = new Date().toISOString();
+        config.logs = [...(config.logs || []).slice(-99), { destination, messageId: result?.id || result?.key?.id || null, at: new Date().toISOString(), status: 'sent' }];
+      } catch (error) {
+        config.stats = { ...(config.stats || {}), failed: (config.stats?.failed || 0) + 1 };
+        config.logs = [...(config.logs || []).slice(-99), { destination, at: new Date().toISOString(), status: 'failed', error: error.message }];
+      }
+    }
+    await MirroringConfigStore.save(config);
+  }
+}
+
+async function handleWhatsAppStatus(req, res) {
+  try {
+    const requestedSession = new URL(req.url || '/', `http://${req.headers.host}`).searchParams.get('session') || WAHA_SESSION;
+    const session = await wahaGetSession(requestedSession);
+    const normalizedStatus = session?.status === 'WORKING' ? 'connected' : session?.status === 'SCAN_QR_CODE' ? 'qr_code' : session?.status === 'STARTING' ? 'connecting' : session?.status === 'FAILED' ? 'error' : 'disconnected';
+    sendJson(res, 200, {
+      connected: session?.status === 'WORKING',
+      phone: session?.me?.id?.replace('@c.us', '') || null,
+      qrCode: session?.status === 'SCAN_QR_CODE' ? await wahaGetQR(requestedSession) : null,
+      status: normalizedStatus,
+      wahaStatus: session?.status || 'STOPPED',
+      session: session?.name,
+    });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar status.' } });
+  }
+}
+
+async function handleWhatsAppConnect(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const sessionName = String(body.sessionId || body.wahaSessionId || WAHA_SESSION).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64);
+    const session = await wahaStartSession(sessionName);
+    const qrCode = session?.status === 'SCAN_QR_CODE' ? await wahaGetQR(sessionName) : null;
+    const record = { id: body.id || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, userId: requestUserId(req), name: String(body.name || sessionName).slice(0, 80), wahaSessionId: sessionName, phone: session?.me?.id?.replace('@c.us', '') || null, status: session?.status || 'STARTING', updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
+    const existing = await WhatsAppSessionStore.getByWahaId(record.userId, sessionName);
+    await WhatsAppSessionStore.save(existing ? { ...existing, ...record, id: existing.id, createdAt: existing.createdAt } : record);
+    sendJson(res, 200, { 
+      qrCode, 
+      status: session?.status === 'SCAN_QR_CODE' ? 'qr_code' : session?.status === 'WORKING' ? 'connected' : 'connecting',
+      session: sessionName,
+    });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: `Erro ao conectar WhatsApp: ${err.message}` } });
+  }
+}
+
+async function handleWhatsAppDisconnect(req, res) {
+  try {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const sessionName = body.sessionId || WAHA_SESSION;
+    await wahaLogout(sessionName);
+    const saved = await WhatsAppSessionStore.getByWahaId(requestUserId(req), sessionName);
+    if (saved) await WhatsAppSessionStore.update(saved.id, { status: 'disconnected', phone: null });
+    sendJson(res, 200, { ok: true, message: 'WhatsApp desconectado.' });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao desconectar.' } });
+  }
+}
+
+async function handleWhatsAppQR(req, res) {
+  try {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const qrCode = await wahaGetQR(body.sessionId || WAHA_SESSION);
+    if (!qrCode) {
+      sendJson(res, 404, { error: { code: 'NO_QR', message: 'QR code não disponível. Inicie a conexão primeiro.' } });
+      return;
+    }
+    sendJson(res, 200, { qrCode: `data:image/png;base64,${qrCode}` });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao gerar QR code.' } });
+  }
+}
+
+async function handleWhatsAppSessions(req, res) {
+  const sessions = await WhatsAppSessionStore.list(requestUserId(req));
+  sendJson(res, 200, { sessions });
+}
+
+async function handleCreateWhatsAppSession(req, res) {
+  const body = await readJsonBody(req);
+  if (!body.name) { sendJson(res, 400, { error: { code: 'MISSING_NAME', message: 'Nome da conexão é obrigatório.' } }); return; }
+  const sessionId = String(body.sessionId || body.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 64);
+  const result = await wahaStartSession(sessionId);
+  const record = { id: `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, userId: requestUserId(req), name: String(body.name).slice(0, 80), wahaSessionId: sessionId, phone: result?.me?.id?.replace('@c.us', '') || null, status: result?.status || 'STARTING', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const existing = await WhatsAppSessionStore.getByWahaId(record.userId, sessionId);
+  const saved = await WhatsAppSessionStore.save(existing ? { ...existing, ...record, id: existing.id, createdAt: existing.createdAt } : record);
+  sendJson(res, 201, { session: saved, qrCode: result?.status === 'SCAN_QR_CODE' ? await wahaGetQR(sessionId) : null });
+}
+
+async function handleDeleteWhatsAppSession(req, res, pathOnly) {
+  const id = decodeURIComponent(pathOnly.replace('/api/whatsapp/sessions/', ''));
+  const session = await WhatsAppSessionStore.get(requestUserId(req), id);
+  if (!session) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Sessão não encontrada.' } }); return; }
+  await wahaLogout(session.wahaSessionId);
+  await WhatsAppSessionStore.remove(id);
+  sendJson(res, 200, { ok: true });
+}
+
+// ========== TEMPLATES HANDLERS ==========
+
+const userTemplates = new Map();
+
+async function handleGetTemplates(req, res) {
+  try {
+    const userId = 'default_user';
+    let templates = userTemplates.get(userId);
+    if (!templates) {
+      templates = getDefaultTemplates();
+      userTemplates.set(userId, templates);
+    }
+    sendJson(res, 200, { templates });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar templates.' } });
+  }
+}
+
+function getDefaultTemplates() {
+  return [
+    { id: 'vendedor', name: 'Vendedor e humanizado', message: "💛 *Esse achado vale a pena conferir!* 📦 *{TITULO}* O preço caiu de ~{PRECO_ANTIGO}~ para apenas *{PRECO}* 🔥 Pra quem já estava querendo comprar, essa pode ser uma boa hora 👀 👉 Veja a oferta: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'direto', name: 'Direto e agressivo', message: "🚨 *OFERTA ENCONTRADA!* 🔥 *{TITULO}* ~De: {PRECO_ANTIGO}~ 💰 *Por apenas: {PRECO}* ⚡ Aproveita antes que o preço mude ou o estoque acabe: 👉 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!* *{TITULO}* ❌ De: ~{PRECO_ANTIGO}~ ✅ Agora por: *{PRECO}* Tá com um preço muito bom! 🔥 🛒 Corre pra ver: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'urgencia', name: 'Urgência e escassez', message: "⚠️ *PREÇO BAIXOU!* 🔥 *{TITULO}* Era ~{PRECO_ANTIGO}~ Agora está saindo por apenas *{PRECO}* 😱 ⏳ Não sei até quando esse preço fica disponível. 👉 Pegue aqui: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  ];
+}
+
+async function handleSaveTemplate(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const { id, name, message, isCustom } = body;
+    if (!name || !message) {
+      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Nome e mensagem são obrigatórios.' } });
+      return;
+    }
+    let templates = userTemplates.get(userId) || getDefaultTemplates();
+    const template = { id: id || `tpl-${Date.now()}`, name, message, isCustom: true, createdAt: new Date().toISOString() };
+    templates = templates.filter(t => t.id !== template.id);
+    templates.push(template);
+    userTemplates.set(userId, templates);
+    sendJson(res, 200, { template });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao salvar template.' } });
+  }
+}
+
+async function handleDeleteTemplate(req, res, pathOnly) {
+  try {
+    const userId = 'default_user';
+    const templateId = pathOnly.replace('/api/templates/', '');
+    let templates = userTemplates.get(userId) || getDefaultTemplates();
+    templates = templates.filter(t => t.id !== templateId);
+    userTemplates.set(userId, templates);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover template.' } });
+  }
+}
+
+// ========== COUPONS HANDLERS ==========
+
+const userCoupons = new Map();
+
+async function handleGetCoupons(req, res) {
+  try {
+    const userId = 'default_user';
+    let coupons = userCoupons.get(userId);
+    if (!coupons) {
+      coupons = [];
+      userCoupons.set(userId, coupons);
+    }
+    sendJson(res, 200, { coupons });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar cupons.' } });
+  }
+}
+
+async function handleCreateCoupon(req, res) {
+  try {
+    const userId = 'default_user';
+    const body = await readJsonBody(req);
+    const { platform, code, description } = body;
+    if (!platform || !code) {
+      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Plataforma e código são obrigatórios.' } });
+      return;
+    }
+    let coupons = userCoupons.get(userId) || [];
+    const coupon = { id: `coupon-${Date.now()}`, platform, code, description, expiresAt: null, isActive: true };
+    coupons.push(coupon);
+    userCoupons.set(userId, coupons);
+    sendJson(res, 201, { coupon });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar cupom.' } });
+  }
+}
+
+async function handleDeleteCoupon(req, res, pathOnly) {
+  try {
+    const userId = 'default_user';
+    const couponId = pathOnly.replace('/api/coupons/', '');
+    let coupons = userCoupons.get(userId) || [];
+    coupons = coupons.filter(c => c.id !== couponId);
+    userCoupons.set(userId, coupons);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover cupom.' } });
+  }
+}
+
+// ========== ANALYTICS HANDLERS ==========
+
+async function handleAnalyticsOverview(req, res) {
+  try {
+    const userId = 'default_user';
+    const hours = parseInt(new URL(req.url || '/', `http://${req.headers.host}`).searchParams.get('hours') || '168');
+    const since = Date.now() - hours * 3_600_000;
+    
+    const store = createSupabaseAnalyticsStore();
+    const events = store.enabled ? await store.list({ marketplace: 'all', since }) : [];
+    const summary = summarizeAnalyticsEvents(events || [], 'all');
+    
+    sendJson(res, 200, { ...summary, meta: { source: store.enabled ? 'supabase' : 'local-fallback', hours } });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics overview.' } });
+  }
+}
+
+async function handleAnalyticsDispatch(req, res) {
+  try {
+    const jobs = Array.from(dispatchJobs.values());
+    const totalJobs = jobs.length;
+    const completedJobs = jobs.filter(j => j.status === 'completed').length;
+    const runningJobs = jobs.filter(j => j.status === 'running').length;
+    const totalSent = jobs.reduce((sum, j) => sum + j.stats.sent, 0);
+    const totalFailed = jobs.reduce((sum, j) => sum + j.stats.failed, 0);
+    
+    sendJson(res, 200, {
+      totalJobs,
+      completedJobs,
+      runningJobs,
+      totalSent,
+      totalFailed,
+      successRate: totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0,
+      jobs: jobs.slice(-10).map(j => ({ id: j.id, status: j.status, sent: j.stats.sent, failed: j.stats.failed, createdAt: j.createdAt })),
+    });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics de disparos.' } });
+  }
+}
+
+async function handleAnalyticsGroups(req, res) {
+  try {
+    const userId = 'default_user';
+    const groups = await syncWhatsAppGroups(userId);
+    const stats = groups.map(g => ({
+      id: g.id,
+      name: g.name,
+      memberCount: g.memberCount,
+      isAdmin: g.isAdmin,
+      status: g.status,
+      messagesSent30d: g.messagesSent30d,
+      messagesReceived30d: g.messagesReceived30d,
+      lastActivity: g.lastActivity,
+    }));
+    sendJson(res, 200, { groups: stats });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics de grupos.' } });
+  }
+}
+
+async function handleAnalyticsProducts(req, res) {
+  try {
+    const userId = 'default_user';
+    const history = await PublicationHistoryStore.getByUser(userId, 100);
+    const productStats = {};
+    for (const item of history) {
+      if (!productStats[item.productId]) {
+        productStats[item.productId] = { productId: item.productId, name: item.productName, marketplace: item.marketplace, publications: 0, totalCommission: 0 };
+      }
+      productStats[item.productId].publications++;
+      // commission estimada
+    }
+    const topProducts = Object.values(productStats).sort((a, b) => b.publications - a.publications).slice(0, 20);
+    sendJson(res, 200, { topProducts });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics de produtos.' } });
+  }
+}
+
 const isDirectRun =
   !!process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
@@ -1194,6 +2884,10 @@ if (isDirectRun) {
   // Inicializa data store
   dataStore.init().then(() => {
     logLine('Data store inicializado.');
+    if (process.env.DISPATCH_WORKER_ENABLED !== 'false') {
+      void resumeDispatchQueue();
+      setInterval(() => { void resumeDispatchQueue(); }, 15_000);
+    }
   }).catch(err => {
     logLine(`AVISO: Erro ao inicializar data store: ${err.message}`);
   });
@@ -1216,3 +2910,5 @@ if (isDirectRun) {
     setInterval(pollSalesInBackground, 120_000);
   });
 }
+
+export { resumeDispatchQueue };

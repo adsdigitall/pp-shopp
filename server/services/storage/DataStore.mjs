@@ -8,6 +8,10 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const DATA_DIR = join(process.cwd(), 'data');
+const IS_SERVERLESS = Boolean(process.env.VERCEL);
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
+const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const STORAGE_FILES = {
   credentials: 'marketplace_credentials.json',
   affiliateConfigs: 'affiliate_configs.json',
@@ -15,6 +19,12 @@ const STORAGE_FILES = {
   autoSearchConfigs: 'auto_search_configs.json',
   productsCache: 'products_cache.json',
   clickTracking: 'click_tracking.json',
+  dispatches: 'dispatches.json',
+  webhookEvents: 'webhook_events.json',
+  mirroringConfigs: 'mirroring_configs.json',
+  whatsappSessions: 'whatsapp_sessions.json',
+  whatsappGroups: 'whatsapp_groups.json',
+  workerStatus: 'worker_status.json',
 };
 
 class DataStore {
@@ -25,6 +35,14 @@ class DataStore {
 
   async init() {
     if (this.initialized) return;
+
+    // Vercel functions have a read-only deployment filesystem. Keep a
+    // per-invocation memory cache there; durable production state belongs in
+    // the configured database/worker deployment, while WAHA owns sessions.
+    if (USE_SUPABASE || IS_SERVERLESS) {
+      this.initialized = true;
+      return;
+    }
     
     try {
       await mkdir(DATA_DIR, { recursive: true });
@@ -52,10 +70,17 @@ class DataStore {
   async load(collection) {
     if (!this.initialized) await this.init();
     
-    if (this.cache.has(collection)) {
+    if (!USE_SUPABASE && this.cache.has(collection)) {
       return this.cache.get(collection);
     }
+
+    if (USE_SUPABASE) {
+      const response = await this.supabaseRequest(`/rest/v1/radar_store?collection=eq.${encodeURIComponent(collection)}&select=data`);
+      return response.map(row => row.data);
+    }
     
+    if (IS_SERVERLESS) return this.cache.get(collection) || [];
+
     const filename = STORAGE_FILES[collection];
     if (!filename) {
       throw new Error(`Coleção desconhecida: ${collection}`);
@@ -78,6 +103,23 @@ class DataStore {
    */
   async save(collection, data) {
     if (!this.initialized) await this.init();
+
+    if (USE_SUPABASE) {
+      await this.supabaseRequest(`/rest/v1/radar_store?collection=eq.${encodeURIComponent(collection)}`, { method: 'DELETE' });
+      if (data.length) {
+        await this.supabaseRequest('/rest/v1/radar_store', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify(data.map(item => this.toRow(collection, item))),
+        });
+      }
+      return data;
+    }
+
+    if (IS_SERVERLESS) {
+      this.cache.set(collection, data);
+      return data;
+    }
     
     const filename = STORAGE_FILES[collection];
     if (!filename) {
@@ -98,6 +140,14 @@ class DataStore {
    * Adiciona item a uma coleção
    */
   async add(collection, item) {
+    if (USE_SUPABASE) {
+      await this.supabaseRequest('/rest/v1/radar_store', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(this.toRow(collection, item)),
+      });
+      return item;
+    }
     const data = await this.load(collection);
     data.push(item);
     await this.save(collection, data);
@@ -134,6 +184,16 @@ class DataStore {
    * Atualiza item
    */
   async update(collection, id, updates) {
+    if (USE_SUPABASE) {
+      const existing = await this.findById(collection, id);
+      if (!existing) return null;
+      const next = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+      await this.supabaseRequest(`/rest/v1/radar_store?id=eq.${encodeURIComponent(this.rowId(collection, id))}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ data: next, user_id: next.userId || next.user_id || null, updated_at: new Date().toISOString() }),
+      });
+      return next;
+    }
     const data = await this.load(collection);
     const index = data.findIndex(item => item.id === id);
     if (index === -1) return null;
@@ -147,6 +207,12 @@ class DataStore {
    * Remove item
    */
   async remove(collection, id) {
+    if (USE_SUPABASE) {
+      const existing = await this.findById(collection, id);
+      if (!existing) return false;
+      await this.supabaseRequest(`/rest/v1/radar_store?id=eq.${encodeURIComponent(this.rowId(collection, id))}`, { method: 'DELETE' });
+      return true;
+    }
     const data = await this.load(collection);
     const filtered = data.filter(item => item.id !== id);
     await this.save(collection, filtered);
@@ -162,6 +228,31 @@ class DataStore {
     } else {
       this.cache.clear();
     }
+  }
+
+  rowId(collection, id) {
+    return `${collection}:${id}`;
+  }
+
+  toRow(collection, item) {
+    const itemId = item.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    return { id: this.rowId(collection, itemId), collection, user_id: item.userId || item.user_id || null, data: { ...item, id: itemId }, updated_at: new Date().toISOString() };
+  }
+
+  async supabaseRequest(path, options = {}) {
+    const response = await fetch(`${SUPABASE_URL}${path}`, {
+      ...options,
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    if (!response.ok) throw new Error(`Supabase storage ${response.status}: ${await response.text()}`);
+    if (response.status === 204) return [];
+    const text = await response.text();
+    return text ? JSON.parse(text) : [];
   }
 }
 
@@ -313,6 +404,91 @@ export const AutoSearchConfigStore = {
   async delete(id) {
     return dataStore.remove('autoSearchConfigs', id);
   },
+};
+
+// WhatsApp Groups Store
+export const WhatsAppGroupsStore = {
+  async get(userId) {
+    const groups = await dataStore.find('whatsappGroups', { userId });
+    return groups.map(g => ({
+      id: g.groupId || g.id,
+      sessionId: g.sessionId,
+      name: g.name,
+      memberCount: g.memberCount || 0,
+      isAdmin: g.isAdmin || false,
+      status: g.status || 'active',
+      messagesSent30d: g.messagesSent30d || 0,
+      messagesReceived30d: g.messagesReceived30d || 0,
+      lastActivity: g.lastActivity,
+      addedAt: g.addedAt,
+    }));
+  },
+
+  async save(userId, groups) {
+    const old = await dataStore.find('whatsappGroups', { userId });
+    for (const item of old) await dataStore.remove('whatsappGroups', item.id);
+    for (const group of groups) {
+      await dataStore.add('whatsappGroups', {
+        id: `group_${group.sessionId || 'default'}_${group.id}`,
+        userId,
+        groupId: group.id,
+        sessionId: group.sessionId || 'default',
+        ...group,
+        savedAt: new Date().toISOString(),
+      });
+    }
+    return groups;
+  },
+  async update(userId, id, updates) {
+    const groups = await this.get(userId);
+    const next = groups.map(group => group.id === id ? { ...group, ...updates, id } : group);
+    await this.save(userId, next);
+    return next.find(group => group.id === id) || null;
+  },
+  async remove(userId, id) {
+    const groups = await this.get(userId);
+    await this.save(userId, groups.filter(group => group.id !== id));
+    return groups.length !== (await this.get(userId)).length;
+  },
+};
+
+export const DispatchStore = {
+  async list(userId, limit = 100) {
+    const rows = await dataStore.find('dispatches', { userId });
+    return rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit);
+  },
+  async get(userId, id) { return dataStore.findOne('dispatches', { userId, id }); },
+  async save(job) {
+    const existing = await dataStore.findOne('dispatches', { id: job.id });
+    return existing ? dataStore.update('dispatches', job.id, job) : dataStore.add('dispatches', job);
+  },
+};
+
+export const WebhookEventStore = {
+  async add(event) { return dataStore.add('webhookEvents', { id: event.id || `hook_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, ...event, receivedAt: event.receivedAt || new Date().toISOString() }); },
+  async has(id) { return Boolean(id && await dataStore.findOne('webhookEvents', { id })); },
+};
+
+export const MirroringConfigStore = {
+  async list(userId) { return dataStore.find('mirroringConfigs', { userId }); },
+  async get(userId, id) { return dataStore.findOne('mirroringConfigs', { userId, id }); },
+  async save(config) {
+    const existing = await dataStore.findOne('mirroringConfigs', { id: config.id });
+    return existing ? dataStore.update('mirroringConfigs', config.id, config) : dataStore.add('mirroringConfigs', config);
+  },
+  async remove(id) { return dataStore.remove('mirroringConfigs', id); },
+};
+
+export const WhatsAppSessionStore = {
+  async list(userId) { return dataStore.find('whatsappSessions', { userId }); },
+  async get(userId, id) { return dataStore.findOne('whatsappSessions', { userId, id }); },
+  async getByWahaId(userId, wahaSessionId) { return dataStore.findOne('whatsappSessions', { userId, wahaSessionId }); },
+  async save(session) {
+    const existing = await dataStore.findOne('whatsappSessions', { id: session.id });
+    return existing ? dataStore.update('whatsappSessions', session.id, session) : dataStore.add('whatsappSessions', session);
+  },
+  async update(id, updates) { return dataStore.update('whatsappSessions', id, updates); },
+  async remove(id) { return dataStore.remove('whatsappSessions', id); },
 };
 
 // Cache de Produtos (para evitar re-busca)
