@@ -289,14 +289,10 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                 <span className="text-[11px] font-bold text-[var(--primary)]">{selectedOffers.length} selecionadas</span>
               </div>
               <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
-                {queueItems.map(item => (
-                  <label key={item.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1.5 hover:border-[var(--primary)] cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedOffers.includes(item.id)}
-                      onChange={(e) => e.target.checked ? setSelectedOffers([...selectedOffers, item.id]) : setSelectedOffers(selectedOffers.filter(id => id !== item.id))}
-                      className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)] shrink-0"
-                    />
+                {queueItems.map(item => {
+                  const isSelected = selectedOffers.includes(item.id);
+                  return <button key={item.id} type="button" aria-pressed={isSelected} onClick={() => setSelectedOffers(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])} className={`flex w-full items-center gap-2 rounded-lg border bg-[var(--surface)] p-1.5 text-left transition-colors ${isSelected ? 'border-[var(--primary)]/70' : 'border-[var(--border)]'} hover:border-[var(--primary)]`}>
+                    <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-transparent'}`}><Check className="h-3 w-3" /></span>
                     <div className="relative h-10 w-10 shrink-0 rounded bg-[var(--surface-elevated)] overflow-hidden">
                       {item.product.imageUrl ? <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[var(--text-secondary)]"><Box className="h-5 w-5" /></div>}
                     </div>
@@ -310,8 +306,8 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                         {item.product.originalPrice && <span className="line-through text-[var(--text-secondary)]">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>}
                       </div>
                     </div>
-                  </label>
-                ))}
+                  </button>;
+                })}
               </div>
               {queueItems.length === 0 && (
                 <div className="text-center py-8 text-[var(--text-secondary)]">
