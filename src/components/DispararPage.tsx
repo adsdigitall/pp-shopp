@@ -38,6 +38,14 @@ const rotatingCtaExamples = [
   'Toque no link e aproveite essa oportunidade',
 ];
 
+const formatTemplateMessage = (value: string) => value
+  .replace(/[^\S\r\n]+/g, ' ')
+  .replace(/\s*(\*?\{TITULO\}\*?)/g, '\n\n$1')
+  .replace(/\s*(\{CTA\})/g, '\n\n$1')
+  .replace(/\s*(\{LINK\})/g, '\n$1')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
 const steps = [
   { num: 1, label: 'Ofertas' },
   { num: 2, label: 'Mensagem' },
@@ -61,7 +69,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [selectedOffers, setSelectedOffers] = useState<string[]>([]);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
   const [selectedTemplateId, setSelectedTemplateId] = useState('humanizado');
-  const [customMessage, setCustomMessage] = useState(defaultTemplates[0].message);
+  const [customMessage, setCustomMessage] = useState(formatTemplateMessage(defaultTemplates[0].message));
   const [showImage, setShowImage] = useState(true);
   const [rotatingCTAs, setRotatingCTAs] = useState(true);
   const [dispatchJob, setDispatchJob] = useState<any>(null);
@@ -107,11 +115,16 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const allTemplates = [...defaultTemplates, ...(userTemplates || [])];
   const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId) || defaultTemplates[0];
 
+  useEffect(() => {
+    if (step !== 1) return;
+    setSelectedOffers(queueItems.filter(item => item.selected !== false).map(item => item.id));
+  }, [queueItems, step]);
+
   const previewMessage = useCallback(() => {
     const firstOffer = offers.find(o => selectedOffers.includes(o.id)) || offers[0];
     if (!firstOffer) return customMessage;
     
-    let msg = customMessage;
+    let msg = formatTemplateMessage(customMessage);
     msg = msg.replace(/{TITULO}/g, firstOffer.name);
     msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${firstOffer.currentPrice.toFixed(2).replace('.', ',')}` : '—');
     msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${firstOffer.originalPrice.toFixed(2).replace('.', ',')}` : '—');
@@ -136,7 +149,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
       setStep(2);
     } else if (step === 2) {
       onSaveMessage({
-        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage, showImage, rotatingCTAs }
+        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage: formatTemplateMessage(customMessage), showImage, rotatingCTAs }
       });
       setStep(3);
     } else if (step === 3) {
@@ -332,7 +345,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Modelo</label>
                     <select
                       value={selectedTemplateId}
-                      onChange={e => { setSelectedTemplateId(e.target.value); setCustomMessage(allTemplates.find(t => t.id === e.target.value)?.message || ''); }}
+                      onChange={e => { setSelectedTemplateId(e.target.value); setCustomMessage(formatTemplateMessage(allTemplates.find(t => t.id === e.target.value)?.message || '')); }}
                       className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                     >
                       {allTemplates.map(t => (
