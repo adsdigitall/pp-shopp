@@ -17,10 +17,10 @@ interface DispararPageProps {
 }
 
 const defaultTemplates: Template[] = [
-  { id: 'humanizado', name: 'Humanizado', message: "💛 *Esse achado vale a pena conferir!*\n📦 *{TITULO}*\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas *{PRECO}* 🔥\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n👉 Veja a oferta: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'direto', name: 'Direto e agressivo', message: "🚨 *OFERTA ENCONTRADA!*\n🔥 *{TITULO}*\n~De: {PRECO_ANTIGO}~ 💰 *Por apenas: {PRECO}*\n⚡ Aproveita antes que o preço mude ou o estoque acabe:\n👉 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n*{TITULO}*\n❌ De: ~{PRECO_ANTIGO}~\n✅ Agora por: *{PRECO}*\nTá com um preço muito bom! 🔥\n🛒 Corre pra ver: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'urgencia', name: 'Urgência e escassez', message: "⚠️ *PREÇO BAIXOU!*\n🔥 *{TITULO}*\nEra ~{PRECO_ANTIGO}~\nAgora está saindo por apenas *{PRECO}* 😱\n⏳ Não sei até quando esse preço fica disponível.\n👉 Pegue aqui: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'humanizado', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
 ];
 
 const variables = [
@@ -122,14 +122,14 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     if (!firstOffer) return customMessage;
     
     let msg = formatTemplateMessage(customMessage);
+    if (!firstOffer.originalPrice || firstOffer.originalPrice <= firstOffer.currentPrice) msg = msg.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
     msg = msg.replace(/{TITULO}/g, firstOffer.name);
     msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${firstOffer.currentPrice.toFixed(2).replace('.', ',')}` : '—');
     msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${firstOffer.originalPrice.toFixed(2).replace('.', ',')}` : '—');
     msg = msg.replace(/{CTA}/g, rotatingCTAs ? rotatingCtaExamples[0] : 'Confira a oferta');
     msg = msg.replace(/{LINK}/g, firstOffer.affiliateUrl || firstOffer.productUrl);
     msg = msg.replace(/{CUPOM}/g, 'CUPOM10');
-    if (rotatingCTAs && !customMessage.includes('{CTA}')) msg += `\n\n👉 ${rotatingCtaExamples[0]}`;
-    return msg;
+    return formatTemplateMessage(msg);
   }, [customMessage, offers, selectedOffers, rotatingCTAs]);
 
   const filteredGroups = groups.filter(g => 
@@ -383,7 +383,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                         <input type="checkbox" checked readOnly aria-label="Imagem do produto sempre incluída" className="w-4 h-4 accent-[var(--primary)]" />
                       </div>
                       <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
-                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">CTAs rotativas</span><span className="text-[9px] text-[var(--text-secondary)]">Alterna a chamada em cada envio para os grupos.</span></span>
+                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">CTAs rotativas</span><span className="text-[9px] text-[var(--text-secondary)]">Alterna a chamada quando o modelo usar {'{CTA}'}.</span></span>
                         <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
                       </label>
                     </div>
