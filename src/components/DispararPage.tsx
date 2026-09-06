@@ -17,16 +17,17 @@ interface DispararPageProps {
 }
 
 const defaultTemplates: Template[] = [
-  { id: 'humanizado', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'humanizado', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
 ];
 
 const variables = [
   { key: '{TITULO}', label: 'Título do produto' },
   { key: '{PRECO}', label: 'Preço atual' },
   { key: '{PRECO_ANTIGO}', label: 'Preço original' },
+  { key: '{DESCONTO}', label: 'Desconto (%)' },
   { key: '{LINK}', label: 'Link de afiliado' },
   { key: '{CUPOM}', label: 'Cupom de desconto' },
   { key: '{CTA}', label: 'Chamada para ação rotativa' },

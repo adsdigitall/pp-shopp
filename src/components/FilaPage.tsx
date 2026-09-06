@@ -9,6 +9,7 @@ interface FilaPageProps {
   onRemoveFromQueue: (queueId: string) => void;
   onClearQueue: () => void;
   onSelectAll: (selected: boolean) => void;
+  onToggleSelection: (queueId: string) => void;
   onOpenDispatch: () => void;
   onOpenGroups: () => void;
   showToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
@@ -20,19 +21,18 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   onRemoveFromQueue,
   onClearQueue,
   onSelectAll,
+  onToggleSelection,
   onOpenDispatch,
   onOpenGroups,
   showToast,
 }) => {
-  const [selectedAll, setSelectedAll] = useState(false);
   const [activeTab, setActiveTab] = useState<'fila' | 'grupos'>('fila');
 
   const selectedCount = queueItems.filter(item => item.selected).length;
+  const selectedAll = queueItems.length > 0 && selectedCount === queueItems.length;
 
   const handleToggleSelectAll = () => {
-    const newSelected = !selectedAll;
-    setSelectedAll(newSelected);
-    onSelectAll(newSelected);
+    onSelectAll(!selectedAll);
   };
 
   const copyAffiliateLink = (url: string) => {
@@ -93,8 +93,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      item.selected = !item.selected;
-                      onSelectAll(false);
+                      onToggleSelection(item.id);
                     }}
                     className={`flex-shrink-0 rounded border-2 ${item.selected ? 'border-[var(--primary)] bg-[var(--primary)]' : 'border-[var(--border)]'} w-4.5 h-4.5`}
                   >

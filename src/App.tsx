@@ -440,7 +440,7 @@ export function App() {
         void fetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ product }),
+          body: JSON.stringify({ product, queueId: newItem.id }),
         }).catch(() => {
           showToast('Oferta adicionada localmente', 'Não foi possível sincronizar a fila agora.', 'info');
         });
@@ -510,10 +510,23 @@ export function App() {
 
   const handleSelectAllQueue = (selected: boolean) => {
     setQueueItems(prev => prev.map(item => ({ ...item, selected })));
+    void Promise.allSettled(queueItems.map(item => fetch(`/api/queue/${encodeURIComponent(item.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selected }) })));
+  };
+
+  const handleToggleQueueSelection = (queueId: string) => {
+    const item = queueItems.find(candidate => candidate.id === queueId);
+    if (!item) return;
+    const selected = !item.selected;
+    setQueueItems(prev => prev.map(candidate => candidate.id === queueId ? { ...candidate, selected } : candidate));
+    void fetch(`/api/queue/${encodeURIComponent(queueId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selected }) })
+      .then(response => { if (!response.ok) throw new Error('Falha ao salvar seleção.'); })
+      .catch(() => { setQueueItems(prev => prev.map(candidate => candidate.id === queueId ? { ...candidate, selected: item.selected } : candidate)); showToast('Não foi possível salvar a seleção', 'Tente novamente.', 'error'); });
   };
 
   const handleSaveQueueSelection = (selectedIds: string[]) => {
+    const updates = queueItems.map(item => ({ id: item.id, selected: selectedIds.includes(item.id) }));
     setQueueItems(prev => prev.map(item => ({ ...item, selected: selectedIds.includes(item.id) })));
+    void Promise.allSettled(updates.map(({ id, selected }) => fetch(`/api/queue/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selected }) })));
   };
 
   const handleSaveMessage = (message: any) => {
@@ -689,6 +702,7 @@ export function App() {
           onRemoveFromQueue={handleRemoveFromQueue}
           onClearQueue={handleClearQueue}
           onSelectAll={handleSelectAllQueue}
+          onToggleSelection={handleToggleQueueSelection}
           onOpenDispatch={() => setActiveSection('disparar')}
           onOpenGroups={() => setActiveSection('grupos')}
           showToast={showToast}

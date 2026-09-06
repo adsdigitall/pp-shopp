@@ -328,6 +328,30 @@ export const AffiliateConfigStore = {
 
 // Histórico de Publicações
 export const PublicationHistoryStore = {
+  async save(userId, entry) {
+    const item = { id: entry.id || `queue_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, userId, ...entry, publishedAt: entry.publishedAt || new Date().toISOString() };
+    const existing = await dataStore.findById('publicationHistory', item.id);
+    return existing ? dataStore.update('publicationHistory', item.id, item) : dataStore.add('publicationHistory', item);
+  },
+
+  async update(userId, id, updates) {
+    const item = await dataStore.findById('publicationHistory', id);
+    if (!item || item.userId !== userId) return null;
+    return dataStore.update('publicationHistory', id, updates);
+  },
+
+  async delete(userId, id) {
+    const item = await dataStore.findById('publicationHistory', id);
+    if (!item || item.userId !== userId) return false;
+    return dataStore.remove('publicationHistory', id);
+  },
+
+  async clear(userId) {
+    const items = await dataStore.find('publicationHistory', { userId });
+    await Promise.all(items.map(item => dataStore.remove('publicationHistory', item.id)));
+    return true;
+  },
+
   async add(entry) {
     return dataStore.add('publicationHistory', {
       id: `pub_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,

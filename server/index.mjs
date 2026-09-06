@@ -631,6 +631,11 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         await handleAddToQueue(req, res);
         return;
       }
+      // PATCH /api/queue/:id - Atualiza seleção do item
+      if (req.method === 'PATCH' && pathOnly.startsWith('/api/queue/')) {
+        await handleUpdateQueueItem(req, res, pathOnly);
+        return;
+      }
       // DELETE /api/queue/:id - Remove item da fila
       if (req.method === 'DELETE' && pathOnly.startsWith('/api/queue/')) {
         await handleRemoveFromQueue(req, res, pathOnly);
@@ -1663,7 +1668,7 @@ async function handleGetQueue(req, res) {
         marketplace: item.marketplace,
         marketplaceProductId: item.marketplaceProductId,
         name: item.productName,
-        imageUrl: '',
+        imageUrl: item.imageUrl || '',
         currentPrice: item.price,
         originalPrice: item.originalPrice,
         discountPercentage: item.originalPrice && item.price ? Math.round((1 - item.price / item.originalPrice) * 100) : null,
@@ -1695,7 +1700,7 @@ async function handleGetQueue(req, res) {
         fetchedAt: item.publishedAt,
       },
       addedAt: item.publishedAt,
-      selected: false,
+      selected: item.selected !== false,
     }));
     sendJson(res, 200, { items, meta: { source: 'publication-history' } });
   } catch (err) {
@@ -1713,11 +1718,12 @@ async function handleAddToQueue(req, res) {
       return;
     }
     const item = {
-      id: `queue-${Date.now()}`,
+      id: String(body.queueId || `queue-${Date.now()}`).slice(0, 120),
       productId: product.id,
       marketplace: product.marketplace,
       marketplaceProductId: product.marketplaceProductId,
       productName: product.name,
+      imageUrl: product.imageUrl || '',
       price: product.currentPrice,
       originalPrice: product.originalPrice,
       affiliateUrl: product.affiliateUrl,
@@ -1789,6 +1795,22 @@ async function handleSendOffer(req, res, pathOnly) {
     sendJson(res, 202, { jobId: job.id, status: job.status });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao enviar oferta.' } });
+  }
+}
+
+async function handleUpdateQueueItem(req, res, pathOnly) {
+  try {
+    const id = pathOnly.replace('/api/queue/', '');
+    const body = await readJsonBody(req);
+    if (typeof body.selected !== 'boolean') {
+      sendJson(res, 400, { error: { code: 'INVALID_SELECTION', message: 'selected deve ser booleano.' } });
+      return;
+    }
+    const item = await PublicationHistoryStore.update('default_user', id, { selected: body.selected });
+    if (!item) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Item da fila não encontrado.' } }); return; }
+    sendJson(res, 200, { item });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar seleção da fila.' } });
   }
 }
 
@@ -2716,10 +2738,10 @@ async function handleGetTemplates(req, res) {
 
 function getDefaultTemplates() {
   return [
-    { id: 'vendedor', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'vendedor', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
   ];
 }
 
