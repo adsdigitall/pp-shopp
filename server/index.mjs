@@ -46,6 +46,9 @@ const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL || '';
 const WAHA_WEBHOOK_HMAC_KEY = process.env.WAHA_WEBHOOK_HMAC_KEY || '';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
+// O fluxo padrão é Radar -> worker -> WAHA. Um webhook legado só pode ser
+// ativado explicitamente, pois ele não recebe o sinal de cancelamento do Radar.
+const USE_LEGACY_N8N_DISPATCH = process.env.ENABLE_LEGACY_N8N_DISPATCH === 'true' && Boolean(N8N_WEBHOOK_URL);
 // Regra comercial: uma mesma oferta não pode voltar para o mesmo grupo antes
 // de três dias. A variável permite aumentar a janela, mas nunca reduzi-la.
 const WHATSAPP_DEDUP_WINDOW_HOURS = Math.max(72, Number(process.env.WHATSAPP_DEDUP_WINDOW_HOURS || 72) || 72);
@@ -666,6 +669,10 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         sendJson(res, 200, { running: ageMs < 45_000, lastHeartbeat: worker?.updatedAt || null });
         return;
       }
+      if (req.method === 'POST' && /^\/api\/dispatch\/[^/]+\/cancel$/.test(pathOnly)) {
+        await handleCancelDispatch(req, res, pathOnly);
+        return;
+      }
       // GET /api/dispatch/:id - Status do disparo
       if (req.method === 'GET' && /^\/api\/dispatch\/[^/]+$/.test(pathOnly)) {
         await handleGetDispatch(req, res, pathOnly);
@@ -843,6 +850,10 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
       if (req.method === 'POST' && pathOnly === '/api/dispatches') {
         await handleCreateDispatch(req, res);
+        return;
+      }
+      if (req.method === 'POST' && /^\/api\/dispatches\/[^/]+\/cancel$/.test(pathOnly)) {
+        await handleCancelDispatch(req, res, pathOnly.replace('/api/dispatches/', '/api/dispatch/'));
         return;
       }
       if (req.method === 'GET' && pathOnly === '/api/dispatches') {
@@ -1788,7 +1799,7 @@ async function handleSendOffer(req, res, pathOnly) {
       message: { whatsapp: { customMessage: body.message || '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
       destinations: { groups: groupIds.map(id => ({ id })), interval: body.interval || { value: 20, unit: 'seconds' } },
       createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
-      stats: { sent: 0, failed: 0, pending: groupIds.length }, currentGroupIndex: 0, attempts: [],
+      stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: groupIds.length }, currentGroupIndex: 0, attempts: [],
       idempotencyKey: String(req.headers['idempotency-key'] || `${offer.id}:${groupIds.join(',')}`),
     };
     dispatchJobs.set(job.id, job);
@@ -1848,7 +1859,7 @@ async function handleCreateDispatch(req, res) {
       createdAt: new Date().toISOString(),
       startedAt: null,
       completedAt: null,
-      stats: { sent: 0, failed: 0, pending: groups.length * offers.length },
+      stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: groups.length * offers.length },
       currentGroupIndex: 0,
       attempts: [],
       idempotencyKey: String(req.headers['idempotency-key'] || body.idempotencyKey || jobId),
@@ -1857,7 +1868,7 @@ async function handleCreateDispatch(req, res) {
     await DispatchStore.save(job);
 
     // Send to n8n webhook if configured
-    if (N8N_WEBHOOK_URL) {
+    if (USE_LEGACY_N8N_DISPATCH) {
       try {
         const n8nPayload = {
           jobId,
@@ -1895,7 +1906,7 @@ async function handleCreateDispatch(req, res) {
     }
 
     // Inicia processamento assíncrono (fallback inline se n8n não configurado)
-    if (PROCESS_DISPATCH_INLINE && !N8N_WEBHOOK_URL) void processDispatchJob(jobId);
+    if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void processDispatchJob(jobId);
 
     sendJson(res, 201, { jobId, status: 'pending' });
   } catch (err) {
@@ -1904,8 +1915,9 @@ async function handleCreateDispatch(req, res) {
 }
 
 async function processDispatchJob(jobId) {
-  const job = dispatchJobs.get(jobId);
+  const job = dispatchJobs.get(jobId) || await DispatchStore.get('default_user', jobId);
   if (!job) return;
+  if (job.status === 'cancelled') return;
 
   const scheduledAt = job.destinations?.scheduledAt ? new Date(job.destinations.scheduledAt).getTime() : 0;
   if (scheduledAt && scheduledAt > Date.now()) return;
@@ -1931,21 +1943,28 @@ async function processDispatchJob(jobId) {
   }
 
   for (let i = 0; i < groups.length; i++) {
+    if (await dispatchWasCancelled(job)) return;
     const group = groups[i];
     job.currentGroupIndex = i;
     
     // Verifica pausas de segurança
     if (shouldPause(destinations)) {
-      await sleep(60000); // espera 1 min e reverte
+      if (await sleepUntilNextDispatch(job, 60000)) return;
       i--;
       continue;
     }
 
     // Envia para cada oferta
     for (const offer of offers) {
+      if (await dispatchWasCancelled(job)) return;
       const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
       if (await alreadyDispatchedRecently(job.userId, offer, group.id, sessionName)) {
         job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: sessionName, status: 'deduplicated', sentAt: new Date().toISOString(), attempts: 0 });
+        job.stats.deduplicated = (job.stats.deduplicated || 0) + 1;
+        deliveryIndex++;
+        job.stats.pending = Math.max(0, totalDeliveries - deliveryIndex);
+        dispatchJobs.set(jobId, job);
+        await DispatchStore.save(job);
         logLine(`[DISPATCH] Bloqueado por duplicação: ${offer.id} -> ${group.id}`);
         continue;
       }
@@ -1968,7 +1987,7 @@ async function processDispatchJob(jobId) {
       await DispatchStore.save(job);
       
       // Intervalo entre envios
-      if (deliveryIndex < totalDeliveries) await sleep(intervalMs);
+      if (deliveryIndex < totalDeliveries && await sleepUntilNextDispatch(job, intervalMs)) return;
     }
   }
 
@@ -1977,6 +1996,24 @@ async function processDispatchJob(jobId) {
   if (job.stats.failed && !job.stats.sent) job.status = 'failed';
   dispatchJobs.set(jobId, job);
   await DispatchStore.save(job);
+}
+
+async function dispatchWasCancelled(job) {
+  if (job.status === 'cancelled') return true;
+  const persisted = await DispatchStore.get(job.userId, job.id);
+  if (persisted?.status !== 'cancelled') return false;
+  Object.assign(job, persisted);
+  dispatchJobs.set(job.id, job);
+  return true;
+}
+
+async function sleepUntilNextDispatch(job, intervalMs) {
+  const deadline = Date.now() + Math.max(0, intervalMs);
+  while (Date.now() < deadline) {
+    if (await dispatchWasCancelled(job)) return true;
+    await sleep(Math.min(1000, deadline - Date.now()));
+  }
+  return dispatchWasCancelled(job);
 }
 
 function getIntervalMs(interval) {
@@ -2052,6 +2089,38 @@ async function handleGetDispatch(req, res, pathOnly) {
     sendJson(res, 200, job);
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar disparo.' } });
+  }
+}
+
+async function handleCancelDispatch(req, res, pathOnly) {
+  try {
+    const jobId = decodeURIComponent(pathOnly.replace('/api/dispatch/', '').replace(/\/cancel$/, ''));
+    const userId = requestUserId(req);
+    const job = dispatchJobs.get(jobId) || await DispatchStore.get(userId, jobId);
+    if (!job) {
+      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Disparo não encontrado.' } });
+      return;
+    }
+    if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+      sendJson(res, 409, { error: { code: 'DISPATCH_NOT_CANCELLABLE', message: 'Este disparo já foi finalizado e não pode ser cancelado.' } });
+      return;
+    }
+    const total = (job.offers?.length || 0) * (job.destinations?.groups?.length || 0);
+    const completed = (job.stats?.sent || 0) + (job.stats?.failed || 0) + (job.stats?.deduplicated || 0);
+    const pending = Math.max(0, total - completed);
+    const cancelled = {
+      ...job,
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelReason: 'cancelled_by_user',
+      stats: { ...job.stats, cancelled: (job.stats?.cancelled || 0) + pending, pending: 0 },
+    };
+    dispatchJobs.set(jobId, cancelled);
+    await DispatchStore.save(cancelled);
+    logLine(`[DISPATCH] Cancelado pelo usuário: ${jobId}; ${pending} envio(s) pendente(s) interrompido(s).`);
+    sendJson(res, 200, { job: cancelled });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível cancelar o disparo.' } });
   }
 }
 
