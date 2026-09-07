@@ -2125,6 +2125,7 @@ async function handleCreateDispatch(req, res) {
 
     sendJson(res, 201, { jobId, status: 'pending' });
   } catch (err) {
+    console.error('[DISPATCH CREATE ERROR]', err);
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar disparo.' } });
   }
 }
