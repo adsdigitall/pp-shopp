@@ -451,7 +451,7 @@ export function App() {
 
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
-    const intervalId = window.setInterval(() => { if (document.visibilityState === 'visible') loadProducts(true, true); }, 30_000);
+    const intervalId = window.setInterval(() => { if (document.visibilityState === 'visible') loadProducts(true, true); }, 10 * 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [loadProducts, activeMarketplace]);
 
@@ -467,6 +467,9 @@ export function App() {
           body: JSON.stringify({ product, queueId: newItem.id }),
         }).then(async (response) => {
           if (!response.ok) throw new Error('Falha ao sincronizar a fila.');
+          // Nunca remova da fila nem inicie disparo aqui: a aprovação é manual.
+          await response.json();
+          return;
           const body = await response.json();
           if (body?.automationJobId) {
             setQueueItems(prev => prev.filter(item => item.id !== newItem.id));
@@ -644,9 +647,9 @@ export function App() {
   ];
 
   return (
-    <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal">
+    <div className="app-shell">
       <div className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center transition-opacity" style={{ opacity: pullDistance > 0 ? 1 : 0 }}>
-        <div className="flex items-center gap-2 rounded-full bg-neutral-900 dark:bg-neutral-50 px-3 py-2 text-xs font-bold text-white dark:text-neutral-950 shadow-xl">
+        <div className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-lg">
           <RefreshCw className={`h-4 w-4 ${pullDistance >= 60 ? 'rotate-180' : ''}`} />
           {pullDistance >= 60 ? 'Solte para ver novas ofertas' : 'Puxe para atualizar'}
         </div>
@@ -665,7 +668,7 @@ export function App() {
       />
       <Header searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenSettings={() => setIsSettingsModalOpen(true)} onOpenNotifications={() => setIsNotificationsModalOpen(true)} whatsappConnected={whatsappConnected} onOpenWhatsApp={() => { setActiveSection('whatsapp'); window.history.pushState({}, '', '#whatsapp'); }} variant={activeSection === 'garimpar' ? 'garimpar' : 'default'} />
 
-      <main className="min-w-0 w-full max-w-5xl flex-1 space-y-5 px-5 pb-28 pt-5 sm:space-y-6 sm:px-6 sm:pb-10 sm:pt-6 lg:px-8 md:ml-72">
+      <main className="min-w-0 w-full max-w-5xl flex-1 space-y-4 px-4 pb-24 pt-4 sm:space-y-5 sm:px-5 sm:pb-8 sm:pt-5 lg:px-6 md:ml-64">
         <div className={activeSection === 'visao-geral' ? '' : 'hidden'}><VisaoGeral
           onNavigateToGarimpar={() => { setActiveSection('garimpar'); setMobileSidebarOpen(false); }}
           onNavigateToDispatch={() => { setActiveSection('disparar'); }}
