@@ -142,8 +142,23 @@ async function wahaGetGroups(sessionName = WAHA_SESSION) {
 }
 
 async function wahaSendMessage(chatId, text, mediaUrl, sessionName = WAHA_SESSION) {
-  const payload = { chatId, session: sessionName, ...(mediaUrl ? { file: { url: mediaUrl }, caption: text } : { text }) };
-  return wahaRequest(mediaUrl ? '/api/sendImage' : '/api/sendText', {
+  if (mediaUrl) {
+    const imageResult = await wahaRequest('/api/sendImage', {
+      method: 'POST',
+      body: JSON.stringify({ chatId, session: sessionName, file: { url: mediaUrl } }),
+    });
+    // Algumas versões do WAHA/GOWS aceitam a imagem, mas descartam caption.
+    // Enviar a copy em uma mensagem de texto separada garante que ela chegue.
+    if (String(text || '').trim()) {
+      await wahaRequest('/api/sendText', {
+        method: 'POST',
+        body: JSON.stringify({ chatId, session: sessionName, text }),
+      });
+    }
+    return imageResult;
+  }
+  const payload = { chatId, session: sessionName, text };
+  return wahaRequest('/api/sendText', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
