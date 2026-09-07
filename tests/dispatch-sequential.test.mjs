@@ -9,3 +9,10 @@ test('dispatch queue processes one job at a time in creation order', async () =>
   assert.match(source, /await processDispatchJob\(nextJob\.id\)/);
   assert.doesNotMatch(source, /void processDispatchJob\(jobId\)/);
 });
+
+test('each offer fans out to every selected group before the next offer', async () => {
+  const source = await readFile(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  assert.match(source, /for \(let offerIndex = 0; offerIndex < offers\.length; offerIndex\+\+\)/);
+  assert.match(source, /for \(let i = 0; i < groups\.length; i\+\+\)/);
+  assert.match(source, /const totalDeliveries = groups\.length \* offers\.length/);
+});

@@ -2156,7 +2156,9 @@ async function processDispatchJob(jobId) {
     return;
   }
 
-  for (let i = 0; i < groups.length; i++) {
+  for (let offerIndex = 0; offerIndex < offers.length; offerIndex++) {
+    const offer = offers[offerIndex];
+    for (let i = 0; i < groups.length; i++) {
     if (await dispatchWasCancelled(job)) return;
     const group = groups[i];
     job.currentGroupIndex = i;
@@ -2168,8 +2170,7 @@ async function processDispatchJob(jobId) {
       continue;
     }
 
-    // Envia para cada oferta
-    for (const offer of offers) {
+    // Envia a oferta atual para cada grupo selecionado
       if (await dispatchWasCancelled(job)) return;
       const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
       if (await alreadyDispatchedRecently(job.userId, offer, group.id, sessionName)) {
