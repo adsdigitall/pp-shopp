@@ -3,6 +3,16 @@ import { Product, QueueItem, Group } from '../types/product';
 import { ProductCard } from './ProductCard';
 import { Trash2, Copy, CheckSquare, Square, Link as LinkIcon, Boxes, Users, Send, Zap, Clock, Save } from 'lucide-react';
 
+const AUTOMATION_CATEGORIES = [
+  { id: 'eletrônicos', label: 'Eletrônicos' },
+  { id: 'moda feminina', label: 'Moda feminina' },
+  { id: 'casa e banho', label: 'Casa e banho' },
+  { id: 'infantil', label: 'Infantil' },
+  { id: 'beleza', label: 'Beleza' },
+  { id: 'acessórios', label: 'Acessórios' },
+  { id: 'celular', label: 'Celulares' },
+];
+
 interface FilaPageProps {
   queueItems: QueueItem[];
   groups: Group[];
@@ -39,10 +49,22 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   }, []);
 
   const selectedAutomationIds = Array.isArray(automation.groups) ? automation.groups.map((group: any) => String(group.id)) : [];
+  const selectedAutomationCategoryIds = Array.isArray(automation.categories) ? automation.categories.map(String) : [];
+  const getAutomationCapacity = () => {
+    const value = Math.max(1, Number(automation.offerInterval?.value || automation.interval?.value) || 30);
+    const unit = automation.offerInterval?.unit || automation.interval?.unit || 'seconds';
+    const intervalMinutes = unit === 'hours' ? value * 60 : unit === 'minutes' ? value : value / 60;
+    const parseTime = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time || '') ? Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) : null;
+    const from = parseTime(automation.activeFrom || '');
+    const until = parseTime(automation.activeUntil || '');
+    const duration = from === null || until === null || from === until ? 1440 : (until - from + 1440) % 1440;
+    return Math.floor(duration / intervalMinutes) + 1;
+  };
+  const automationCapacity = getAutomationCapacity();
   const saveAutomation = async () => {
     setSavingAutomation(true);
     try {
-      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, groupIds: selectedAutomationIds, interval: automation.interval, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '', activeUntil: automation.activeUntil || '' }) });
+      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '', activeUntil: automation.activeUntil || '' }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setAutomation(body.config);
@@ -95,6 +117,16 @@ export const FilaPage: React.FC<FilaPageProps> = ({
             <input aria-label="Fim do horário automático" type="time" value={automation.activeUntil || ''} onChange={event => setAutomation((prev: any) => ({ ...prev, activeUntil: event.target.value }))} className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
           </label>
           <p className="sm:col-span-2 text-[9px] leading-3 text-[var(--text-secondary)]">Deixe os dois horários vazios para enviar o dia todo. Fora do horário, a oferta fica na fila manual.</p>
+          <label className="sm:col-span-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[9px] font-bold text-[var(--text-secondary)]">Nova oferta a cada
+            <input aria-label="Frequência de novas ofertas" type="number" min="1" value={automation.offerInterval?.value || automation.interval?.value || 30} onChange={event => setAutomation((prev: any) => ({ ...prev, offerInterval: { ...(prev.offerInterval || prev.interval || {}), value: Number(event.target.value) } }))} className="h-7 w-14 rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-1.5 text-[10px] text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
+            <select aria-label="Unidade da frequência de novas ofertas" value={automation.offerInterval?.unit || automation.interval?.unit || 'seconds'} onChange={event => setAutomation((prev: any) => ({ ...prev, offerInterval: { ...(prev.offerInterval || prev.interval || {}), unit: event.target.value } }))} className="h-7 rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-1.5 text-[10px] text-[var(--text-primary)]"><option value="seconds">segundos</option><option value="minutes">minutos</option><option value="hours">horas</option></select>
+          </label>
+          <div className="sm:col-span-2 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+            <p className="mb-1.5 text-[9px] font-black text-[var(--text-primary)]">Categorias que o piloto automático pode buscar</p>
+            <div className="flex flex-wrap gap-1.5">{AUTOMATION_CATEGORIES.map(category => { const checked = selectedAutomationCategoryIds.includes(category.id); return <button key={category.id} type="button" onClick={() => setAutomation((prev: any) => ({ ...prev, categories: checked ? prev.categories.filter((item: string) => item !== category.id) : [...(prev.categories || []), category.id] }))} className={`rounded-md border px-2 py-1 text-[9px] font-bold transition ${checked ? 'border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--text-primary)]' : 'border-[var(--border)] text-[var(--text-secondary)]'}`}>{checked && '✓ '}{category.label}</button>; })}</div>
+            <p className="mt-1.5 text-[8px] text-[var(--text-secondary)]">Sem categoria marcada, busca ofertas em alta de todos os nichos.</p>
+          </div>
+          <p className="sm:col-span-2 rounded-md bg-[var(--primary)]/10 px-2 py-1.5 text-[10px] font-bold text-[var(--text-primary)]">Previsão: até {automationCapacity} {automationCapacity === 1 ? 'oferta' : 'ofertas'} neste período, contando a primeira no horário de início.</p>
         </div>}
         {automation.enabled && <div className="mt-3 border-t border-[var(--border)] pt-3"><p className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Grupos que receberão as próximas ofertas</p><div className="grid gap-1.5 sm:grid-cols-2">{groups.map(group => { const checked = selectedAutomationIds.includes(String(group.id)); return <button type="button" key={group.id} onClick={() => setAutomation((prev: any) => ({ ...prev, groups: checked ? prev.groups.filter((item: any) => String(item.id) !== String(group.id)) : [...prev.groups, { id: group.id, name: group.name, sessionId: (group as any).sessionId }] }))} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[10px] font-bold ${checked ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--text-primary)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'}`}><span className={`grid h-4 w-4 place-items-center rounded border ${checked ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)]'}`}>{checked && <CheckSquare className="h-3 w-3" />}</span><span className="truncate">{group.name}</span></button>; })}</div><div className="mt-3 flex items-center gap-2"><Clock className="h-4 w-4 text-[var(--primary)]" /><input aria-label="Intervalo automático" type="number" min="10" value={automation.interval?.value || 30} onChange={event => setAutomation((prev: any) => ({ ...prev, interval: { ...(prev.interval || {}), value: Number(event.target.value) } }))} className="h-8 w-16 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" /><select aria-label="Unidade de intervalo automático" value={automation.interval?.unit || 'seconds'} onChange={event => setAutomation((prev: any) => ({ ...prev, interval: { ...(prev.interval || {}), unit: event.target.value } }))} className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)]"><option value="seconds">segundos</option><option value="minutes">minutos</option><option value="hours">horas</option></select><button type="button" onClick={() => void saveAutomation()} disabled={savingAutomation} className="ml-auto inline-flex h-8 items-center gap-1 rounded-md bg-[var(--primary)] px-3 text-[10px] font-black text-white disabled:opacity-60"><Save className="h-3.5 w-3.5" />{savingAutomation ? 'Salvando' : 'Salvar'}</button></div></div>}
       </div>

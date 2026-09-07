@@ -1794,7 +1794,7 @@ const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, groups: [], interval: { value: 30, unit: 'seconds' }, aiEnabled: false, activeFrom: '', activeUntil: '' } });
+  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 30, unit: 'seconds' }, offerInterval: { value: 30, unit: 'seconds' }, aiEnabled: false, activeFrom: '', activeUntil: '' } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -1810,12 +1810,16 @@ async function handleSaveDispatchAutomation(req, res) {
     }
     const value = Math.min(1440, Math.max(10, Number(body.interval?.value) || 30));
     const unit = ['seconds', 'minutes', 'hours'].includes(body.interval?.unit) ? body.interval.unit : 'seconds';
+    const offerValue = Math.min(1440, Math.max(10, Number(body.offerInterval?.value) || value));
+    const offerUnit = ['seconds', 'minutes', 'hours'].includes(body.offerInterval?.unit) ? body.offerInterval.unit : unit;
     const config = await DispatchAutomationStore.save(userId, {
       enabled: body.enabled === true, groups, interval: { value, unit },
+      offerInterval: { value: offerValue, unit: offerUnit },
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : (groups[0]?.sessionId || WAHA_SESSION),
       template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
       rotatingCTAs: body.rotatingCTAs !== false,
       aiEnabled: body.aiEnabled === true,
+      categories: Array.isArray(body.categoryIds) ? [...new Set(body.categoryIds.map(item => String(item).trim()).filter(item => item.length > 0 && item.length <= 80))].slice(0, 12) : [],
       activeFrom: isValidAutomationTime(body.activeFrom) ? String(body.activeFrom) : '',
       activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '',
     });
@@ -1852,6 +1856,52 @@ async function enqueueAutomaticDispatch(userId, offer) {
   if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void processDispatchJob(jobId);
   logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila automática: ${jobId}`);
   return job;
+}
+
+let automaticDiscoveryRunning = false;
+
+async function runAutomaticOfferDiscovery() {
+  if (automaticDiscoveryRunning) return;
+  automaticDiscoveryRunning = true;
+  try {
+    const configs = await DispatchAutomationStore.list();
+    for (const config of configs.filter(item => item?.enabled && Array.isArray(item.groups) && item.groups.length)) {
+      if (!automationIsWithinSchedule(config)) continue;
+      const dueAt = Date.parse(String(config.nextDiscoveryAt || ''));
+      if (Number.isFinite(dueAt) && dueAt > Date.now()) continue;
+
+      const cadence = config.offerInterval || config.interval || { value: 30, unit: 'seconds' };
+      const nextDiscoveryAt = new Date(Date.now() + Math.max(10_000, getIntervalMs(cadence))).toISOString();
+      try {
+        const categories = Array.isArray(config.categories) ? config.categories : [];
+        const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
+        const keyword = categories.length ? categories[categoryCursor % categories.length] : '';
+        const { nodes } = await searchProductOffers({
+          keyword, filter: 'trending', page: 1, limit: 24, categoryId: null, config: loadShopeeConfig(),
+        });
+        const seen = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys : []);
+        const offer = normalizeProductOffers(nodes, 'trending').find(item => item?.id && !seen.has(dispatchProductKey(item)));
+        if (!offer) {
+          await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
+          logLine(`[AUTOMATION] Nenhuma oferta inédita disponível para ${config.userId}.`);
+          continue;
+        }
+        const job = await enqueueAutomaticDispatch(config.userId, offer);
+        await DispatchAutomationStore.save(config.userId, {
+          ...config,
+          nextDiscoveryAt,
+          categoryCursor: categoryCursor + 1,
+          recentOfferKeys: [dispatchProductKey(offer), ...seen].slice(0, 300),
+        });
+        logLine(job ? `[AUTOMATION] Oferta automática criada: ${job.id}` : `[AUTOMATION] Oferta ${offer.id} ficou na fila manual.`);
+      } catch (error) {
+        await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt });
+        logLine(`[AUTOMATION ERROR] Busca automática falhou: ${error.message}`);
+      }
+    }
+  } finally {
+    automaticDiscoveryRunning = false;
+  }
 }
 
 function automationIsWithinSchedule(config, now = new Date()) {
@@ -3133,7 +3183,8 @@ if (isDirectRun) {
     logLine('Data store inicializado.');
     if (process.env.DISPATCH_WORKER_ENABLED !== 'false') {
       void resumeDispatchQueue();
-      setInterval(() => { void resumeDispatchQueue(); }, 15_000);
+      void runAutomaticOfferDiscovery();
+      setInterval(() => { void resumeDispatchQueue(); void runAutomaticOfferDiscovery(); }, 15_000);
     }
   }).catch(err => {
     logLine(`AVISO: Erro ao inicializar data store: ${err.message}`);
@@ -3158,4 +3209,4 @@ if (isDirectRun) {
   });
 }
 
-export { resumeDispatchQueue };
+export { resumeDispatchQueue, runAutomaticOfferDiscovery };

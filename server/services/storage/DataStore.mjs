@@ -490,6 +490,7 @@ export const DispatchStore = {
 };
 
 export const DispatchAutomationStore = {
+  async list() { return dataStore.load('dispatchAutomations'); },
   async get(userId) { return dataStore.findOne('dispatchAutomations', { userId }); },
   async save(userId, config) {
     const existing = await this.get(userId);

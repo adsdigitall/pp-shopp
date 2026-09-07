@@ -1,6 +1,6 @@
 import { initEnv } from './lib/env.mjs';
 import { dataStore } from './services/storage/DataStore.mjs';
-import { resumeDispatchQueue } from './index.mjs';
+import { resumeDispatchQueue, runAutomaticOfferDiscovery } from './index.mjs';
 
 initEnv();
 process.env.DISPATCH_WORKER = 'external';
@@ -14,4 +14,5 @@ const writeHeartbeat = async () => {
 };
 await writeHeartbeat();
 await resumeDispatchQueue();
-setInterval(() => { void writeHeartbeat(); void resumeDispatchQueue(); }, 15_000);
+await runAutomaticOfferDiscovery();
+setInterval(() => { void writeHeartbeat(); void resumeDispatchQueue(); void runAutomaticOfferDiscovery(); }, 15_000);
