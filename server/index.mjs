@@ -1794,7 +1794,7 @@ const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 5, unit: 'minutes' }, offerInterval: { value: 5, unit: 'minutes' }, aiEnabled: false, activeFrom: '', activeUntil: '' } });
+  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 5, unit: 'minutes' }, offerInterval: { value: 5, unit: 'minutes' }, batchSize: 10, aiEnabled: false, activeFrom: '', activeUntil: '' } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -1807,9 +1807,11 @@ async function handleSaveDispatchAutomation(req, res) {
     const offerUnit = ['seconds', 'minutes', 'hours'].includes(body.offerInterval?.unit) ? body.offerInterval.unit : unit;
     const minimumOfferInterval = offerUnit === 'seconds' ? 10 : 1;
     const offerValue = Math.min(1440, Math.max(minimumOfferInterval, Number(body.offerInterval?.value) || value));
+    const batchSize = Math.min(20, Math.max(1, Math.round(Number(body.batchSize) || 10)));
     const config = await DispatchAutomationStore.save(userId, {
       enabled: body.enabled === true, groups: [], interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
+      batchSize,
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : WAHA_SESSION,
       template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
       rotatingCTAs: body.rotatingCTAs !== false,
@@ -1897,21 +1899,27 @@ async function runAutomaticOfferDiscovery() {
           keyword, filter: 'trending', page: 1, limit: 24, categoryId: null, config: loadShopeeConfig(),
         });
         const seen = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys : []);
-        const offer = normalizeProductOffers(nodes, 'trending').find(item => item?.id && !seen.has(dispatchProductKey(item)));
-        if (!offer) {
+        const batchSize = Math.min(20, Math.max(1, Number(config.batchSize) || 10));
+        const offers = normalizeProductOffers(nodes, 'trending')
+          .filter(item => item?.id && !seen.has(dispatchProductKey(item)))
+          .slice(0, batchSize);
+        if (!offers.length) {
           await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
           logLine(`[AUTOMATION] Nenhuma oferta inédita disponível para ${config.userId}.`);
           continue;
         }
-        const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer);
-        const job = queuedItem;
+        const queuedItems = [];
+        for (const offer of offers) {
+          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer);
+          if (queuedItem) queuedItems.push(queuedItem);
+        }
         await DispatchAutomationStore.save(config.userId, {
           ...config,
           nextDiscoveryAt,
           categoryCursor: categoryCursor + 1,
-          recentOfferKeys: [dispatchProductKey(offer), ...seen].slice(0, 300),
+          recentOfferKeys: [...offers.map(dispatchProductKey), ...seen].slice(0, 300),
         });
-        logLine(job ? `[AUTOMATION] Oferta automática criada: ${job.id}` : `[AUTOMATION] Oferta ${offer.id} ficou na fila manual.`);
+        logLine(`[AUTOMATION] ${queuedItems.length} oferta(s) do lote adicionada(s) à fila para revisão manual.`);
       } catch (error) {
         await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt });
         logLine(`[AUTOMATION ERROR] Busca automática falhou: ${error.message}`);

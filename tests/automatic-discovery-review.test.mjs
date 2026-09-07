@@ -12,6 +12,8 @@ test('automatic discovery only adds offers to the manual review queue', async ()
   assert.match(activePath, /PublicationHistoryStore\.save/);
   assert.doesNotMatch(activePath, /DispatchStore\.save|resumeDispatchQueue|processDispatchJob/);
   assert.match(source, /for \(const config of configs\.filter\(item => item\?\.enabled\)\)/);
+  assert.match(source, /const batchSize = Math\.min\(20, Math\.max\(1, Number\(config\.batchSize\) \|\| 10\)\)/);
+  assert.match(source, /for \(const offer of offers\)/);
 });
 
 test('manual queue additions do not enqueue dispatches', async () => {
