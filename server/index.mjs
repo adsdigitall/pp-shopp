@@ -2224,9 +2224,10 @@ async function processDispatchJob(jobId) {
       dispatchJobs.set(jobId, job);
       await DispatchStore.save(job);
       
-      // Intervalo entre envios
-      if (deliveryIndex < totalDeliveries && await sleepUntilNextDispatch(job, intervalMs)) return;
     }
+    // Aguarda somente depois de enviar a oferta para todos os grupos.
+    // O intervalo não pode separar os grupos da mesma oferta.
+    if (offerIndex < offers.length - 1 && await sleepUntilNextDispatch(job, intervalMs)) return;
   }
 
   job.status = 'completed';
