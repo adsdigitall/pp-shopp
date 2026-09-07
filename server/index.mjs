@@ -1894,14 +1894,23 @@ async function runAutomaticOfferDiscovery() {
       try {
         const categories = Array.isArray(config.categories) ? config.categories : [];
         const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
-        const keyword = categories.length ? categories[categoryCursor % categories.length] : '';
+        const selectedCategory = categories.length ? String(categories[categoryCursor % categories.length]).trim() : '';
+        const numericCategoryId = Number.parseInt(selectedCategory, 10);
         const { nodes } = await searchProductOffers({
-          keyword, filter: 'trending', page: 1, limit: 50, categoryId: null, config: loadShopeeConfig(),
+          keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : selectedCategory,
+          filter: 'trending', page: 1, limit: 50,
+          categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
+          config: loadShopeeConfig(),
         });
-        const seen = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys : []);
+        const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
+        const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
+        const sentKeys = await recentlySentProductKeys(config.userId);
         const batchSize = Math.min(50, Math.max(1, Number(config.batchSize) || 10));
         const offers = normalizeProductOffers(nodes, 'trending')
-          .filter(item => item?.id && !seen.has(dispatchProductKey(item)))
+          .filter(item => {
+            const key = dispatchProductKey(item);
+            return item?.id && !queuedKeys.has(key) && !sentKeys.has(key);
+          })
           .slice(0, batchSize);
         if (!offers.length) {
           await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
@@ -1917,7 +1926,7 @@ async function runAutomaticOfferDiscovery() {
           ...config,
           nextDiscoveryAt,
           categoryCursor: categoryCursor + 1,
-          recentOfferKeys: [...offers.map(dispatchProductKey), ...seen].slice(0, 300),
+          recentOfferKeys: offers.map(dispatchProductKey).slice(0, 300),
         });
         logLine(`[AUTOMATION] ${queuedItems.length} oferta(s) do lote adicionada(s) à fila para revisão manual.`);
       } catch (error) {
@@ -2825,6 +2834,15 @@ function dispatchProductKey(offer) {
   const marketplace = String(offer?.marketplace || 'shopee').trim().toLowerCase();
   const productId = String(offer?.marketplaceProductId || offer?.productId || offer?.id || '').trim();
   return `${marketplace}:${productId}`;
+}
+
+async function recentlySentProductKeys(userId, cooldownHours = WHATSAPP_DEDUP_WINDOW_HOURS) {
+  const since = Date.now() - Math.max(1, cooldownHours) * 60 * 60 * 1000;
+  const jobs = await DispatchStore.list(userId, 500);
+  return new Set(jobs.flatMap(job => (job.attempts || [])
+    .filter(attempt => attempt.status === 'sent' && new Date(attempt.sentAt).getTime() >= since)
+    .map(attempt => attempt.productKey || `shopee:${String(attempt.offerId || '').trim()}`)
+    .filter(key => key !== 'shopee:')));
 }
 
 async function alreadyDispatchedRecently(userId, offer, groupId, sessionId) {
