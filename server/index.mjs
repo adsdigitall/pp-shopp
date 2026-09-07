@@ -3090,8 +3090,8 @@ async function handleGetTemplates(req, res) {
 
 function getDefaultTemplates() {
   return [
-    { id: 'clique-agora', name: 'Clique agora e garanta', message: '[OFERTA QUE PODE ACABAR AGORA!]\\n\\n*TITULO:* {TITULO}\\n\\n~De: {PRECO_ANTIGO}~\\nX *Por apenas: {PRECO}*\\n_{DESCONTO}% OFF_\\n\\n*{CTA}:*\\n{LINK}\\n\\n[URGENTE] Pode acabar a qualquer momento ou o preco mudar sem aviso.', isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado-barato', name: 'Achado barato', message: '[ACHADO DO MOMENTO]\\n\\n*{TITULO}*\\n\\n~De: {PRECO_ANTIGO}~\\nX *Agora por {PRECO}* - _{DESCONTO}% OFF_\\n\\n*Clique aqui agora e veja:*\\n{LINK}\\n\\nSe gostou, corre: esse preco pode acabar hoje.', isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'clique-agora', name: 'Clique agora e garanta', message: '[OFERTA QUE PODE ACABAR AGORA!]\n\n*TITULO:* {TITULO}\n\n~De: {PRECO_ANTIGO}~\nX *Por apenas: {PRECO}*\n_{DESCONTO}% OFF_\n\n*{CTA}:*\n{LINK}\n\n[URGENTE] Pode acabar a qualquer momento ou o preco mudar sem aviso.', isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado-barato', name: 'Achado barato', message: '[ACHADO DO MOMENTO]\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\nX *Agora por {PRECO}* - _{DESCONTO}% OFF_\n\n*Clique aqui agora e veja:*\n{LINK}\n\nSe gostou, corre: esse preco pode acabar hoje.', isCustom: false, createdAt: new Date().toISOString() },
     { id: 'vendedor', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
     { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
     { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
