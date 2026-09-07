@@ -1908,6 +1908,7 @@ async function runAutomaticOfferDiscovery() {
         const batchSize = Math.min(50, Math.max(1, Number(config.batchSize) || 10));
         const offers = normalizeProductOffers(nodes, 'trending')
           .filter(item => {
+            if (!isBrazilianOffer(item)) return false;
             const key = dispatchProductKey(item);
             return item?.id && !queuedKeys.has(key) && !sentKeys.has(key);
           })
@@ -2835,6 +2836,20 @@ function dispatchProductKey(offer) {
   const marketplace = String(offer?.marketplace || 'shopee').trim().toLowerCase();
   const productId = String(offer?.marketplaceProductId || offer?.productId || offer?.id || '').trim();
   return `${marketplace}:${productId}`;
+}
+
+// A garimpagem automática deve permanecer restrita ao catálogo brasileiro.
+function isBrazilianOffer(offer) {
+  const urls = [offer?.productUrl, offer?.affiliateUrl].filter(Boolean);
+  if (!urls.length) return false;
+  return urls.some((value) => {
+    try {
+      const hostname = new URL(String(value)).hostname.toLowerCase();
+      return hostname === 'shopee.com.br' || hostname.endsWith('.shopee.com.br');
+    } catch {
+      return false;
+    }
+  });
 }
 
 async function recentlySentProductKeys(userId, cooldownHours = WHATSAPP_DEDUP_WINDOW_HOURS) {
