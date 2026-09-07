@@ -25,7 +25,7 @@ export function renderWhatsAppMessage(template, offer, options = {}) {
   if (!hasOriginalPrice) source = source.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
   if (!discount) source = source.split('\n').filter(line => !line.includes('{DESCONTO}')).join('\n');
   let rendered = source
-    .replace(/{TITULO}/g, offer.name || '')
+    .replace(/{TITULO}/g, offer.name || offer.title || 'Oferta especial')
     .replace(/{PRECO}/g, hasCurrentPrice ? `R$ ${currentPrice.toFixed(2).replace('.', ',')}` : 'Preço indisponível')
     .replace(/{PRECO_ANTIGO}/g, hasOriginalPrice ? `R$ ${originalPrice.toFixed(2).replace('.', ',')}` : '')
     .replace(/{DESCONTO}/g, discount ? String(discount) : '')

@@ -1,17 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, FilterType, AffiliateSettings, SectionId, QueueItem, Template, Group, Settings as SettingsType, Coupon, GarimparTab, GarimparPlatform, GarimparFilter, DispatchStep, PageType } from './types/product';
 import { productService } from './services/productService';
-import { Header } from './components/Header';
 import { FilterTabs } from './components/FilterTabs';
 import { ProductCard } from './components/ProductCard';
 import { OfferPreviewModal } from './components/OfferPreviewModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { MobileBottomNav, MainNavTab } from './components/MobileBottomNav';
 import { MercadoLivreSearch } from './components/MercadoLivreSearch';
 import { AnalyticsModal } from './components/AnalyticsModal';
-import { DesktopSidebar } from './components/DesktopSidebar';
 import { VisaoGeral } from './components/VisaoGeral';
 import { GarimparPage } from './components/GarimparPage';
 import { FilaPage } from './components/FilaPage';
@@ -24,6 +21,9 @@ import { ConfiguracoesPage } from './components/ConfiguracoesPage';
 import { WhatsAppPage } from './components/WhatsAppPage';
 import { DispararPage } from './components/DispararPage';
 import { FloatingActionButtons } from './components/FloatingActionButtons';
+import { DesktopSidebar } from './components/layout/DesktopSidebar';
+import { Header } from './components/layout/Header';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 import {
   getPullRefreshDistance,
   mergeFreshProducts,
@@ -98,7 +98,7 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('top_sales');
-  const [activeNav, setActiveNav] = useState<MainNavTab>('home');
+  const [activeNav, setActiveNav] = useState<'home' | 'products' | 'dispatch' | 'groups' | 'config' | 'whatsapp'>('home');
   const [activeMarketplace, setActiveMarketplace] = useState<Marketplace>('shopee');
   const [selectedPlatform, setSelectedPlatform] = useState<GarimparPlatform>('shopee');
   const [garimparTab, setGarimparTab] = useState<GarimparTab>('buscar');
@@ -108,7 +108,6 @@ export function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const seenSalesRef = useRef<Set<string>>(new Set());
 
-  // Restaura a fila persistida para que as ofertas não desapareçam ao recarregar.
   useEffect(() => {
     let cancelled = false;
     const restoreQueue = async () => {
@@ -119,7 +118,6 @@ export function App() {
         const items = Array.isArray(body?.items) ? body.items : [];
         if (!cancelled) setQueueItems(items as QueueItem[]);
       } catch {
-        // Mantém a fila local caso a API esteja temporariamente indisponível.
       }
     };
     void restoreQueue();
@@ -127,12 +125,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const navBySection: Partial<Record<SectionId, MainNavTab>> = {
+    const navBySection: Partial<Record<SectionId, 'home' | 'products' | 'dispatch' | 'groups' | 'config' | 'whatsapp'>> = {
       'visao-geral': 'home',
       garimpar: 'products',
       disparar: 'dispatch',
       grupos: 'groups',
       configuracoes: 'config',
+      whatsapp: 'whatsapp',
     };
     const nextNav = navBySection[activeSection];
     if (nextNav) setActiveNav(nextNav);
@@ -148,7 +147,6 @@ export function App() {
     };
   }, []);
 
-  // Modal States (kept for secondary, quick actions only)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
@@ -156,10 +154,8 @@ export function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState<boolean>(false);
   const [dispatchDraft, setDispatchDraft] = useState<any>({ message: null, destinations: null });
+  const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
 
-  // The sidebar is a real mobile drawer: pull from the left edge to open and
-  // swipe it back to the left to close. This keeps the primary screens free of
-  // floating controls and preserves the same navigation on touch devices.
   useEffect(() => {
     const handleTouchStart = (event: TouchEvent) => {
       const touch = event.touches[0];
@@ -187,23 +183,28 @@ export function App() {
     };
   }, [mobileSidebarOpen]);
 
-  // Settings & Data
   const [settings, setSettings] = useState<AffiliateSettings>(DEFAULT_SETTINGS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [groups, setGroups] = useState<Group[]>([
+    { id: '1', name: 'Grupo Imersão Ofertas Dinâmicas 06/06', memberCount: 389, isAdmin: true, status: 'healthy', messagesSent30d: 4, messagesReceived30d: 0, lastActivity: '2026-09-04', addedAt: '2026-06-06' },
+    { id: '2', name: 'SYNC PAY', memberCount: 6, isAdmin: false, status: 'healthy', messagesSent30d: 2, messagesReceived30d: 1, lastActivity: '2026-09-03', addedAt: '2026-07-01' },
+    { id: '3', name: 'Fornecedor Tiktok ADS', memberCount: 3, isAdmin: false, status: 'active', messagesSent30d: 1, messagesReceived30d: 2, lastActivity: '2026-09-02', addedAt: '2026-08-15' },
+    { id: '4', name: 'Utmify', memberCount: 2, isAdmin: false, status: 'active', messagesSent30d: 0, messagesReceived30d: 0, lastActivity: '2026-09-01', addedAt: '2026-08-20' },
+    { id: '5', name: 'Scale ADS- Pro Comunidade', memberCount: 1600, isAdmin: false, status: 'healthy', messagesSent30d: 50, messagesReceived30d: 10, lastActivity: '2026-09-04', addedAt: '2026-07-10' },
+  ]);
   const [pages, setPages] = useState<any[]>([]);
-  const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([]);
-  const [extensionToken, setExtensionToken] = useState('');
-  const [panelUrl, setPanelUrl] = useState('https://radarfertas.shop');
+  const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([
+    { id: 'mirror-demo', name: 'Ofertas TOP Brasil', sourceGroupId: '1', destinationGroupIds: ['2', '3'], type: 'instant', status: 'active', onlyOffers: true, templateIds: [], mirroredMessages: 128, failedMessages: 2, createdAt: '2026-09-04' },
+  ]);
+  const [extensionToken, setExtensionToken] = useState('b0882c9dcbb9fda04d9ac0f896a2a50f0df55472f166475c');
+  const [panelUrl, setPanelUrl] = useState('https://app.garimpalinks.com.br');
   const [whatsappConnected, setWhatsAppConnected] = useState(false);
-  const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
 
-  // App Settings State
   const [appSettings, setAppSettings] = useState<SettingsType>({
     channels: { whatsapp: { connected: false, phone: '', instanceId: '' }, telegram: { connected: false } },
-    platforms: { shopee: { appId: '', secret: '', validated: false }, mercadoLivre: { affiliateTag: '', accessToken: '' }, amazon: { associateTag: '' }, magalu: { storeSlug: '' } },
+    platforms: { shopee: { appId: '18349490069', secret: 'I326BKMYMZMEHEVI25JDJP26PJRUIAZF', validated: true }, mercadoLivre: { affiliateTag: '', accessToken: '' }, amazon: { associateTag: '' }, magalu: { storeSlug: '' } },
     templates: [],
     coupons: [],
     security: { safeInterval: true },
@@ -215,16 +216,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const loadHistory = () => fetch('/api/dispatch/history').then(response => response.ok ? response.json() : null).then(body => {
-      if (active && Array.isArray(body?.history)) setDispatchHistory(body.history);
-    }).catch(() => undefined);
-    loadHistory();
-    const intervalId = window.setInterval(loadHistory, 15_000);
-    return () => { active = false; window.clearInterval(intervalId); };
-  }, []);
-
-  useEffect(() => {
     const root = document.documentElement;
     const theme = settings.theme;
     if (theme === 'dark') {
@@ -232,14 +223,12 @@ export function App() {
     } else if (theme === 'light') {
       root.classList.remove('dark');
     } else {
-      // system preference
       if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
         root.classList.add('dark');
       } else {
         root.classList.remove('dark');
       }
     }
-    // listen for system changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e: MediaQueryListEvent) => {
       if (settings.theme === 'system') {
@@ -347,34 +336,19 @@ export function App() {
       const targetPage = rotatePage ? nextRefreshPage(refreshPageRef.current) : 1;
       const discovery = nextRefreshQuery(selectedQuery, discoveryIndexRef.current);
       const query = rotatePage ? discovery.query : selectedQuery;
-      let resolvedPage = targetPage;
-      let result = await productService.getProductsPage(activeFilter, query, resolvedPage);
-      // A vitrine só apresenta produtos que ainda não foram mostrados nesta
-      // instalação. Quando uma página se esgotar, a próxima atualização troca
-      // página/categoria para buscar novos resultados reais da Shopee.
-      let nextProducts = mergeFreshProducts(
-        [],
-        result.products,
-        recentProductIdsRef.current,
-        result.products.length,
-        false,
-      );
-      // A API pode devolver uma página que o usuário já viu. Caminhamos por
-      // mais páginas imediatamente para não deixar a vitrine vazia/repetida.
-      for (let attempt = 0; nextProducts.length === 0 && result.hasNextPage && attempt < 3; attempt++) {
-        resolvedPage = nextRefreshPage(resolvedPage, 50);
-        result = await productService.getProductsPage(activeFilter, query, resolvedPage);
-        nextProducts = mergeFreshProducts([], result.products, recentProductIdsRef.current, result.products.length, false);
-      }
+      const result = await productService.getProductsPage(activeFilter, query, targetPage);
+      const nextProducts = rotatePage
+        ? mergeFreshProducts([], result.products, recentProductIdsRef.current, result.products.length)
+        : result.products;
       setProducts(nextProducts);
       setHasNextPage(result.hasNextPage);
-      setCurrentPage(resolvedPage);
-      refreshPageRef.current = resolvedPage;
+      setCurrentPage(targetPage);
+      refreshPageRef.current = targetPage;
       discoveryIndexRef.current = discovery.nextIndex;
       nextProducts.forEach((product) => recentProductIdsRef.current.add(product.id));
       const recentIds = [...recentProductIdsRef.current].slice(-RECENT_PRODUCTS_LIMIT);
       recentProductIdsRef.current = new Set(recentIds);
-      localStorage.setItem(REFRESH_PAGE_KEY, String(resolvedPage));
+      localStorage.setItem(REFRESH_PAGE_KEY, String(targetPage));
       localStorage.setItem(DISCOVERY_INDEX_KEY, String(discovery.nextIndex));
       localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(recentIds));
       lastRefreshAtRef.current = Date.now();
@@ -431,10 +405,7 @@ export function App() {
       const recentIds = [...recentProductIdsRef.current].slice(-RECENT_PRODUCTS_LIMIT);
       recentProductIdsRef.current = new Set(recentIds);
       localStorage.setItem(RECENT_PRODUCTS_KEY, JSON.stringify(recentIds));
-      setProducts((current) => {
-        const ids = new Set(current.map((p) => p.id));
-        return [...current, ...freshProducts.filter((p) => !ids.has(p.id))];
-      });
+      setProducts((current) => { const ids = new Set(current.map((p) => p.id)); return [...current, ...freshProducts.filter((p) => !ids.has(p.id))]; });
       setHasNextPage(result.hasNextPage);
       setCurrentPage(nextPage);
     } catch { showToast('Não foi possível carregar mais ofertas', 'Tente novamente em instantes.', 'error'); }
@@ -451,7 +422,7 @@ export function App() {
 
   useEffect(() => {
     if (activeMarketplace !== 'shopee') return;
-    const intervalId = window.setInterval(() => { if (document.visibilityState === 'visible') loadProducts(true, true); }, 30_000);
+    const intervalId = window.setInterval(() => { if (document.visibilityState === 'visible') loadProducts(true, true); }, 10 * 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [loadProducts, activeMarketplace]);
 
@@ -464,21 +435,13 @@ export function App() {
         void fetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ product, queueId: newItem.id }),
-        }).then(async (response) => {
-          if (!response.ok) throw new Error('Falha ao sincronizar a fila.');
-          const body = await response.json();
-          if (body?.automationJobId) {
-            setQueueItems(prev => prev.filter(item => item.id !== newItem.id));
-            showToast('Oferta na fila automática', 'O servidor criou o disparo. Acompanhe em Disparos › Em andamento.', 'success');
-          }
+          body: JSON.stringify({ product }),
         }).catch(() => {
           showToast('Oferta adicionada localmente', 'Não foi possível sincronizar a fila agora.', 'info');
         });
         showToast('Oferta adicionada à fila', 'Disponível em Ofertas / fila para disparo manual.', 'success');
       }
     } else {
-      // Open Garimpar page to add offers
       setActiveSection('garimpar');
       setMobileSidebarOpen(false);
       window.history.pushState({}, '', `#garimpar`);
@@ -487,9 +450,6 @@ export function App() {
   };
 
   const handleGenerateOffer = (product: Product) => {
-    // Sharing an offer now enters the full dispatch flow instead of opening a
-    // centered preview modal. The selected product is added to the existing
-    // queue, while all dispatch rules and API calls remain unchanged.
     handleAddToQueue(product);
     setActiveSection('disparar');
     setMobileSidebarOpen(false);
@@ -541,23 +501,14 @@ export function App() {
 
   const handleSelectAllQueue = (selected: boolean) => {
     setQueueItems(prev => prev.map(item => ({ ...item, selected })));
-    void Promise.allSettled(queueItems.map(item => fetch(`/api/queue/${encodeURIComponent(item.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selected }) })));
   };
 
   const handleToggleQueueSelection = (queueId: string) => {
-    const item = queueItems.find(candidate => candidate.id === queueId);
-    if (!item) return;
-    const selected = !item.selected;
-    setQueueItems(prev => prev.map(candidate => candidate.id === queueId ? { ...candidate, selected } : candidate));
-    void fetch(`/api/queue/${encodeURIComponent(queueId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selected }) })
-      .then(response => { if (!response.ok) throw new Error('Falha ao salvar seleção.'); })
-      .catch(() => { setQueueItems(prev => prev.map(candidate => candidate.id === queueId ? { ...candidate, selected: item.selected } : candidate)); showToast('Não foi possível salvar a seleção', 'Tente novamente.', 'error'); });
+    setQueueItems(prev => prev.map(item => item.id === queueId ? { ...item, selected: !item.selected } : item));
   };
 
   const handleSaveQueueSelection = (selectedIds: string[]) => {
-    const updates = queueItems.map(item => ({ id: item.id, selected: selectedIds.includes(item.id) }));
     setQueueItems(prev => prev.map(item => ({ ...item, selected: selectedIds.includes(item.id) })));
-    void Promise.allSettled(updates.map(({ id, selected }) => fetch(`/api/queue/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selected }) })));
   };
 
   const handleSaveMessage = (message: any) => {
@@ -579,7 +530,7 @@ export function App() {
       const response = await fetch('/api/dispatch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          offers: selectedQueue.map(item => { const raw: any = item as any; const product: any = raw.product || raw; return ({ id: product.productId || product.id, name: product.productName || product.name, currentPrice: product.price ?? product.currentPrice, originalPrice: product.originalPrice, affiliateUrl: product.affiliateUrl, productUrl: product.originalUrl || product.productUrl, imageUrl: product.imageUrl }); }),
+          offers: selectedQueue.map(item => { const raw: any = item as any; const product: any = raw.product || raw; return ({ id: product.productId || product.id, name: product.productName || product.name || product.title || 'Oferta especial', currentPrice: product.price ?? product.currentPrice, originalPrice: product.originalPrice, discountPercentage: product.discountPercentage, affiliateUrl: product.affiliateUrl, productUrl: product.originalUrl || product.productUrl, imageUrl: product.imageUrl }); }),
           message: dispatchDraft.message || { whatsapp: { customMessage: '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
           destinations: { ...destinations, groups: destinations.groups.map((group: any) => ({ id: group.id, sessionId: group.sessionId })) },
         }),
@@ -629,7 +580,7 @@ export function App() {
 
   const handleToggleTheme = () => { setSettings(prev => { const themes = ['light', 'dark', 'system'] as const; const current = themes.indexOf(prev.theme); return { ...prev, theme: themes[(current + 1) % themes.length] }; }); };
 
-  const handleSelectNav = (nav: MainNavTab) => {
+  const handleSelectNav = (nav: 'home' | 'products' | 'dispatch' | 'groups' | 'config' | 'whatsapp') => {
     setActiveNav(nav);
     const section: SectionId = nav === 'groups' ? 'grupos' : nav === 'config' ? 'configuracoes' : nav === 'dispatch' ? 'disparar' : nav === 'products' ? 'garimpar' : nav === 'whatsapp' ? 'whatsapp' : 'visao-geral';
     setActiveSection(section);
@@ -642,6 +593,20 @@ export function App() {
     { id: 'shopee', label: '🛍️ Shopee', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-[#EE4D2D]', bgColor: 'bg-orange-100' },
     { id: 'mercado_livre', label: '🛒 Mercado Livre', icon: <ShoppingBag className="w-5 h-5" />, color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
   ];
+
+  const user = {
+    name: appSettings.account.name,
+    email: appSettings.account.email,
+    plan: appSettings.account.plan,
+  };
+
+  const navigate = (section: SectionId) => {
+    setMobileSidebarOpen(false);
+    setActiveSection(section);
+    window.history.pushState({}, '', `#${section}`);
+    const target = section;
+    if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); else window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal">
@@ -656,16 +621,24 @@ export function App() {
         activeSection={activeSection}
         mobileOpen={mobileSidebarOpen}
         onToggleMobile={() => setMobileSidebarOpen((open) => !open)}
-        onNavigate={(section) => { setMobileSidebarOpen(false); setActiveSection(section as SectionId); window.history.pushState({}, '', `#${section}`); const target = section; if (target) document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); else window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onNavigate={navigate}
         onDispatch={() => setActiveSection('disparar')}
         onGroups={() => setActiveSection('grupos')}
         onSettings={() => { setActiveSection('configuracoes'); setMobileSidebarOpen(false); }}
         onNotifications={() => setIsNotificationsModalOpen(true)}
         onAnalytics={() => { setActiveSection('metricas'); setMobileSidebarOpen(false); }}
       />
-      <Header searchQuery={searchQuery} onSearchChange={setSearchQuery} onOpenSettings={() => setIsSettingsModalOpen(true)} onOpenNotifications={() => setIsNotificationsModalOpen(true)} whatsappConnected={whatsappConnected} onOpenWhatsApp={() => { setActiveSection('whatsapp'); window.history.pushState({}, '', '#whatsapp'); }} variant={activeSection === 'garimpar' ? 'garimpar' : 'default'} />
+      <Header
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenNotifications={() => setIsNotificationsModalOpen(true)}
+        whatsappConnected={whatsappConnected}
+        user={user}
+        className="lg:ml-64"
+      />
 
-      <main className="min-w-0 w-full max-w-5xl flex-1 space-y-5 px-5 pb-28 pt-5 sm:space-y-6 sm:px-6 sm:pb-10 sm:pt-6 lg:px-8 md:ml-72">
+      <main className="min-w-0 w-full max-w-5xl flex-1 space-y-5 px-5 pb-28 pt-5 sm:space-y-6 sm:px-6 sm:pb-10 sm:pt-6 lg:px-8 lg:ml-64">
         <div className={activeSection === 'visao-geral' ? '' : 'hidden'}><VisaoGeral
           onNavigateToGarimpar={() => { setActiveSection('garimpar'); setMobileSidebarOpen(false); }}
           onNavigateToDispatch={() => { setActiveSection('disparar'); }}
