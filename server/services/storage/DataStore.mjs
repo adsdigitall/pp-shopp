@@ -20,6 +20,7 @@ const STORAGE_FILES = {
   productsCache: 'products_cache.json',
   clickTracking: 'click_tracking.json',
   dispatches: 'dispatches.json',
+  dispatchAutomations: 'dispatch_automations.json',
   webhookEvents: 'webhook_events.json',
   mirroringConfigs: 'mirroring_configs.json',
   whatsappSessions: 'whatsapp_sessions.json',
@@ -485,6 +486,15 @@ export const DispatchStore = {
   async save(job) {
     const existing = await dataStore.findOne('dispatches', { id: job.id });
     return existing ? dataStore.update('dispatches', job.id, job) : dataStore.add('dispatches', job);
+  },
+};
+
+export const DispatchAutomationStore = {
+  async get(userId) { return dataStore.findOne('dispatchAutomations', { userId }); },
+  async save(userId, config) {
+    const existing = await this.get(userId);
+    const value = { id: existing?.id || `dispatch_auto_${Date.now()}`, userId, ...existing, ...config, updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString() };
+    return existing ? dataStore.update('dispatchAutomations', existing.id, value) : dataStore.add('dispatchAutomations', value);
   },
 };
 

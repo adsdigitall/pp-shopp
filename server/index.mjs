@@ -27,6 +27,7 @@ import {
   ClickTrackingStore,
   WhatsAppGroupsStore,
   DispatchStore,
+  DispatchAutomationStore,
   WebhookEventStore,
   MirroringConfigStore,
   WhatsAppSessionStore,
@@ -653,6 +654,14 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
 
       // ========== DISPATCH (DISPAROS) ENDPOINTS ==========
+      if (req.method === 'GET' && pathOnly === '/api/dispatch/automation') {
+        await handleGetDispatchAutomation(req, res);
+        return;
+      }
+      if (req.method === 'PUT' && pathOnly === '/api/dispatch/automation') {
+        await handleSaveDispatchAutomation(req, res);
+        return;
+      }
       // POST /api/dispatch - Cria job de disparo (3-step wizard)
       if (req.method === 'POST' && pathOnly === '/api/dispatch') {
         await handleCreateDispatch(req, res);
@@ -1748,7 +1757,9 @@ async function handleAddToQueue(req, res) {
       affiliateProvider: product.affiliateProvider,
     };
     await PublicationHistoryStore.save(userId, item);
-    sendJson(res, 201, { ok: true, item });
+    const automationJob = await enqueueAutomaticDispatch(userId, product);
+    if (automationJob) await PublicationHistoryStore.delete(userId, item.id);
+    sendJson(res, 201, { ok: true, item, automationJobId: automationJob?.id || null });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao adicionar à fila.' } });
   }
@@ -1778,6 +1789,56 @@ async function handleClearQueue(req, res) {
 // ========== DISPATCH HANDLERS ==========
 
 const dispatchJobs = new Map();
+
+const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}';
+
+async function handleGetDispatchAutomation(req, res) {
+  const config = await DispatchAutomationStore.get(requestUserId(req));
+  sendJson(res, 200, { config: config || { enabled: false, groups: [], interval: { value: 30, unit: 'seconds' } } });
+}
+
+async function handleSaveDispatchAutomation(req, res) {
+  try {
+    const userId = requestUserId(req);
+    const body = await readJsonBody(req);
+    const knownGroups = await WhatsAppGroupsStore.get(userId);
+    const selectedIds = Array.isArray(body.groupIds) ? body.groupIds.map(String) : [];
+    const groups = knownGroups.filter(group => selectedIds.includes(String(group.id))).map(group => ({ id: group.id, name: group.name, sessionId: group.sessionId }));
+    if (body.enabled === true && groups.length === 0) {
+      sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Selecione ao menos um grupo para ativar o automático.' } });
+      return;
+    }
+    const value = Math.min(1440, Math.max(10, Number(body.interval?.value) || 30));
+    const unit = ['seconds', 'minutes', 'hours'].includes(body.interval?.unit) ? body.interval.unit : 'seconds';
+    const config = await DispatchAutomationStore.save(userId, {
+      enabled: body.enabled === true, groups, interval: { value, unit },
+      sessionId: typeof body.sessionId === 'string' ? body.sessionId : (groups[0]?.sessionId || WAHA_SESSION),
+      template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
+      rotatingCTAs: body.rotatingCTAs !== false,
+    });
+    sendJson(res, 200, { config });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível salvar a automação.' } });
+  }
+}
+
+async function enqueueAutomaticDispatch(userId, offer) {
+  const config = await DispatchAutomationStore.get(userId);
+  if (!config?.enabled || !Array.isArray(config.groups) || config.groups.length === 0) return null;
+  const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const job = {
+    id: jobId, userId, source: 'queue_automation', status: 'pending', step: 3, offers: [offer],
+    message: { whatsapp: { enabled: true, customMessage: config.template || DEFAULT_AUTOMATION_MESSAGE, showImage: true, rotatingCTAs: config.rotatingCTAs !== false } },
+    destinations: { groups: config.groups, sessionId: config.sessionId, interval: config.interval || { value: 30, unit: 'seconds' }, nightPause: true, weekendPause: false, expirePause: true },
+    createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
+    stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: config.groups.length }, currentGroupIndex: 0, attempts: [], idempotencyKey: `auto:${dispatchProductKey(offer)}:${Date.now()}`,
+  };
+  dispatchJobs.set(jobId, job);
+  await DispatchStore.save(job);
+  if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void processDispatchJob(jobId);
+  logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila automática: ${jobId}`);
+  return job;
+}
 
 async function handleSendOffer(req, res, pathOnly) {
   try {

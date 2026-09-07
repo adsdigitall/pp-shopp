@@ -465,6 +465,13 @@ export function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ product, queueId: newItem.id }),
+        }).then(async (response) => {
+          if (!response.ok) throw new Error('Falha ao sincronizar a fila.');
+          const body = await response.json();
+          if (body?.automationJobId) {
+            setQueueItems(prev => prev.filter(item => item.id !== newItem.id));
+            showToast('Oferta na fila automática', 'O servidor criou o disparo. Acompanhe em Disparos › Em andamento.', 'success');
+          }
         }).catch(() => {
           showToast('Oferta adicionada localmente', 'Não foi possível sincronizar a fila agora.', 'info');
         });
@@ -722,6 +729,7 @@ export function App() {
 
         <div className={activeSection === 'fila' || activeSection === 'ofertas' ? '' : 'hidden'}><FilaPage
           queueItems={queueItems}
+          groups={groups}
           onAddToQueue={handleAddToQueue}
           onRemoveFromQueue={handleRemoveFromQueue}
           onClearQueue={handleClearQueue}
