@@ -10,7 +10,7 @@ interface DispararPageProps {
   templates: Template[];
   groups: Group[];
   onSaveQueueSelection: (selectedIds: string[]) => void;
-  onSaveMessage: (message: { whatsapp: { enabled: boolean; templateId: string; customMessage: string; showImage: boolean; rotatingCTAs: boolean } }) => void;
+  onSaveMessage: (message: { whatsapp: { enabled: boolean; templateId: string; customMessage: string; showImage: boolean; rotatingCTAs: boolean; templateMode: 'fixed' | 'rotate'; templatePool?: { id: string; message: string }[] } }) => void;
   onSaveDestinations: (destinations: { groups: Group[]; schedule: 'now' | 'scheduled'; scheduledAt?: string; interval: { value: number; unit: 'seconds' | 'minutes' | 'hours' }; nightPause: boolean; weekendPause: boolean; expirePause: boolean }) => void;
   onExecuteDispatch: () => Promise<{ jobId: string; status: string } | null>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
@@ -69,6 +69,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [selectedOffers, setSelectedOffers] = useState<string[]>([]);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
   const [selectedTemplateId, setSelectedTemplateId] = useState('humanizado');
+  const [templateMode, setTemplateMode] = useState<'fixed' | 'rotate'>('fixed');
   const [customMessage, setCustomMessage] = useState(formatTemplateMessage(defaultTemplates[0].message));
   const [showImage, setShowImage] = useState(true);
   const [rotatingCTAs, setRotatingCTAs] = useState(true);
@@ -150,7 +151,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
       setStep(2);
     } else if (step === 2) {
       onSaveMessage({
-        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage: formatTemplateMessage(customMessage), showImage, rotatingCTAs }
+        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage: formatTemplateMessage(customMessage), showImage, rotatingCTAs: true, templateMode, templatePool: templateMode === 'rotate' ? allTemplates.map(template => ({ id: template.id, message: template.message })) : undefined }
       });
       setStep(3);
     } else if (step === 3) {
@@ -378,6 +379,16 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                 <>
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Modelo</label>
+                    <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                      <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'fixed' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
+                        <input type="radio" name="template-mode" checked={templateMode === 'fixed'} onChange={() => setTemplateMode('fixed')} className="mt-0.5 accent-[var(--primary)]" />
+                        <span><strong className="block text-[10px] text-[var(--text-primary)]">Modelo fixo</strong><small className="text-[9px] text-[var(--text-secondary)]">Usa o modelo escolhido em todas as ofertas.</small></span>
+                      </label>
+                      <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'rotate' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
+                        <input type="radio" name="template-mode" checked={templateMode === 'rotate'} onChange={() => setTemplateMode('rotate')} className="mt-0.5 accent-[var(--primary)]" />
+                        <span><strong className="block text-[10px] text-[var(--text-primary)]">Alternar modelos</strong><small className="text-[9px] text-[var(--text-secondary)]">Troca o template a cada oferta.</small></span>
+                      </label>
+                    </div>
                     <select
                       value={selectedTemplateId}
                       onChange={e => { setSelectedTemplateId(e.target.value); setCustomMessage(formatTemplateMessage(allTemplates.find(t => t.id === e.target.value)?.message || '')); }}
