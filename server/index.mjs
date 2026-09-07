@@ -1789,6 +1789,7 @@ async function handleClearQueue(req, res) {
 // ========== DISPATCH HANDLERS ==========
 
 const dispatchJobs = new Map();
+let dispatchQueueRunning = false;
 
 const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}';
 
@@ -1855,7 +1856,7 @@ async function enqueueAutomaticDispatch(userId, offer) {
   };
   dispatchJobs.set(jobId, job);
   await DispatchStore.save(job);
-  if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void processDispatchJob(jobId);
+  if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void resumeDispatchQueue();
   logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila automática: ${jobId}`);
   return job;
 }
@@ -1985,7 +1986,7 @@ async function handleSendOffer(req, res, pathOnly) {
     };
     dispatchJobs.set(job.id, job);
     await DispatchStore.save(job);
-    if (PROCESS_DISPATCH_INLINE) void processDispatchJob(job.id);
+    if (PROCESS_DISPATCH_INLINE) void resumeDispatchQueue();
     sendJson(res, 202, { jobId: job.id, status: job.status });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao enviar oferta.' } });
@@ -2087,7 +2088,7 @@ async function handleCreateDispatch(req, res) {
     }
 
     // Inicia processamento assíncrono (fallback inline se n8n não configurado)
-    if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void processDispatchJob(jobId);
+    if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void resumeDispatchQueue();
 
     sendJson(res, 201, { jobId, status: 'pending' });
   } catch (err) {
@@ -2226,16 +2227,26 @@ function sleep(ms) {
 }
 
 async function resumeDispatchQueue() {
+  if (dispatchQueueRunning) return;
+  dispatchQueueRunning = true;
   try {
     const jobs = await DispatchStore.list('default_user', 200);
-    for (const job of jobs.filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection')) {
-      if (!dispatchJobs.has(job.id) || dispatchJobs.get(job.id)?.status === 'waiting_connection') {
-        dispatchJobs.set(job.id, job);
-        void processDispatchJob(job.id);
-      }
-    }
+    const queued = jobs
+      .filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection')
+      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    const nextJob = queued.find(item => item.status === 'running')
+      || queued.find(item => item.status === 'waiting_connection')
+      || queued.find(item => {
+        const scheduledAt = item.destinations?.scheduledAt ? new Date(item.destinations.scheduledAt).getTime() : 0;
+        return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now());
+      });
+    if (!nextJob) return;
+    dispatchJobs.set(nextJob.id, nextJob);
+    await processDispatchJob(nextJob.id);
   } catch (error) {
     logLine(`[DISPATCH QUEUE] Falha ao restaurar fila: ${error.message}`);
+  } finally {
+    dispatchQueueRunning = false;
   }
 }
 
