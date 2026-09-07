@@ -143,11 +143,15 @@ export const DispararPage: React.FC<DispararPageProps> = ({
 
   const handleNext = () => {
     if (step === 1) {
-      if (selectedOffers.length === 0) {
-        onShowToast('Selecione pelo menos uma oferta', undefined, 'error');
+      const offersToDispatch = selectedOffers.length
+        ? selectedOffers
+        : queueItems.map(item => item.id);
+      if (offersToDispatch.length === 0) {
+        onShowToast('A fila está vazia', 'Adicione pelo menos uma oferta antes de criar o disparo.', 'error');
         return;
       }
-      onSaveQueueSelection(selectedOffers);
+      setSelectedOffers(offersToDispatch);
+      onSaveQueueSelection(offersToDispatch);
       setStep(2);
     } else if (step === 2) {
       onSaveMessage({
