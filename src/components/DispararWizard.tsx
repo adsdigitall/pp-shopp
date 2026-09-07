@@ -17,6 +17,8 @@ interface DispararWizardProps {
 }
 
 const defaultTemplates: Template[] = [
+  { id: 'clique-agora', name: 'Clique agora e garanta', message: '[OFERTA QUE PODE ACABAR AGORA!]\\n\\n*TITULO:* {TITULO}\\n\\n~De: {PRECO_ANTIGO}~\\nX *Por apenas: {PRECO}*\\n_{DESCONTO}% OFF_\\n\\n*{CTA}:*\\n{LINK}\\n\\n[URGENTE] Pode acabar a qualquer momento ou o preco mudar sem aviso.', isCustom: false, createdAt: new Date().toISOString() },
+  { id: 'achado-barato', name: 'Achado barato', message: '[ACHADO DO MOMENTO]\\n\\n*{TITULO}*\\n\\n~De: {PRECO_ANTIGO}~\\nX *Agora por {PRECO}* - _{DESCONTO}% OFF_\\n\\n*Clique aqui agora e veja:*\\n{LINK}\\n\\nSe gostou, corre: esse preco pode acabar hoje.', isCustom: false, createdAt: new Date().toISOString() },
   { id: 'vendedor', name: 'Vendedor e humanizado', message: "💛 *Esse achado vale a pena conferir!*\n📦 *{TITULO}*\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas *{PRECO}* 🔥\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n👉 Veja a oferta: {LINK}", isCustom: false, createdAt: new Date().toISOString() },
   { id: 'direto', name: 'Direto e agressivo', message: "🚨 *OFERTA ENCONTRADA!*\n🔥 *{TITULO}*\n~De: {PRECO_ANTIGO}~ 💰 *Por apenas: {PRECO}*\n⚡ Aproveita antes que o preço mude ou o estoque acabe:\n👉 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
   { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n*{TITULO}*\n❌ De: ~{PRECO_ANTIGO}~\n✅ Agora por: *{PRECO}*\nTá com um preço muito bom! 🔥\n🛒 Corre pra ver: {LINK}", isCustom: false, createdAt: new Date().toISOString() },

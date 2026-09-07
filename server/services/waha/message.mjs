@@ -2,6 +2,9 @@ export const ROTATING_CTAS = [
   'Confira a oferta antes que o preço mude',
   'Garanta o seu enquanto ainda está disponível',
   'Toque no link e aproveite essa oportunidade',
+  'Clique aqui agora antes que acabe',
+  'Aproveite agora: pode acabar a qualquer momento',
+  'Nao deixe para depois: confira enquanto esta disponivel',
   'Veja agora todos os detalhes da promoção',
 ];
 
