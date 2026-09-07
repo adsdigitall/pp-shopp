@@ -1,0 +1,23 @@
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    environment:
+      WHATSAPP_API_KEY: ${WAHA_API_KEY}
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WAHA_DASHBOARD_ENABLED: "false"
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-WEBJS}
+      WAHA_WEBHOOK_URL: ${WAHA_WEBHOOK_URL}
+      WHATSAPP_HOOK_URL: ${WAHA_WEBHOOK_URL}
+      WHATSAPP_HOOK_EVENTS: session.status,message,message.any,message.ack,message.ack.group,group.v2.update,group.v2.participants
+      WHATSAPP_HOOK_HMAC_KEY: ${WAHA_WEBHOOK_HMAC_KEY}
+      WHATSAPP_HOOK_RETRIES_POLICY: exponential
+      WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: "2"
+      WHATSAPP_HOOK_RETRIES_ATTEMPTS: "5"
+    volumes:
+      - waha_sessions:/app/.sessions
+    expose:
+      - "3000"
+
+volumes:
+  waha_sessions:
