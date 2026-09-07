@@ -33,22 +33,22 @@ interface DesktopSidebarProps {
   onAnalytics: () => void;
 }
 
-const sectionConfig: Record<SectionId, { label: string; icon: React.ElementType }> = {
-  'visao-geral': { label: 'Início', icon: LayoutDashboard },
-  'garimpar': { label: 'Garimpar', icon: WandSparkles },
-  'disparar': { label: 'Disparar', icon: Send },
-  'fila': { label: 'Fila', icon: Boxes },
-  'ofertas': { label: 'Fila', icon: Boxes },
-  'paginas': { label: 'Páginas', icon: FileText },
-  'templates': { label: 'Templates', icon: FileText },
-  'espelhamento': { label: 'Espelhar', icon: GitBranch },
-  'grupos': { label: 'Grupos', icon: Users },
-  'metricas': { label: 'Métricas', icon: BarChart2 },
-  'extensao': { label: 'Extensão', icon: PlugZap },
-  'configuracoes': { label: 'Config', icon: Settings },
-  'tutoriais': { label: 'Tutoriais', icon: BookOpen },
-  'suporte': { label: 'Suporte', icon: LifeBuoy },
-  'whatsapp': { label: 'WhatsApp', icon: MessageSquare },
+const sectionConfig: Record<SectionId, { label: string; icon: React.ElementType; color: string; bgColor: string }> = {
+  'visao-geral': { label: 'Início', icon: LayoutDashboard, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'garimpar': { label: 'Garimpar', icon: WandSparkles, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'disparar': { label: 'Disparar', icon: Send, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'fila': { label: 'Fila', icon: Boxes, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'ofertas': { label: 'Fila', icon: Boxes, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'paginas': { label: 'Páginas', icon: FileText, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'templates': { label: 'Templates', icon: FileText, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'espelhamento': { label: 'Espelhar', icon: GitBranch, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'grupos': { label: 'Grupos', icon: Users, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'metricas': { label: 'Métricas', icon: BarChart2, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'extensao': { label: 'Extensão', icon: PlugZap, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'configuracoes': { label: 'Config', icon: Settings, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'tutoriais': { label: 'Tutoriais', icon: BookOpen, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'suporte': { label: 'Suporte', icon: LifeBuoy, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
+  'whatsapp': { label: 'WhatsApp', icon: MessageSquare, color: 'text-[var(--primary)]', bgColor: 'bg-[var(--brand-light)]' },
 };
 
 const sidebarGroups: { key: string; sections: SectionId[] }[] = [
@@ -71,21 +71,21 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
   const handleClick = (section: SectionId) => onNavigate(section);
 
   const renderItem = (section: SectionId) => {
-    const { label, icon: Icon } = sectionConfig[section];
+    const { label, icon: Icon, color, bgColor } = sectionConfig[section];
     const isActive = activeSection === section;
     return (
       <button
         key={section}
         type="button"
         onClick={() => handleClick(section)}
-        className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition-all duration-200 ${
+        className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-bold transition ${
           isActive
-            ? 'bg-[var(--brand-light)] text-[var(--brand-primary)] shadow-sm shadow-[0_2px_8px_-2px_color-mix(in_srgb,_var(--brand-primary)_30%,_transparent)]'
-            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]'
+            ? `bg-slate-900 text-white ${bgColor} ${color}`
+            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)]'
         }`}
       >
-        <span className={`absolute left-0 h-4 w-0.5 rounded-r-full transition-colors ${isActive ? 'bg-[var(--brand-primary)]' : 'bg-transparent'}`} />
-        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]'}`} />
+        <span className={`absolute left-0 h-4 w-0.5 rounded-r-full transition ${isActive ? 'bg-[var(--primary)]' : 'bg-transparent'}`} />
+        <Icon className={`h-4 w-4 ${isActive ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]'}`} />
         {label}
       </button>
     );
@@ -94,85 +94,31 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
   return (
     <>
       {mobileOpen && (
-        <button type="button" aria-label="Fechar navegação" onClick={onToggleMobile} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden" />
+        <button type="button" aria-label="Fechar navegação" onClick={onToggleMobile} className="fixed inset-0 z-40 bg-black/65 backdrop-blur-[1px] md:hidden" />
       )}
-      <button
-        type="button"
-        onClick={onToggleMobile}
-        aria-label="Abrir navegação"
-        className="fixed left-2 top-14 z-40 grid h-9 w-9 place-items-center rounded-lg bg-[var(--surface-0)] text-[var(--text-primary)] shadow-lg border border-[var(--border-default)] md:hidden"
-      >
-        ☰
-      </button>
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-[var(--border-default)] bg-[var(--surface-0)] px-2 py-3 text-[var(--text-secondary)] ${mobileOpen ? 'flex' : 'hidden'} md:flex`}
-      >
-        <div className="flex items-center gap-2 px-1 pb-3">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-[var(--brand-primary)] to-[var(--brand-primary-hover)] text-white shadow-[0_4px_12px_-4px_color-mix(in_srgb,_var(--brand-primary)_50%,_transparent)]">
-            <ShoppingBag className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-black">
-              <span className="text-[var(--brand-primary)]">Radar</span>{' '}
-              <span className="text-[var(--text-primary)]">de Oferta</span>
-            </div>
-            <div className="truncate text-[8px] font-medium text-[var(--text-muted)]">Painel de afiliados</div>
-          </div>
+      <button type="button" onClick={onToggleMobile} aria-label="Abrir navegação" className="fixed left-2 top-16 z-40 grid h-9 w-9 place-items-center rounded-lg bg-slate-900 text-base text-white shadow-xl md:hidden">☰</button>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[220px] flex-col border-r border-[var(--border)] bg-[var(--aside-bg)] px-2 py-4 text-[var(--text-secondary)] backdrop-blur-xl ${mobileOpen ? 'flex' : 'hidden'} md:flex`}>
+        <div className="flex items-center gap-2 px-1 pb-4">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--primary)] text-base text-white shadow-lg shadow-orange-950/40">📡</div>
+          <div className="text-sm font-black"><span className="text-[var(--primary)]">Radar</span> <span className="text-[var(--text-primary)]">de Oferta</span><div className="text-[9px] font-medium text-[var(--text-secondary)]">Painel de afiliados</div></div>
         </div>
-        <div className="border-t border-[var(--border-default)]" />
-        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-2">
+        <div className="border-t border-slate-800" />
+        <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3">
           {sidebarGroups.map((group, groupIndex) => (
-            <div key={group.key} className={`space-y-0.5 ${groupIndex > 0 ? 'border-t border-[var(--border-default)] pt-2' : ''}`}>
+            <div key={group.key} className={`space-y-0.5 ${groupIndex > 0 ? 'border-t border-slate-800 pt-3' : ''}`}>
               {group.sections.map(renderItem)}
             </div>
           ))}
-          <div className="mt-auto space-y-0.5 border-t border-[var(--border-default)] pt-2">
-            <button
-              type="button"
-              onClick={() => onNavigate('tutoriais' as SectionId)}
-              className="group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]"
-            >
-              <BookOpen className="h-4 w-4 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
-              Tutoriais
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('suporte' as SectionId)}
-              className="group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]"
-            >
-              <LifeBuoy className="h-4 w-4 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
-              Suporte
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('configuracoes' as SectionId)}
-              className="group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold text-[var(--text-secondary)] transition-all hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)]"
-            >
-              <Settings className="h-4 w-4 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
-              Config
-            </button>
+          <div className="mt-auto space-y-0.5 border-t border-slate-800 pt-3">
+            <button type="button" onClick={() => onNavigate('tutoriais' as SectionId)} className="group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-bold text-[var(--text-secondary)] transition hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)]"><BookOpen className="h-4 w-4 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />Tutoriais</button>
+            <button type="button" onClick={() => onNavigate('suporte' as SectionId)} className="group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-bold text-[var(--text-secondary)] transition hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)]"><LifeBuoy className="h-4 w-4 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />Suporte</button>
+            <button type="button" onClick={() => onNavigate('configuracoes' as SectionId)} className="group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-bold text-[var(--text-secondary)] transition hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)]"><Settings className="h-4 w-4 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />Config</button>
           </div>
         </nav>
-        <div className="mt-2 flex items-center gap-2 border-t border-[var(--border-default)] px-1 pt-3">
-          <div className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-[var(--brand-primary)] to-[var(--brand-primary-hover)] text-[10px] font-black text-white">
-            CM
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[11px] font-bold text-[var(--text-primary)]">
-              Carolina de assunção macedo
-            </div>
-            <div className="text-[8px] font-semibold text-[var(--brand-primary)]">
-              PRO | Afiliado Viral
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onNotifications}
-            className="ml-auto btn-icon-primary h-8 w-8"
-            aria-label="Notificações"
-          >
-            <Bell className="h-4 w-4" />
-          </button>
+        <div className="mt-2 flex items-center gap-2 border-t border-slate-800 px-1 pt-3">
+          <div className="grid h-7 w-7 place-items-center rounded-full bg-[var(--primary)] text-[10px] font-black text-white">CM</div>
+          <div className="min-w-0"><div className="truncate text-[11px] font-bold text-[var(--text-primary)]">Carolina de assunção macedo</div><div className="text-[9px] font-semibold text-[var(--primary)]">PRO | Afiliado Viral</div></div>
+          <Bell className="ml-auto h-3.5 w-3.5 text-slate-600" onClick={onNotifications} />
         </div>
       </aside>
     </>

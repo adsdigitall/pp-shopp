@@ -1,5 +1,5 @@
 export type FilterType = 'trending' | 'top_sales' | 'high_commission' | 'high_discount' | 'commission_8' | 'commission_10' | 'best_value';
-export type MarketplaceType = 'shopee' | 'mercado_livre' | 'amazon' | 'magalu' | 'tiktok_shop' | 'shein' | 'aliexpress';
+export type MarketplaceType = 'shopee' | 'mercado_livre' | 'amazon' | 'tiktok_shop' | 'shein' | 'aliexpress';
 export type AffiliateProviderType = 'official' | 'bot_do_afiliado' | 'afilitools' | 'afilimax' | 'manual';
 export type AffiliateLinkStatus = 'pending' | 'generated' | 'failed' | 'expired' | 'manual_required';
 
