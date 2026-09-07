@@ -1808,10 +1808,12 @@ async function handleSaveDispatchAutomation(req, res) {
       sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Selecione ao menos um grupo para ativar o automático.' } });
       return;
     }
-    const value = Math.min(1440, Math.max(10, Number(body.interval?.value) || 30));
     const unit = ['seconds', 'minutes', 'hours'].includes(body.interval?.unit) ? body.interval.unit : 'seconds';
-    const offerValue = Math.min(1440, Math.max(10, Number(body.offerInterval?.value) || value));
+    const minimumInterval = unit === 'seconds' ? 10 : 1;
+    const value = Math.min(1440, Math.max(minimumInterval, Number(body.interval?.value) || 30));
     const offerUnit = ['seconds', 'minutes', 'hours'].includes(body.offerInterval?.unit) ? body.offerInterval.unit : unit;
+    const minimumOfferInterval = offerUnit === 'seconds' ? 10 : 1;
+    const offerValue = Math.min(1440, Math.max(minimumOfferInterval, Number(body.offerInterval?.value) || value));
     const config = await DispatchAutomationStore.save(userId, {
       enabled: body.enabled === true, groups, interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
