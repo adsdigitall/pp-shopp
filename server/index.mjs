@@ -2185,7 +2185,11 @@ async function processDispatchJob(jobId) {
         continue;
       }
       try {
-        const msg = renderWhatsAppMessage(message.whatsapp.customMessage, offer, {
+        const templatePool = Array.isArray(message.whatsapp.templatePool) ? message.whatsapp.templatePool.filter(item => item?.message) : [];
+        const selectedMessage = message.whatsapp.templateMode === 'rotate' && templatePool.length
+          ? templatePool[offerIndex % templatePool.length].message
+          : message.whatsapp.customMessage;
+        const msg = renderWhatsAppMessage(selectedMessage, offer, {
           rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
           rotationIndex: deliveryIndex,
         });

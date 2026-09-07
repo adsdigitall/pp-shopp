@@ -10,7 +10,7 @@ interface DispararWizardProps {
   templates: Template[];
   groups: Group[];
   onSaveQueueSelection: (selectedIds: string[]) => void;
-  onSaveMessage: (message: { whatsapp: { enabled: boolean; templateId: string; customMessage: string; showImage: boolean; rotatingCTAs: boolean } }) => void;
+  onSaveMessage: (message: { whatsapp: { enabled: boolean; templateId: string; customMessage: string; showImage: boolean; rotatingCTAs: boolean; templateMode: 'fixed' | 'rotate'; templatePool?: { id: string; message: string }[] } }) => void;
   onSaveDestinations: (destinations: { groups: Group[]; schedule: 'now' | 'scheduled'; scheduledAt?: string; interval: { value: number; unit: 'seconds' | 'minutes' | 'hours' }; nightPause: boolean; weekendPause: boolean; expirePause: boolean }) => void;
   onExecuteDispatch: () => void;
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
@@ -42,9 +42,10 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
   const [selectedOffers, setSelectedOffers] = useState<string[]>([]);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
   const [selectedTemplateId, setSelectedTemplateId] = useState('vendedor');
+  const [templateMode, setTemplateMode] = useState<'fixed' | 'rotate'>('fixed');
   const [customMessage, setCustomMessage] = useState(defaultTemplates[0].message);
   const [showImage, setShowImage] = useState(true);
-  const [rotatingCTAs, setRotatingCTAs] = useState(false);
+  const [rotatingCTAs, setRotatingCTAs] = useState(true);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [schedule, setSchedule] = useState<'now' | 'scheduled'>('now');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -86,7 +87,7 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
       setStep(2);
     } else if (step === 2) {
       onSaveMessage({
-        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage, showImage, rotatingCTAs }
+        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage, showImage, rotatingCTAs: true, templateMode, templatePool: templateMode === 'rotate' ? allTemplates.map(template => ({ id: template.id, message: template.message })) : undefined }
       });
       setStep(3);
     }
@@ -209,6 +210,16 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
                 <>
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <label className="block text-xs font-bold text-slate-600 mb-2">Modelo</label>
+                    <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                      <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'fixed' ? 'border-orange-400 bg-orange-50' : 'border-slate-200'}`}>
+                        <input type="radio" name="template-mode" checked={templateMode === 'fixed'} onChange={() => setTemplateMode('fixed')} className="mt-0.5 text-[#EE4D2D]" />
+                        <span><strong className="block text-xs text-slate-800">Modelo fixo</strong><small className="text-[10px] text-slate-500">Usa o escolhido em todas as ofertas.</small></span>
+                      </label>
+                      <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'rotate' ? 'border-orange-400 bg-orange-50' : 'border-slate-200'}`}>
+                        <input type="radio" name="template-mode" checked={templateMode === 'rotate'} onChange={() => setTemplateMode('rotate')} className="mt-0.5 text-[#EE4D2D]" />
+                        <span><strong className="block text-xs text-slate-800">Alternar modelos</strong><small className="text-[10px] text-slate-500">Troca o template a cada oferta.</small></span>
+                      </label>
+                    </div>
                     <select
                       value={selectedTemplateId}
                       onChange={e => { setSelectedTemplateId(e.target.value); setCustomMessage(allTemplates.find(t => t.id === e.target.value)?.message || ''); }}
@@ -252,9 +263,9 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
                         <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
                         <span className="text-xs font-medium text-slate-700">Mostrar imagem</span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer opacity-50">
-                        <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} disabled className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D] opacity-50" />
-                        <span className="text-xs font-medium text-slate-500">CTAs rotativas</span>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                        <span className="text-xs font-medium text-slate-700">CTAs fortes e rotativas</span>
                         <span className="text-[10px] text-slate-400 ml-auto">Adicione frases no seu modelo em Configurações pra ativar.</span>
                       </label>
                     </div>
