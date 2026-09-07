@@ -39,7 +39,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'fila' | 'grupos'>('fila');
-  const [automation, setAutomation] = useState<any>({ enabled: false, groups: [], interval: { value: 30, unit: 'seconds' } });
+  const [automation, setAutomation] = useState<any>({ enabled: false, groups: [], interval: { value: 5, unit: 'minutes' }, offerInterval: { value: 5, unit: 'minutes' } });
   const [savingAutomation, setSavingAutomation] = useState(false);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setAutomation(body.config);
-      showToast(automation.enabled ? 'Automação ativada' : 'Automação pausada', automation.enabled ? 'As próximas ofertas adicionadas à fila serão disparadas com esta configuração.' : undefined, 'success');
+      showToast(automation.enabled ? 'Busca automática ativada' : 'Busca automática pausada', automation.enabled ? 'As próximas ofertas serão adicionadas à fila para sua revisão. Nada será enviado sem confirmação.' : undefined, 'success');
     } catch (error) {
       showToast('Erro na automação', error instanceof Error ? error.message : 'Tente novamente.', 'error');
     } finally { setSavingAutomation(false); }
@@ -100,8 +100,8 @@ export const FilaPage: React.FC<FilaPageProps> = ({
 
       <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2"><span className={`grid h-8 w-8 place-items-center rounded-lg ${automation.enabled ? 'bg-[var(--primary)] text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]'}`}><Zap className="h-4 w-4" /></span><div><p className="text-[12px] font-black text-[var(--text-primary)]">Fila automática</p><p className="text-[9px] text-[var(--text-secondary)]">Salve grupos e intervalo uma vez.</p></div></div>
-          <button type="button" onClick={() => setAutomation((prev: any) => ({ ...prev, enabled: !prev.enabled }))} className={`relative h-6 w-11 rounded-full transition ${automation.enabled ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'}`} aria-pressed={automation.enabled} aria-label="Ativar envio automático"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${automation.enabled ? 'left-6' : 'left-1'}`} /></button>
+          <div className="flex min-w-0 items-center gap-2"><span className={`grid h-8 w-8 place-items-center rounded-lg ${automation.enabled ? 'bg-[var(--primary)] text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]'}`}><Zap className="h-4 w-4" /></span><div><p className="text-[12px] font-black text-[var(--text-primary)]">Busca automática</p><p className="text-[9px] text-[var(--text-secondary)]">Só adiciona ofertas à fila para sua revisão.</p></div></div>
+          <button type="button" onClick={() => setAutomation((prev: any) => ({ ...prev, enabled: !prev.enabled }))} className={`relative h-6 w-11 rounded-full transition ${automation.enabled ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'}`} aria-pressed={automation.enabled} aria-label="Ativar busca automática"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${automation.enabled ? 'left-6' : 'left-1'}`} /></button>
         </div>
         {automation.enabled && <div className="mt-3 grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-2">
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5 sm:col-span-2">
@@ -110,10 +110,10 @@ export const FilaPage: React.FC<FilaPageProps> = ({
               <button type="button" onClick={() => setAutomation((prev: any) => ({ ...prev, aiEnabled: !prev.aiEnabled }))} className={`relative h-6 w-11 shrink-0 rounded-full transition ${automation.aiEnabled ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'}`} aria-pressed={automation.aiEnabled === true} aria-label="Ativar filtro por IA"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${automation.aiEnabled ? 'left-6' : 'left-1'}`} /></button>
             </div>
           </div>
-          <label className="grid gap-1 text-[9px] font-bold text-[var(--text-secondary)]">Começar a enviar
+          <label className="grid gap-1 text-[9px] font-bold text-[var(--text-secondary)]">Começar a buscar
             <input aria-label="Início do horário automático" type="time" value={automation.activeFrom || ''} onChange={event => setAutomation((prev: any) => ({ ...prev, activeFrom: event.target.value }))} className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
           </label>
-          <label className="grid gap-1 text-[9px] font-bold text-[var(--text-secondary)]">Parar de enviar
+          <label className="grid gap-1 text-[9px] font-bold text-[var(--text-secondary)]">Parar de buscar
             <input aria-label="Fim do horário automático" type="time" value={automation.activeUntil || ''} onChange={event => setAutomation((prev: any) => ({ ...prev, activeUntil: event.target.value }))} className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
           </label>
           <p className="sm:col-span-2 text-[9px] leading-3 text-[var(--text-secondary)]">Deixe os dois horários vazios para enviar o dia todo. Fora do horário, a oferta fica na fila manual.</p>
@@ -128,7 +128,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
           </div>
           <p className="sm:col-span-2 rounded-md bg-[var(--primary)]/10 px-2 py-1.5 text-[10px] font-bold text-[var(--text-primary)]">Previsão: até {automationCapacity} {automationCapacity === 1 ? 'oferta' : 'ofertas'} neste período, contando a primeira no horário de início.</p>
         </div>}
-        {automation.enabled && <div className="mt-3 border-t border-[var(--border)] pt-3"><p className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Grupos que receberão as próximas ofertas</p><div className="grid gap-1.5 sm:grid-cols-2">{groups.map(group => { const checked = selectedAutomationIds.includes(String(group.id)); return <button type="button" key={group.id} onClick={() => setAutomation((prev: any) => ({ ...prev, groups: checked ? prev.groups.filter((item: any) => String(item.id) !== String(group.id)) : [...prev.groups, { id: group.id, name: group.name, sessionId: (group as any).sessionId }] }))} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[10px] font-bold ${checked ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--text-primary)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'}`}><span className={`grid h-4 w-4 place-items-center rounded border ${checked ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)]'}`}>{checked && <CheckSquare className="h-3 w-3" />}</span><span className="truncate">{group.name}</span></button>; })}</div><div className="mt-3 flex items-center gap-2"><Clock className="h-4 w-4 text-[var(--primary)]" /><input aria-label="Intervalo automático" type="number" min="10" value={automation.interval?.value || 30} onChange={event => setAutomation((prev: any) => ({ ...prev, interval: { ...(prev.interval || {}), value: Number(event.target.value) } }))} className="h-8 w-16 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" /><select aria-label="Unidade de intervalo automático" value={automation.interval?.unit || 'seconds'} onChange={event => setAutomation((prev: any) => ({ ...prev, interval: { ...(prev.interval || {}), unit: event.target.value } }))} className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--text-primary)]"><option value="seconds">segundos</option><option value="minutes">minutos</option><option value="hours">horas</option></select><button type="button" onClick={() => void saveAutomation()} disabled={savingAutomation} className="ml-auto inline-flex h-8 items-center gap-1 rounded-md bg-[var(--primary)] px-3 text-[10px] font-black text-white disabled:opacity-60"><Save className="h-3.5 w-3.5" />{savingAutomation ? 'Salvando' : 'Salvar'}</button></div></div>}
+        {automation.enabled && <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-3"><p className="text-[10px] leading-4 text-[var(--text-secondary)]">As ofertas encontradas entram apenas na fila para você revisar. Nenhuma será enviada sem confirmar em <b>Disparar</b>.</p><button type="button" onClick={() => void saveAutomation()} disabled={savingAutomation} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md bg-[var(--primary)] px-3 text-[10px] font-black text-white disabled:opacity-60"><Save className="h-3.5 w-3.5" />{savingAutomation ? 'Salvando' : 'Salvar'}</button></div>}
       </div>
 
       <div className="flex gap-1.5 mb-3">

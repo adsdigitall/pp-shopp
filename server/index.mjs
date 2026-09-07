@@ -1757,9 +1757,8 @@ async function handleAddToQueue(req, res) {
       affiliateProvider: product.affiliateProvider,
     };
     await PublicationHistoryStore.save(userId, item);
-    const automationJob = await enqueueAutomaticDispatch(userId, product);
-    if (automationJob) await PublicationHistoryStore.delete(userId, item.id);
-    sendJson(res, 201, { ok: true, item, automationJobId: automationJob?.id || null });
+    // A fila é sempre de revisão: adicionar não pode criar ou iniciar disparo.
+    sendJson(res, 201, { ok: true, item });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao adicionar à fila.' } });
   }
@@ -1795,20 +1794,13 @@ const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 30, unit: 'seconds' }, offerInterval: { value: 30, unit: 'seconds' }, aiEnabled: false, activeFrom: '', activeUntil: '' } });
+  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 5, unit: 'minutes' }, offerInterval: { value: 5, unit: 'minutes' }, aiEnabled: false, activeFrom: '', activeUntil: '' } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
   try {
     const userId = requestUserId(req);
     const body = await readJsonBody(req);
-    const knownGroups = await WhatsAppGroupsStore.get(userId);
-    const selectedIds = Array.isArray(body.groupIds) ? body.groupIds.map(String) : [];
-    const groups = knownGroups.filter(group => selectedIds.includes(String(group.id))).map(group => ({ id: group.id, name: group.name, sessionId: group.sessionId }));
-    if (body.enabled === true && groups.length === 0) {
-      sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Selecione ao menos um grupo para ativar o automático.' } });
-      return;
-    }
     const unit = ['seconds', 'minutes', 'hours'].includes(body.interval?.unit) ? body.interval.unit : 'seconds';
     const minimumInterval = unit === 'seconds' ? 10 : 1;
     const value = Math.min(1440, Math.max(minimumInterval, Number(body.interval?.value) || 30));
@@ -1816,9 +1808,9 @@ async function handleSaveDispatchAutomation(req, res) {
     const minimumOfferInterval = offerUnit === 'seconds' ? 10 : 1;
     const offerValue = Math.min(1440, Math.max(minimumOfferInterval, Number(body.offerInterval?.value) || value));
     const config = await DispatchAutomationStore.save(userId, {
-      enabled: body.enabled === true, groups, interval: { value, unit },
+      enabled: body.enabled === true, groups: [], interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
-      sessionId: typeof body.sessionId === 'string' ? body.sessionId : (groups[0]?.sessionId || WAHA_SESSION),
+      sessionId: typeof body.sessionId === 'string' ? body.sessionId : WAHA_SESSION,
       template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
       rotatingCTAs: body.rotatingCTAs !== false,
       aiEnabled: body.aiEnabled === true,
@@ -1832,9 +1824,9 @@ async function handleSaveDispatchAutomation(req, res) {
   }
 }
 
-async function enqueueAutomaticDispatch(userId, offer) {
+async function enqueueAutomaticOfferForReview(userId, offer) {
   const config = await DispatchAutomationStore.get(userId);
-  if (!config?.enabled || !Array.isArray(config.groups) || config.groups.length === 0) return null;
+  if (!config?.enabled) return null;
   if (!automationIsWithinSchedule(config)) {
     logLine(`[AUTOMATION] Fora do horário configurado; ${offer.id} mantida na fila manual.`);
     return null;
@@ -1846,6 +1838,27 @@ async function enqueueAutomaticDispatch(userId, offer) {
       return null;
     }
   }
+  const productKey = dispatchProductKey(offer);
+  const currentQueue = await PublicationHistoryStore.getByUser(userId, 300);
+  if (currentQueue.some(item => dispatchProductKey({ id: item.productId, marketplace: item.marketplace, marketplaceProductId: item.marketplaceProductId }) === productKey)) {
+    logLine(`[AUTOMATION] Oferta ${offer.id} já está na fila de revisão.`);
+    return null;
+  }
+  const item = {
+    id: `queue-auto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    productId: offer.id, marketplace: offer.marketplace, marketplaceProductId: offer.marketplaceProductId,
+    productName: offer.name, imageUrl: offer.imageUrl || '', price: offer.currentPrice,
+    originalPrice: offer.originalPrice, affiliateUrl: offer.affiliateUrl, originalUrl: offer.productUrl,
+    channelId: '', channelName: '', publishedAt: new Date().toISOString(), selected: true,
+    offerScore: offer.offerScore, affiliateProvider: offer.affiliateProvider, source: 'automatic_discovery',
+  };
+  await PublicationHistoryStore.save(userId, item);
+  logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila para revisão manual: ${item.id}`);
+  return item;
+
+  /* Legacy automatic dispatch is deliberately unreachable. It will be removed
+     after deployed workers have consumed this compatible change. */
+  /* Legacy dispatch path intentionally disabled: discovery only queues for review.
   const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const job = {
     id: jobId, userId, source: 'queue_automation', status: 'pending', step: 3, offers: [offer],
@@ -1859,6 +1872,7 @@ async function enqueueAutomaticDispatch(userId, offer) {
   if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void resumeDispatchQueue();
   logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila automática: ${jobId}`);
   return job;
+  */
 }
 
 let automaticDiscoveryRunning = false;
@@ -1868,7 +1882,7 @@ async function runAutomaticOfferDiscovery() {
   automaticDiscoveryRunning = true;
   try {
     const configs = await DispatchAutomationStore.list();
-    for (const config of configs.filter(item => item?.enabled && Array.isArray(item.groups) && item.groups.length)) {
+    for (const config of configs.filter(item => item?.enabled)) {
       if (!automationIsWithinSchedule(config)) continue;
       const dueAt = Date.parse(String(config.nextDiscoveryAt || ''));
       if (Number.isFinite(dueAt) && dueAt > Date.now()) continue;
@@ -1889,7 +1903,8 @@ async function runAutomaticOfferDiscovery() {
           logLine(`[AUTOMATION] Nenhuma oferta inédita disponível para ${config.userId}.`);
           continue;
         }
-        const job = await enqueueAutomaticDispatch(config.userId, offer);
+        const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer);
+        const job = queuedItem;
         await DispatchAutomationStore.save(config.userId, {
           ...config,
           nextDiscoveryAt,
