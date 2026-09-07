@@ -1866,7 +1866,7 @@ async function enqueueAutomaticOfferForReview(userId, offer) {
   const item = {
     id: `queue-auto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     productId: offer.id, marketplace: offer.marketplace, marketplaceProductId: offer.marketplaceProductId,
-    productName: offer.name, imageUrl: offer.imageUrl || '', price: offer.currentPrice,
+    productName: offer.name || offer.title || '', imageUrl: offer.imageUrl || '', price: offer.currentPrice,
     originalPrice: offer.originalPrice, affiliateUrl: offer.affiliateUrl, originalUrl: offer.productUrl,
     channelId: '', channelName: '', publishedAt: new Date().toISOString(), selected: true,
     offerScore: offer.offerScore, affiliateProvider: offer.affiliateProvider, source: 'automatic_discovery',
@@ -1976,7 +1976,7 @@ async function evaluateOfferForAutomation(offer) {
   const apiKey = (process.env.OPENAI_API_KEY || '').trim();
   if (!apiKey) return { approved: false, reason: 'IA não configurada no servidor' };
   const facts = {
-    title: String(offer?.name || '').slice(0, 220),
+    title: String(offer?.name || offer?.title || '').slice(0, 220),
     marketplace: String(offer?.marketplace || 'shopee'),
     category: String(offer?.category || '').slice(0, 100),
     currentPrice: Number.isFinite(Number(offer?.currentPrice)) ? Number(offer.currentPrice) : null,
