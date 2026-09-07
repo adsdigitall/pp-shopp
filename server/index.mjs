@@ -1794,7 +1794,7 @@ const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, groups: [], interval: { value: 30, unit: 'seconds' } } });
+  sendJson(res, 200, { config: config || { enabled: false, groups: [], interval: { value: 30, unit: 'seconds' }, aiEnabled: false, activeFrom: '', activeUntil: '' } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -1815,6 +1815,9 @@ async function handleSaveDispatchAutomation(req, res) {
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : (groups[0]?.sessionId || WAHA_SESSION),
       template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
       rotatingCTAs: body.rotatingCTAs !== false,
+      aiEnabled: body.aiEnabled === true,
+      activeFrom: isValidAutomationTime(body.activeFrom) ? String(body.activeFrom) : '',
+      activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '',
     });
     sendJson(res, 200, { config });
   } catch (err) {
@@ -1825,6 +1828,17 @@ async function handleSaveDispatchAutomation(req, res) {
 async function enqueueAutomaticDispatch(userId, offer) {
   const config = await DispatchAutomationStore.get(userId);
   if (!config?.enabled || !Array.isArray(config.groups) || config.groups.length === 0) return null;
+  if (!automationIsWithinSchedule(config)) {
+    logLine(`[AUTOMATION] Fora do horário configurado; ${offer.id} mantida na fila manual.`);
+    return null;
+  }
+  if (config.aiEnabled) {
+    const decision = await evaluateOfferForAutomation(offer);
+    if (!decision.approved) {
+      logLine(`[AUTOMATION] IA reteve ${offer.id}: ${decision.reason}`);
+      return null;
+    }
+  }
   const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const job = {
     id: jobId, userId, source: 'queue_automation', status: 'pending', step: 3, offers: [offer],
@@ -1838,6 +1852,60 @@ async function enqueueAutomaticDispatch(userId, offer) {
   if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void processDispatchJob(jobId);
   logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila automática: ${jobId}`);
   return job;
+}
+
+function automationIsWithinSchedule(config, now = new Date()) {
+  const from = String(config?.activeFrom || '');
+  const until = String(config?.activeUntil || '');
+  if (!isValidAutomationTime(from) || !isValidAutomationTime(until) || from === until) return true;
+  const current = now.getHours() * 60 + now.getMinutes();
+  const parse = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  const start = parse(from);
+  const end = parse(until);
+  return start < end ? current >= start && current < end : current >= start || current < end;
+}
+
+function isValidAutomationTime(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+}
+
+async function evaluateOfferForAutomation(offer) {
+  const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (!apiKey) return { approved: false, reason: 'IA não configurada no servidor' };
+  const facts = {
+    title: String(offer?.name || '').slice(0, 220),
+    marketplace: String(offer?.marketplace || 'shopee'),
+    category: String(offer?.category || '').slice(0, 100),
+    currentPrice: Number.isFinite(Number(offer?.currentPrice)) ? Number(offer.currentPrice) : null,
+    originalPrice: Number.isFinite(Number(offer?.originalPrice)) ? Number(offer.originalPrice) : null,
+    discountPercentage: Number.isFinite(Number(offer?.discountPercentage)) ? Number(offer.discountPercentage) : null,
+    salesCount: Number.isFinite(Number(offer?.salesCount)) ? Number(offer.salesCount) : null,
+    commissionRate: Number.isFinite(Number(offer?.commissionRate)) ? Number(offer.commissionRate) : null,
+    commissionAmount: Number.isFinite(Number(offer?.commissionAmount)) ? Number(offer.commissionAmount) : null,
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        input: `Você é um filtro conservador de ofertas de marketplace. Analise SOMENTE estes dados reais, sem inventar fatos: ${JSON.stringify(facts)}. Aprove somente se houver valor claro para um grupo de ofertas: desconto relevante ou vendas fortes ou comissão relevante, e título/preço válidos. Responda exclusivamente JSON válido no formato {"approved":boolean,"reason":"até 120 caracteres","score":0-100}.`,
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+    const json = await response.json().catch(() => null);
+    const text = json?.output_text || json?.output?.flatMap((item) => item?.content || []).find((item) => item?.type === 'output_text')?.text;
+    const parsed = typeof text === 'string' ? JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim()) : null;
+    if (!response.ok || !parsed || typeof parsed.approved !== 'boolean') return { approved: false, reason: 'IA não retornou uma avaliação válida' };
+    return { approved: parsed.approved === true, reason: String(parsed.reason || 'Avaliação automática').slice(0, 120), score: Number(parsed.score) || 0 };
+  } catch {
+    return { approved: false, reason: 'IA indisponível; oferta mantida na fila manual' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function handleSendOffer(req, res, pathOnly) {
