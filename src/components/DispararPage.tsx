@@ -226,14 +226,19 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     });
   };
 
-  const handleCancelDispatch = async (jobId: string) => {
+  const handleCancelDispatch = async (jobIds: string | string[]) => {
     if (!window.confirm('Cancelar este disparo? Os envios já concluídos serão mantidos, mas nenhum item pendente será enviado.')) return;
-    setCancellingJobId(jobId);
+    const ids = Array.isArray(jobIds) ? jobIds : [jobIds];
+    const requestId = ids.join('|');
+    setCancellingJobId(requestId);
     try {
-      const response = await fetch(`/api/dispatch/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível cancelar o disparo.');
-      if (dispatchJob?.id === jobId) setDispatchJob(body.job);
+      const results = await Promise.all(ids.map(async id => {
+        const response = await fetch(`/api/dispatch/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível cancelar o disparo.');
+        return body;
+      }));
+      if (dispatchJob?.id && ids.includes(dispatchJob.id)) setDispatchJob(results[0]?.job);
       await refreshHistory();
       onShowToast('Disparo cancelado', 'Os envios pendentes foram interrompidos.', 'info');
     } catch (error) {
@@ -248,11 +253,28 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const selectedGroupsData = groups.filter(g => selectedGroups.includes(g.id));
   const totalEnvios = selectedOffers.length * selectedGroups.length;
   const activeJobs = dispatchHistory.filter(job => ['pending', 'running', 'waiting_connection'].includes(job.status));
+  const visibleActiveJobs = Object.values(activeJobs.reduce((result: Record<string, any>, job: any) => {
+    const key = job.source === 'queue_automation' ? `automatico:${job.destinations?.sessionId || 'default'}` : job.id;
+    const existing = result[key];
+    if (!existing) {
+      result[key] = { ...job, id: key, jobIds: [job.id], offers: [...(job.offers || [])], stats: { ...(job.stats || {}) }, destinations: { ...job.destinations, groups: [...(job.destinations?.groups || [])] } };
+      return result;
+    }
+    existing.jobIds.push(job.id);
+    existing.offers.push(...(job.offers || []));
+    existing.stats.sent = (existing.stats.sent || 0) + (job.stats?.sent || 0);
+    existing.stats.failed = (existing.stats.failed || 0) + (job.stats?.failed || 0);
+    existing.stats.pending = (existing.stats.pending || 0) + (job.stats?.pending || 0);
+    const knownGroups = new Set(existing.destinations.groups.map((group: any) => String(group.id)));
+    existing.destinations.groups.push(...(job.destinations?.groups || []).filter((group: any) => !knownGroups.has(String(group.id))));
+    if (job.status === 'running') existing.status = 'running';
+    return result;
+  }, {}));
   const recentJobs = dispatchHistory.filter(job => !['pending', 'running', 'waiting_connection'].includes(job.status));
   const dispatchTabs = (
     <div className="flex gap-5 border-b border-[var(--border)] px-3 pt-3 text-[12px]">
       <button type="button" onClick={() => setActiveTab('new')} className={`pb-2.5 font-semibold ${activeTab === 'new' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Novo Disparo</button>
-      <button type="button" onClick={() => setActiveTab('ongoing')} className={`flex items-center gap-1.5 pb-2.5 font-semibold ${activeTab === 'ongoing' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Em andamento <span className="grid min-w-5 place-items-center rounded-full bg-[var(--primary)] px-1 text-[9px] text-white">{activeJobs.length}</span></button>
+      <button type="button" onClick={() => setActiveTab('ongoing')} className={`flex items-center gap-1.5 pb-2.5 font-semibold ${activeTab === 'ongoing' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Em andamento <span className="grid min-w-5 place-items-center rounded-full bg-[var(--primary)] px-1 text-[9px] text-white">{visibleActiveJobs.length}</span></button>
     </div>
   );
 
@@ -262,15 +284,15 @@ export const DispararPage: React.FC<DispararPageProps> = ({
       <div className="space-y-5 px-3 py-4 pb-24">
         <header><h2 className="text-xl font-black text-[var(--text-primary)]">Disparos em andamento</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado.</p></header>
         <div className="space-y-2.5">
-          {activeJobs.map(job => {
+          {visibleActiveJobs.map((job: any) => {
             const total = Math.max(1, (job.offers?.length || 0) * (job.destinations?.groups?.length || 0));
             const done = (job.stats?.sent || 0) + (job.stats?.failed || 0);
             const percent = Math.min(100, Math.round(done / total * 100));
             return <article key={job.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-              <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3></div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
+              <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3>{job.jobIds?.length > 1 && <p className="mt-1 text-[9px] text-[var(--text-secondary)]">Piloto automático: {job.jobIds.length} entradas agrupadas nesta linha.</p>}</div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--primary)] transition-[width]" style={{ width: `${percent}%` }} /></div>
               <div className="mt-2 flex justify-between text-[10px] text-[var(--text-secondary)]"><span>{job.stats?.sent || 0} enviados · {job.stats?.failed || 0} falhas</span><span>{percent}% · intervalo {job.destinations?.interval?.value || 30} {job.destinations?.interval?.unit === 'minutes' ? 'min' : job.destinations?.interval?.unit === 'hours' ? 'h' : 's'}</span></div>
-              <button type="button" onClick={() => void handleCancelDispatch(job.id)} disabled={cancellingJobId === job.id} className="pressable mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--error)]/60 bg-[var(--error)]/10 px-3 text-[10px] font-bold text-[var(--error)] transition hover:bg-[var(--error)]/20 disabled:cursor-wait disabled:opacity-60"><Ban className="h-3.5 w-3.5" />{cancellingJobId === job.id ? 'Cancelando…' : 'Cancelar disparo'}</button>
+              <button type="button" onClick={() => void handleCancelDispatch(job.jobIds || job.id)} disabled={cancellingJobId === (job.jobIds || [job.id]).join('|')} className="pressable mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--error)]/60 bg-[var(--error)]/10 px-3 text-[10px] font-bold text-[var(--error)] transition hover:bg-[var(--error)]/20 disabled:cursor-wait disabled:opacity-60"><Ban className="h-3.5 w-3.5" />{cancellingJobId === (job.jobIds || [job.id]).join('|') ? 'Cancelando…' : 'Cancelar disparo'}</button>
             </article>;
           })}
           {!activeJobs.length && <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[11px] text-[var(--text-secondary)]">Nenhum disparo em andamento.</div>}
