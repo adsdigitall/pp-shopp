@@ -1807,7 +1807,7 @@ async function handleSaveDispatchAutomation(req, res) {
     const offerUnit = ['seconds', 'minutes', 'hours'].includes(body.offerInterval?.unit) ? body.offerInterval.unit : unit;
     const minimumOfferInterval = offerUnit === 'seconds' ? 10 : 1;
     const offerValue = Math.min(1440, Math.max(minimumOfferInterval, Number(body.offerInterval?.value) || value));
-    const batchSize = Math.min(20, Math.max(1, Math.round(Number(body.batchSize) || 10)));
+    const batchSize = Math.min(50, Math.max(1, Math.round(Number(body.batchSize) || 10)));
     const config = await DispatchAutomationStore.save(userId, {
       enabled: body.enabled === true, groups: [], interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
@@ -1896,10 +1896,10 @@ async function runAutomaticOfferDiscovery() {
         const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
         const keyword = categories.length ? categories[categoryCursor % categories.length] : '';
         const { nodes } = await searchProductOffers({
-          keyword, filter: 'trending', page: 1, limit: 24, categoryId: null, config: loadShopeeConfig(),
+          keyword, filter: 'trending', page: 1, limit: 50, categoryId: null, config: loadShopeeConfig(),
         });
         const seen = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys : []);
-        const batchSize = Math.min(20, Math.max(1, Number(config.batchSize) || 10));
+        const batchSize = Math.min(50, Math.max(1, Number(config.batchSize) || 10));
         const offers = normalizeProductOffers(nodes, 'trending')
           .filter(item => item?.id && !seen.has(dispatchProductKey(item)))
           .slice(0, batchSize);
