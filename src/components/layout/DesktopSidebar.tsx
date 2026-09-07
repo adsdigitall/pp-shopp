@@ -96,8 +96,10 @@ export function DesktopSidebar({
   onAnalytics,
   className,
 }: DesktopSidebarProps) {
+  const normalizeSection = (section: string) => section.replace(/^\/+/, '') as SectionId;
+
   const handleClick = (section: SectionId) => {
-    onNavigate(section);
+    onNavigate(normalizeSection(section));
   };
 
   const renderItem = (section: SectionId) => {
@@ -184,15 +186,15 @@ export function DesktopSidebar({
                   <button
                     key={item.href}
                     type="button"
-                    onClick={() => handleClick(item.href as SectionId)}
+                    onClick={() => handleClick(normalizeSection(item.href))}
                     className={cn(
                       "group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition-all duration-200",
-                      activeSection === (item.href as SectionId)
+                      activeSection === normalizeSection(item.href)
                         ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-primary"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                     )}
                   >
-                    <item.icon className={cn("h-4 w-4 shrink-0", activeSection === (item.href as SectionId) ? "text-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground")} />
+                    <item.icon className={cn("h-4 w-4 shrink-0", activeSection === normalizeSection(item.href) ? "text-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground")} />
                     <span className="truncate">{item.label}</span>
                   </button>
                 ))}
@@ -204,15 +206,15 @@ export function DesktopSidebar({
               <button
                 key={item.href}
                 type="button"
-                onClick={() => handleClick(item.href as SectionId)}
+                onClick={() => handleClick(normalizeSection(item.href))}
                 className={cn(
                   "group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition-all duration-200",
-                  activeSection === (item.href as SectionId)
+                  activeSection === normalizeSection(item.href)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-primary"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 )}
               >
-                <item.icon className={cn("h-4 w-4 shrink-0", activeSection === (item.href as SectionId) ? "text-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground")} />
+                <item.icon className={cn("h-4 w-4 shrink-0", activeSection === normalizeSection(item.href) ? "text-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground")} />
                 {item.label}
               </button>
             ))}
