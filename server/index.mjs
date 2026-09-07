@@ -239,7 +239,9 @@ function readRawBody(req) {
     let raw = '';
     req.on('data', (chunk) => {
       raw += chunk;
-      if (raw.length > 12_000) reject(new Error('BODY_TOO_LARGE'));
+      // Lotes de até 50 ofertas carregam imagem e links; 12 KB era
+      // insuficiente e fazia a criação do disparo falhar silenciosamente.
+      if (raw.length > 1_000_000) reject(new Error('BODY_TOO_LARGE'));
     });
     req.on('end', () => resolve(raw));
     req.on('error', reject);
