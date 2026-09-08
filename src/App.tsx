@@ -71,6 +71,27 @@ function readRecentProductIds() {
   }
 }
 
+function normalizeQueueItem(raw: any): QueueItem {
+  const source = raw?.product && typeof raw.product === 'object' ? raw.product : raw || {};
+  const product: any = {
+    ...source,
+    id: source.id || raw?.productId || raw?.id || `queue-product-${Date.now()}`,
+    name: source.name || source.productName || source.title || raw?.productName || raw?.name || raw?.title || 'Oferta especial',
+    imageUrl: source.imageUrl || raw?.imageUrl || '',
+    currentPrice: source.currentPrice ?? source.price ?? raw?.currentPrice ?? raw?.price,
+    originalPrice: source.originalPrice ?? raw?.originalPrice,
+    affiliateUrl: source.affiliateUrl || raw?.affiliateUrl || '',
+    productUrl: source.productUrl || source.originalUrl || raw?.productUrl || raw?.originalUrl || '',
+  };
+  return {
+    ...raw,
+    id: String(raw?.id || `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+    product,
+    addedAt: raw?.addedAt || raw?.publishedAt || new Date().toISOString(),
+    selected: raw?.selected !== false,
+  } as QueueItem;
+}
+
 type Marketplace = 'shopee' | 'mercado_livre';
 
 function decodeVapidKey(value: string) {
@@ -117,7 +138,7 @@ export function App() {
         if (!response.ok) return;
         const body = await response.json();
         const items = Array.isArray(body?.items) ? body.items : [];
-        if (!cancelled) setQueueItems(items as QueueItem[]);
+        if (!cancelled) setQueueItems(items.map(normalizeQueueItem));
       } catch {
       }
     };
@@ -611,7 +632,7 @@ export function App() {
 
   return (
     <TooltipProvider>
-    <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal">
+    <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal bg-gradient-to-br from-[var(--background)] via-[var(--surface)] to-[var(--background)]">
       <div className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center transition-opacity" style={{ opacity: pullDistance > 0 ? 1 : 0 }}>
         <div className="flex items-center gap-2 rounded-full bg-neutral-900 dark:bg-neutral-50 px-3 py-2 text-xs font-bold text-white dark:text-neutral-950 shadow-xl">
           <RefreshCw className={`h-4 w-4 ${pullDistance >= 60 ? 'rotate-180' : ''}`} />
@@ -759,17 +780,17 @@ export function App() {
           onDisconnectWhatsApp={handleDisconnectWhatsApp}
         /></div>
 
-        <section id="tutoriais" className={`${activeSection === 'tutoriais' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
-          <h2 className="text-base font-black text-slate-900">Tutoriais</h2>
-          <p className="mt-1 text-xs text-slate-500">Aprenda a garimpar, revisar e copiar ofertas para seus grupos com o fluxo manual seguro.</p>
-          <ol className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3"><li><b>1.</b> Escolha um produto.</li><li><b>2.</b> Gere e revise a mensagem.</li><li><b>3.</b> Copie e envie no WhatsApp.</li></ol>
-        </section>
+<div className="rounded-xl border border-orange-200 bg-white/80 p-5 shadow-sm backdrop-blur-md card-floating">
+            <h2 className="text-base font-black text-slate-900">Tutoriais</h2>
+            <p className="mt-1 text-xs text-slate-500">Aprenda a garimpar, revisar e copiar ofertas para seus grupos com o fluxo manual seguro.</p>
+            <ol className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3"><li><b>1.</b> Escolha um produto.</li><li><b>2.</b> Gere e revise a mensagem.</li><li><b>3.</b> Copie e envie no WhatsApp.</li></ol>
+          </div>
 
-        <section id="suporte" className={`${activeSection === 'suporte' ? '' : 'hidden'} rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md`}>
-          <h2 className="text-base font-black text-slate-900">Suporte</h2>
-          <p className="mt-1 text-xs text-slate-500">Precisa de ajuda? Confira as instruções da extensão e valide suas configurações de integração antes de solicitar atendimento.</p>
-          <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="mt-3 rounded-xl bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-700 hover:bg-orange-100">Abrir configurações</button>
-        </section>
+<section id="suporte" className={`${activeSection === 'suporte' ? '' : 'hidden'} rounded-3xl border border-orange-200 bg-white/80 p-5 shadow-sm backdrop-blur-md card-floating`}>
+           <h2 className="text-base font-black text-slate-900">Suporte</h2>
+           <p className="mt-1 text-xs text-slate-500">Precisa de ajuda? Confira as instruções da extensão e valide suas configurações de integração antes de solicitar atendimento.</p>
+           <button type="button" onClick={() => setIsSettingsModalOpen(true)} className="mt-3 rounded-xl bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-700 hover:bg-orange-100 btn-floating">Abrir configurações</button>
+         </section>
       </main>
 
       <OfferPreviewModal product={selectedProduct} isOpen={isOfferModalOpen} onClose={() => setIsOfferModalOpen(false)} onShowToast={showToast} />
