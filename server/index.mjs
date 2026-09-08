@@ -390,7 +390,9 @@ function parseProductsQuery(url) {
 
   let limit = Number.parseInt(qs.get('limit') || '12', 10);
   if (!Number.isFinite(limit) || limit < 1) limit = 12;
-  if (limit > 50) limit = 50;
+  // A API oficial aceita atÃ© 500 itens por pÃ¡gina; mantemos 100 como padrÃ£o
+  // no front para trazer muito mais ofertas sem estourar o payload do navegador.
+  if (limit > 500) limit = 500;
 
   return { filter, keyword, categoryId, page, limit };
 }

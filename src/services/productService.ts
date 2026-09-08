@@ -127,7 +127,9 @@ class ProductService {
     params.set('sort', activeFilter);
     params.set('page', String(page));
     params.set('_refresh', String(Date.now()));
-    params.set('limit', activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value' ? '50' : '12');
+    // Puxa um lote maior por pÃ¡gina; a paginaÃ§Ã£o/infinite scroll continua
+    // trazendo as prÃ³ximas pÃ¡ginas atÃ© esgotar o catÃ¡logo permitido pela API.
+    params.set('limit', '100');
     if (activeFilter === 'commission_8' || activeFilter === 'commission_10' || activeFilter === 'best_value') params.set('sort', 'high_commission');
     if (query.trim()) params.set('keyword', query.trim());
 
