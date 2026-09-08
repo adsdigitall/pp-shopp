@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Wifi, X, CheckCircle2, AlertCircle, RotateCcw, Smartphone, QrCode, Users, RefreshCw, Trash2, CheckSquare, Square, Search, Download, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { cn } from '@/lib/utils';
 
 interface WhatsAppPageProps {
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
@@ -249,15 +252,15 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
   const getStatusConfig = (): { label: string; color: string; icon: React.ReactNode } => {
     switch (session?.status) {
       case 'working':
-        return { label: 'Conectado', color: 'bg-green-100 text-green-700', icon: <CheckCircle2 className="w-4 h-4" /> };
+        return { label: 'Conectado', color: 'bg-[var(--success)]/10 text-[var(--success)]', icon: <CheckCircle2 className="w-4 h-4" /> };
       case 'qr_code':
-        return { label: 'Aguardando QR Code', color: 'bg-orange-100 text-orange-700', icon: <QrCode className="w-4 h-4" /> };
+        return { label: 'Aguardando QR Code', color: 'bg-[var(--warning)]/10 text-[var(--warning)]', icon: <QrCode className="w-4 h-4" /> };
       case 'connecting':
-        return { label: 'Conectando...', color: 'bg-blue-100 text-blue-700', icon: <RotateCcw className="w-4 h-4 animate-spin" /> };
+        return { label: 'Conectando...', color: 'bg-[var(--primary)]/10 text-[var(--primary)]', icon: <RotateCcw className="w-4 h-4 animate-spin" /> };
       case 'failed':
-        return { label: 'Erro na conexão', color: 'bg-red-100 text-red-700', icon: <AlertCircle className="w-4 h-4" /> };
+        return { label: 'Erro na conexão', color: 'bg-[var(--error)]/10 text-[var(--error)]', icon: <AlertCircle className="w-4 h-4" /> };
       default:
-        return { label: 'Desconectado', color: 'bg-slate-100 text-slate-700', icon: <Wifi className="w-4 h-4" /> };
+        return { label: 'Desconectado', color: 'bg-[var(--surface-elevated)] text-[var(--text-primary)]', icon: <Wifi className="w-4 h-4" /> };
     }
   };
 
@@ -268,8 +271,8 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">WhatsApp</h1>
-          <p className="text-sm text-slate-500 mt-1">Gerencie a conexão e grupos para disparos</p>
+          <h1 className="text-2xl font-black text-[var(--text-primary)]">WhatsApp</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">Gerencie a conexão e grupos para disparos</p>
         </div>
         <div className="flex items-center gap-3">
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusConfig.color}`}>
@@ -278,23 +281,23 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Contas conectadas</p>
             <p className="mt-1 text-sm text-[var(--text-primary)]">Cada sessão WAHA mantém seus próprios grupos e fila.</p>
           </div>
-          <button type="button" onClick={() => setShowNewConnection(value => !value)} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)]">+ Adicionar WhatsApp</button>
+          <Button type="button" onClick={() => setShowNewConnection(value => !value)} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--primary-hover)]">+ Adicionar WhatsApp</Button>
         </div>
-        {sessions.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{sessions.map(item => <button type="button" key={item.id} onClick={() => setSelectedSessionId(item.wahaSessionId)} className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${selectedSessionId === item.wahaSessionId ? 'border-[var(--primary)] bg-[var(--brand-light)]' : 'border-[var(--border)] bg-[var(--surface-secondary)]'}`}><span><span className="block text-sm font-bold text-[var(--text-primary)]">{item.name}</span><span className="block text-xs text-[var(--text-secondary)]">{item.phone || item.wahaSessionId}</span></span><span className="text-xs font-bold text-[var(--text-secondary)]">{item.status === 'WORKING' ? 'Conectado' : 'Não conectado'}</span></button>)}</div>}
-        {showNewConnection && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><input value={newConnectionName} onChange={event => setNewConnectionName(event.target.value)} placeholder="Nome da conexão (ex.: Radar Principal)" className="min-h-11 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-3 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" /><button type="button" onClick={handleCreateConnection} disabled={loading} className="rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-bold text-white disabled:opacity-50">Criar conexão</button></div>}
+        {sessions.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{sessions.map(item => <Button type="button" key={item.id} onClick={() => setSelectedSessionId(item.wahaSessionId)} className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${selectedSessionId === item.wahaSessionId ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)] bg-[var(--surface-elevated)]'}`}><span><span className="block text-sm font-bold text-[var(--text-primary)]">{item.name}</span><span className="block text-xs text-[var(--text-secondary)]">{item.phone || item.wahaSessionId}</span></span><span className="text-xs font-bold text-[var(--text-secondary)]">{item.status === 'WORKING' ? 'Conectado' : 'Não conectado'}</span></Button>)}</div>}
+        {showNewConnection && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Input value={newConnectionName} onChange={event => setNewConnectionName(event.target.value)} placeholder="Nome da conexão (ex.: Radar Principal)" className="min-h-11 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" /><Button type="button" onClick={handleCreateConnection} disabled={loading} className="rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-bold text-white disabled:opacity-50">Criar conexão</Button></div>}
       </div>
 
       {/* Connection Card */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
         {session?.status === 'qr_code' && session.qrCode && (
           <div className="text-center space-y-4">
-            <div className="grid h-64 w-64 place-items-center rounded-xl bg-slate-50 mx-auto border border-slate-200">
+            <div className="grid h-64 w-64 place-items-center rounded-xl bg-[var(--surface-elevated)] mx-auto border border-[var(--border)]">
               <img 
                 src={`data:image/png;base64,${session.qrCode}`} 
                 alt="QR Code WhatsApp" 
@@ -302,23 +305,23 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
               />
             </div>
             <div className="space-y-2">
-              <p className="font-bold text-slate-900">Escaneie o QR Code</p>
-              <p className="text-sm text-slate-500">Abra o WhatsApp no celular → Dispositivos conectados → Conectar aparelho</p>
+              <p className="font-bold text-[var(--text-primary)]">Escaneie o QR Code</p>
+              <p className="text-sm text-[var(--text-secondary)]">Abra o WhatsApp no celular → Dispositivos conectados → Conectar aparelho</p>
               <div className="flex gap-2 justify-center">
-                <button
+                <Button
                   onClick={handleRefreshQR}
                   disabled={loading}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-bold text-[var(--text-primary)] hover:bg-[var(--surface-hover)] flex items-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" /> Atualizar QR
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleDisconnect}
                   disabled={loading}
-                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100 flex items-center gap-2"
+                  className="rounded-xl border border-[var(--error)]/20 bg-[var(--error)]/10 px-4 py-2 text-sm font-bold text-[var(--error)] hover:bg-[var(--error)]/10 flex items-center gap-2"
                 >
                   <X className="w-4 h-4" /> Cancelar
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -327,143 +330,143 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
         {session?.status === 'working' && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-green-100">
-                <CheckCircle2 className="w-6 h-6 text-green-700" />
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-[var(--success)]/10">
+                <CheckCircle2 className="w-6 h-6 text-[var(--success)]" />
               </div>
               <div>
-                <p className="font-bold text-slate-900">WhatsApp Conectado</p>
-                <p className="text-sm text-slate-500">
+                <p className="font-bold text-[var(--text-primary)]">WhatsApp Conectado</p>
+                <p className="text-sm text-[var(--text-secondary)]">
                   {session.phone ? `📱 ${session.phone}` : 'Pronto para disparos'}
                 </p>
               </div>
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={handleSyncGroups}
                 disabled={groupsLoading}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-bold text-[var(--text-primary)] hover:bg-[var(--surface-hover)] flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" /> Sincronizar Grupos
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleDisconnect}
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100 flex items-center gap-2"
+                className="rounded-xl border border-[var(--error)]/20 bg-[var(--error)]/10 px-4 py-2 text-sm font-bold text-[var(--error)] hover:bg-[var(--error)]/10 flex items-center gap-2"
               >
                 <Wifi className="w-4 h-4" /> Desconectar
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         {session?.status === 'connecting' && (
           <div className="text-center space-y-4 py-4">
-            <div className="grid h-20 w-20 place-items-center rounded-full bg-blue-100 mx-auto">
-              <RotateCcw className="w-10 h-10 text-blue-700 animate-spin" />
+            <div className="grid h-20 w-20 place-items-center rounded-full bg-[var(--primary)]/10 mx-auto">
+              <RotateCcw className="w-10 h-10 text-[var(--primary)] animate-spin" />
             </div>
-            <p className="font-bold text-slate-900">Conectando...</p>
-            <p className="text-sm text-slate-500">Aguarde enquanto iniciamos a sessão</p>
+            <p className="font-bold text-[var(--text-primary)]">Conectando...</p>
+            <p className="text-sm text-[var(--text-secondary)]">Aguarde enquanto iniciamos a sessão</p>
           </div>
         )}
 
         {session?.status === 'failed' && (
           <div className="text-center space-y-4 py-4">
-            <div className="grid h-20 w-20 place-items-center rounded-full bg-red-100 mx-auto">
-              <AlertCircle className="w-10 h-10 text-red-700" />
+            <div className="grid h-20 w-20 place-items-center rounded-full bg-[var(--error)]/10 mx-auto">
+              <AlertCircle className="w-10 h-10 text-[var(--error)]" />
             </div>
-            <p className="font-bold text-slate-900">Falha na conexão</p>
-            <p className="text-sm text-slate-500">Tente reconectar</p>
-            <button
+            <p className="font-bold text-[var(--text-primary)]">Falha na conexão</p>
+            <p className="text-sm text-[var(--text-secondary)]">Tente reconectar</p>
+            <Button
               onClick={handleConnect}
               disabled={loading}
-              className="rounded-xl bg-brand-primary px-6 py-3 text-sm font-black text-white hover:bg-brand-primary-hover mx-auto"
+              className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-black text-white hover:bg-[var(--primary-hover)] mx-auto"
             >
               Tentar novamente
-            </button>
+            </Button>
           </div>
         )}
 
         {(!session || session?.status === 'disconnected') && (
           <div className="text-center space-y-4 py-4">
-            <div className="grid h-20 w-20 place-items-center rounded-full bg-slate-100 mx-auto">
-              <Smartphone className="w-10 h-10 text-slate-400" />
+            <div className="grid h-20 w-20 place-items-center rounded-full bg-[var(--surface-elevated)] mx-auto">
+              <Smartphone className="w-10 h-10 text-[var(--text-secondary)]" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">WhatsApp não conectado</p>
-              <p className="mt-1 text-sm text-slate-500">Conecte para gerenciar grupos e fazer disparos</p>
+              <p className="font-bold text-[var(--text-primary)]">WhatsApp não conectado</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Conecte para gerenciar grupos e fazer disparos</p>
             </div>
-            <button
+            <Button
               onClick={handleConnect}
               disabled={loading}
-              className="rounded-xl bg-brand-primary px-6 py-3 text-sm font-black text-white hover:bg-brand-primary-hover mx-auto"
+              className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-black text-white hover:bg-[var(--primary-hover)] mx-auto"
             >
               <Smartphone className="w-4 h-4" /> Conectar WhatsApp
-            </button>
-            <p className="text-[10px] text-slate-500">Vamos abrir o WhatsApp Web pra você escanear o QR Code</p>
+            </Button>
+            <p className="text-[10px] text-[var(--text-secondary)]">Vamos abrir o WhatsApp Web pra você escanear o QR Code</p>
           </div>
         )}
       </div>
 
       {/* Groups Section */}
       {session?.status === 'working' && (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+          <div className="border-b border-[var(--border)] px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-purple-100">
-                <Users className="w-5 h-5 text-purple-700" />
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--primary)]/10">
+                <Users className="w-5 h-5 text-[var(--primary)]" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-slate-900">Grupos do WhatsApp</h2>
-                <p className="text-xs text-slate-500">{groups.length} grupos • {selectedCount} selecionados</p>
+                <h2 className="text-lg font-black text-[var(--text-primary)]">Grupos do WhatsApp</h2>
+                <p className="text-xs text-[var(--text-secondary)]">{groups.length} grupos • {selectedCount} selecionados</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <input
+              <Input
                 type="text"
                 placeholder="Buscar grupo..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-brand-primary"
+                className="w-64 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
               />
-              <button
+              <Button
                 onClick={handleSyncGroups}
                 disabled={groupsLoading}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-bold text-[var(--text-primary)] hover:bg-[var(--surface-hover)] flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" /> Atualizar
-              </button>
+              </Button>
             </div>
           </div>
 
           {filteredGroups.length > 0 && (
             <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 cursor-pointer">
+              <label className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={selectAll && filteredGroups.length > 0}
                   onChange={toggleSelectAll}
-                  className="w-4 h-4 accent-brand-primary"
+                  className="w-4 h-4 accent-[var(--primary)]"
                 />
-                <span className="text-sm font-bold text-slate-700">Selecionar todos ({filteredGroups.length})</span>
+                <span className="text-sm font-bold text-[var(--text-primary)]">Selecionar todos ({filteredGroups.length})</span>
               </label>
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-[var(--border)]">
                 {filteredGroups.map(group => (
-                  <label key={group.id} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <label key={group.id} className="flex items-center justify-between px-4 py-3 hover:bg-[var(--surface-hover)] cursor-pointer transition-colors">
                     <div className="flex items-center gap-3 min-w-0">
                       <input
                         type="checkbox"
                         checked={group.selected}
                         onChange={() => toggleGroup(group.id)}
-                        className="w-4 h-4 accent-brand-primary"
+                        className="w-4 h-4 accent-[var(--primary)]"
                       />
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-900">{group.name}</p>
-                        <p className="text-[10px] text-slate-500 flex items-center gap-2">
+                        <p className="truncate font-medium text-[var(--text-primary)]">{group.name}</p>
+                        <p className="text-[10px] text-[var(--text-secondary)] flex items-center gap-2">
                           <span>{group.memberCount} membros</span>
-                          {group.isAdmin && <span className="rounded-full bg-green-100 text-green-700 text-[10px] px-1.5 py-0.5">Admin</span>}
+                          {group.isAdmin && <span className="rounded-full bg-[var(--success)]/10 text-[var(--success)] text-[10px] px-1.5 py-0.5">Admin</span>}
                         </p>
                       </div>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${group.isAdmin ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${group.isAdmin ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--surface-elevated)] text-[var(--text-secondary)]'}`}>
                       {group.memberCount}
                     </span>
                   </label>
@@ -473,7 +476,7 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
           )}
 
           {filteredGroups.length === 0 && groups.length > 0 && (
-            <div className="px-6 py-8 text-center text-slate-500">
+            <div className="px-6 py-8 text-center text-[var(--text-secondary)]">
               <Search className="w-10 h-10 mx-auto text-slate-300 mb-2" />
               <p>Nenhum grupo encontrado com "{searchQuery}"</p>
             </div>
@@ -482,15 +485,15 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
           {groups.length === 0 && !groupsLoading && session?.status === 'working' && (
             <div className="px-6 py-12 text-center">
               <Users className="w-16 h-16 mx-auto text-slate-300 mb-3" />
-              <p className="font-bold text-slate-900">Nenhum grupo encontrado</p>
-              <p className="mt-1 text-sm text-slate-500">Clique em "Sincronizar Grupos" para buscar seus grupos do WhatsApp</p>
-              <button
+              <p className="font-bold text-[var(--text-primary)]">Nenhum grupo encontrado</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Clique em "Sincronizar Grupos" para buscar seus grupos do WhatsApp</p>
+              <Button
                 onClick={handleSyncGroups}
                 disabled={groupsLoading}
-                className="mt-4 rounded-xl bg-brand-primary px-6 py-2.5 text-sm font-black text-white hover:bg-brand-primary-hover mx-auto"
+                className="mt-4 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-black text-white hover:bg-[var(--primary-hover)] mx-auto"
               >
                 <RefreshCw className="w-4 h-4" /> Sincronizar Grupos
-              </button>
+              </Button>
             </div>
           )}
         </div>

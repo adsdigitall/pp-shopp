@@ -118,7 +118,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(v: 'fila' | 'grupos' | 'automacao') => setActiveTab(v)} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="fila">Fila</TabsTrigger>
           <TabsTrigger value="automacao">Automação</TabsTrigger>
@@ -317,6 +317,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                       {savingAutomation ? 'Salvando...' : automation.enabled ? 'Atualizar automação' : 'Salvar automação'}
                     </Button>
                   </div>
+                </div>
                 </CardContent>
               )}
           </Card>

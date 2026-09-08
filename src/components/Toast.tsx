@@ -21,7 +21,7 @@ export const ToastContainer: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="pointer-events-auto flex items-start gap-3 p-4 bg-slate-900/95 text-white rounded-2xl shadow-xl shadow-slate-950/20 backdrop-blur border border-slate-700/60 animate-in fade-in slide-in-from-bottom-5 duration-300"
+          className="pointer-events-auto flex items-start gap-3 p-4 bg-slate-900/95 text-white rounded-2xl shadow-xl shadow-slate-950/20 backdrop-blur border border-slate-700/60 toast-enter"
           role="status"
           aria-live="polite"
         >

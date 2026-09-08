@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 import { Settings, Users, Globe, Tag, Shield, User, Bell, Lock, Key, CreditCard, LogOut, Save, Check, X, AlertCircle, Eye, EyeOff, Copy, Edit, Trash2, Plus, Wifi, Smartphone, Mail, Lock as LockIcon, Shield as ShieldIcon, FileText, Send } from 'lucide-react';
 import { Template, Coupon, Settings as SettingsType } from '../types/product';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { Switch } from '@/components/ui/Switch';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 
 interface ConfiguracoesPageProps {
   settings: SettingsType;
@@ -82,38 +92,43 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       case 'canais':
         return (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">Conecte os canais onde suas ofertas serão enviadas.</p>
+            <p className="text-xs text-[var(--text-secondary)]">Conecte os canais onde suas ofertas serão enviadas.</p>
             <div className="space-y-3">
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4 flex items-center justify-between">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-green-100">
-                    <Send className="w-5 h-5 text-green-700" />
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--success)]/10">
+                    <Send className="w-5 h-5 text-[var(--success)]" />
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900">WhatsApp</p>
-                    <p className="text-xs text-green-700">Conectado</p>
+                    <p className="font-bold text-[var(--text-primary)]">WhatsApp</p>
+                    <Badge variant="success">Conectado</Badge>
                   </div>
                 </div>
                 {whatsappConnected && (
-                  <button onClick={onDisconnectWhatsApp} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 flex items-center gap-1.5">
-                    <Wifi className="w-3 h-3" /> Desconectar
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="destructive" onClick={onDisconnectWhatsApp} className="border-[var(--error)]/20 bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20 flex items-center gap-1.5">
+                        <Wifi className="w-3 h-3" /> Desconectar
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Desconectar WhatsApp</TooltipContent>
+                  </Tooltip>
                 )}
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4 flex items-center justify-between opacity-50">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 flex items-center justify-between opacity-50">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100">
-                    <Mail className="w-5 h-5 text-slate-500" />
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--surface-elevated)]">
+                    <Mail className="w-5 h-5 text-[var(--text-secondary)]" />
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900">Telegram</p>
-                    <p className="text-xs text-slate-500">Em breve</p>
+                    <p className="font-bold text-[var(--text-primary)]">Telegram</p>
+                    <Badge variant="secondary">Em breve</Badge>
                   </div>
                 </div>
               </div>
-              <button className="rounded-xl bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200 flex items-center gap-2 mx-auto">
+              <Button variant="outline" className="rounded-xl bg-[var(--surface-elevated)] px-4 py-2.5 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--surface)] flex items-center gap-2 mx-auto border-[var(--border)]">
                 <Plus className="w-4 h-4" /> Adicionar outro número ou bot
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -121,108 +136,104 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       case 'plataformas':
         return (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">Suas contas de afiliado, pra gerar links com a sua tag.</p>
+            <p className="text-xs text-[var(--text-secondary)]">Suas contas de afiliado, pra gerar links com a sua tag.</p>
             <div className="space-y-4">
-              {/* Shopee */}
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="font-bold text-slate-900">Shopee</p>
-                    <p className="text-xs text-green-700">Conectado</p>
+                    <p className="font-bold text-[var(--text-primary)]">Shopee</p>
+                    <Badge variant="success">Conectado</Badge>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">AppId</label>
-                    <input
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">AppId</label>
+                    <Input
                       type="text"
                       value={settings.platforms.shopee.appId}
                       onChange={e => onSaveSettings({ platforms: { ...settings.platforms, shopee: { ...settings.platforms.shopee, appId: e.target.value } } })}
-                      className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Secret</label>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Secret</label>
                     <div className="relative">
-                      <input
+                      <Input
                         type={showPassword ? 'text' : 'password'}
                         value={settings.platforms.shopee.secret}
                         onChange={e => onSaveSettings({ platforms: { ...settings.platforms, shopee: { ...settings.platforms.shopee, secret: e.target.value } } })}
-                        className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400 pr-10"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)] pr-10"
                       />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button className="flex-1 rounded-xl bg-[#EE4D2D] px-4 py-2 text-xs font-black text-white hover:bg-orange-600 flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</button>
-                  <button className="flex-1 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100 flex items-center justify-center gap-2"><Wifi className="w-3 h-3" /> Validar conexão</button>
+                  <Button variant="default" className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
+                  <Button variant="outline" className="flex-1 border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20 flex items-center justify-center gap-2"><Wifi className="w-3 h-3" /> Validar conexão</Button>
                 </div>
               </div>
 
-              {/* Mercado Livre */}
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="font-bold text-slate-900">Mercado Livre</p>
-                    <p className="text-xs text-orange-700">Pendente</p>
+                    <p className="font-bold text-[var(--text-primary)]">Mercado Livre</p>
+                    <Badge variant="warning">Pendente</Badge>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Tag de afiliado</label>
-                  <input
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tag de afiliado</label>
+                  <Input
                     type="text"
                     value={settings.platforms.mercadoLivre.affiliateTag}
                     onChange={e => onSaveSettings({ platforms: { ...settings.platforms, mercadoLivre: { ...settings.platforms.mercadoLivre, affiliateTag: e.target.value } } })}
-                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                     placeholder="sua-tag"
                   />
                 </div>
-                <button className="mt-3 rounded-xl bg-[#EE4D2D] px-4 py-2 text-xs font-black text-white hover:bg-orange-600 flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</button>
+                <Button variant="default" className="mt-3 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
               </div>
 
-              {/* Amazon */}
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="font-bold text-slate-900">Amazon</p>
-                    <p className="text-xs text-orange-700">Pendente</p>
+                    <p className="font-bold text-[var(--text-primary)]">Amazon</p>
+                    <Badge variant="warning">Pendente</Badge>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Associate tag</label>
-                  <input
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Associate tag</label>
+                  <Input
                     type="text"
                     value={settings.platforms.amazon.associateTag}
                     onChange={e => onSaveSettings({ platforms: { ...settings.platforms, amazon: { ...settings.platforms.amazon, associateTag: e.target.value } } })}
-                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                     placeholder="suatag-20"
                   />
                 </div>
-                <button className="mt-3 rounded-xl bg-[#EE4D2D] px-4 py-2 text-xs font-black text-white hover:bg-orange-600 flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</button>
+                <Button variant="default" className="mt-3 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
               </div>
 
-              {/* Magalu */}
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="font-bold text-slate-900">Magalu</p>
-                    <p className="text-xs text-orange-700">Pendente</p>
+                    <p className="font-bold text-[var(--text-primary)]">Magalu</p>
+                    <Badge variant="warning">Pendente</Badge>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Sua loja (Magazine Você)</label>
-                  <input
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Sua loja (Magazine Você)</label>
+                  <Input
                     type="text"
                     value={settings.platforms.magalu.storeSlug}
                     onChange={e => onSaveSettings({ platforms: { ...settings.platforms, magalu: { ...settings.platforms.magalu, storeSlug: e.target.value } } })}
-                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                     placeholder="minhaloja"
                   />
                 </div>
-                <button className="mt-3 rounded-xl bg-[#EE4D2D] px-4 py-2 text-xs font-black text-white hover:bg-orange-600 flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</button>
+                <Button variant="default" className="mt-3 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
               </div>
             </div>
           </div>
@@ -231,182 +242,186 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       case 'templates':
         return (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">Modelos de mensagem usados nos disparos e espelhamentos. Use variáveis como {'{' + 'TITULO' + '}'}, {'{' + 'PRECO' + '}'} e {'{' + 'LINK' + '}'}.</p>
+            <p className="text-xs text-[var(--text-secondary)]">Modelos de mensagem usados nos disparos e espelhamentos. Use variáveis como {'{' + 'TITULO' + '}'}, {'{' + 'PRECO' + '}'} e {'{' + 'LINK' + '}'}.</p>
 
-            {/* Custom Templates */}
             <div className="space-y-3">
               {(userTemplates || []).map(template => (
-                <div key={template.id} className="rounded-xl border border-slate-200 bg-white/80 p-3">
+                <div key={template.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900">{template.name}</p>
-                      <p className="mt-1 text-xs text-slate-600 font-mono truncate">{template.message}</p>
+                      <p className="font-bold text-[var(--text-primary)]">{template.name}</p>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)] font-mono truncate">{template.message}</p>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => handleTemplateEdit(template)} className="p-1.5 rounded hover:bg-slate-100"><Edit className="w-4 h-4 text-slate-400" /></button>
-                      <button onClick={() => handleTemplateDelete(template.id)} className="p-1.5 rounded hover:bg-red-50"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button onClick={() => handleTemplateEdit(template)} className="p-1.5 rounded hover:bg-[var(--surface-elevated)]"><Edit className="w-4 h-4 text-[var(--text-secondary)]" /></button>
+                        </TooltipTrigger>
+                        <TooltipContent>Editar template</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button onClick={() => handleTemplateDelete(template.id)} className="p-1.5 rounded hover:bg-[var(--error)]/10"><Trash2 className="w-4 h-4 text-[var(--error)]" /></button>
+                        </TooltipTrigger>
+                        <TooltipContent>Excluir template</TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Suggested Templates */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Plus className="w-4 h-4 text-orange-600" />
-                <span className="font-bold text-slate-700">Modelos sugeridos</span>
+                <Plus className="w-4 h-4 text-[var(--primary)]" />
+                <span className="font-bold text-[var(--text-primary)]">Modelos sugeridos</span>
               </div>
               {defaultTemplates.map(template => (
-                <div key={template.id} className="rounded-xl border border-slate-200 bg-white/80 p-3">
+                <div key={template.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900">{template.name}</span>
-                        <span className="rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5">usar</span>
+                        <span className="font-bold text-[var(--text-primary)]">{template.name}</span>
+                        <Badge variant="warning">usar</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-slate-600 font-mono truncate">{template.message}</p>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)] font-mono truncate">{template.message}</p>
                     </div>
-                    <button
-                      onClick={() => onSaveTemplate({ ...template, id: `custom-${template.id}`, isCustom: true, createdAt: new Date().toISOString() })}
-                      className="rounded-lg bg-[#EE4D2D] px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-600"
-                    >
-                      Usar
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="default" onClick={() => onSaveTemplate({ ...template, id: `custom-${template.id}`, isCustom: true, createdAt: new Date().toISOString() })} className="rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] px-3 py-1.5 text-xs font-bold">
+                          Usar
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Usar este template</TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Add Custom Template */}
-            <button
-              onClick={() => setEditingTemplate({ id: `custom-${Date.now()}`, name: '', message: '', isCustom: true, createdAt: new Date().toISOString() })}
-              className="rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center text-slate-500 hover:border-orange-300"
-            >
-              <Plus className="w-6 h-6 mx-auto text-slate-400 mb-2" />
+            <Button variant="outline" onClick={() => setEditingTemplate({ id: `custom-${Date.now()}`, name: '', message: '', isCustom: true, createdAt: new Date().toISOString() })} className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-center text-[var(--text-secondary)] hover:border-[var(--primary)] w-full">
+              <Plus className="w-6 h-6 mx-auto text-[var(--text-secondary)] mb-2" />
               <p className="text-xs font-medium">Modelo em branco</p>
-            </button>
+            </Button>
 
-            {/* Edit Modal */}
-            {editingTemplate && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                    <h3 className="font-bold text-slate-900">{editingTemplate.id.startsWith('custom-') ? 'Editar template' : 'Novo template'}</h3>
-                    <button onClick={() => setEditingTemplate(null)} className="p-1 rounded hover:bg-slate-100"><X className="w-5 h-5 text-slate-500" /></button>
-                  </div>
-                  <div className="p-4 space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Nome do template"
-                      value={editingTemplate.name}
-                      onChange={e => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
-                    />
-                    <textarea
-                      placeholder="Mensagem com variáveis: {TITULO}, {PRECO}, {PRECO_ANTIGO}, {LINK}, {CUPOM}"
-                      value={editingTemplate.message}
-                      onChange={e => setEditingTemplate({ ...editingTemplate, message: e.target.value })}
-                      className="w-full min-h-[100px] rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-orange-400 resize-none font-mono"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setEditingTemplate(null)} className="flex-1 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-                      <button onClick={handleTemplateSave} className="flex-1 rounded-xl bg-[#EE4D2D] py-2 text-xs font-black text-white hover:bg-orange-600">Salvar</button>
-                    </div>
-                  </div>
+            <Dialog open={!!editingTemplate} onOpenChange={(open) => !open && setEditingTemplate(null)}>
+              <DialogContent className="w-full max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingTemplate?.id.startsWith('custom-') ? 'Editar template' : 'Novo template'}</DialogTitle>
+                  <DialogDescription>Edite o template de mensagem abaixo.</DialogDescription>
+                </DialogHeader>
+                <div className="p-4 space-y-3">
+                  <Input
+                    type="text"
+                    placeholder="Nome do template"
+                    value={editingTemplate?.name || ''}
+                    onChange={e => setEditingTemplate({ ...editingTemplate!, name: e.target.value })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                  />
+                  <Textarea
+                    placeholder="Mensagem com variáveis: {TITULO}, {PRECO}, {PRECO_ANTIGO}, {LINK}, {CUPOM}"
+                    value={editingTemplate?.message || ''}
+                    onChange={e => setEditingTemplate({ ...editingTemplate!, message: e.target.value })}
+                    className="w-full min-h-[100px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] outline-none focus:border-[var(--primary)] resize-none font-mono"
+                  />
                 </div>
-              </div>
-            )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditingTemplate(null)} className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]">Cancelar</Button>
+                  <Button variant="default" onClick={handleTemplateSave} className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] py-2 text-xs font-black">Salvar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         );
 
       case 'cupons': {
         return (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">Cupons por plataforma. Nas mensagens, a variável {'{' + 'CUPOM' + '}'} usa o cupom da mesma plataforma da oferta.</p>
-            <button onClick={() => setNewCoupon({ platform: 'shopee', code: '', description: '' })} className="rounded-xl bg-[#EE4D2D] px-4 py-2.5 text-xs font-black text-white hover:bg-orange-600 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo cupom</button>
+            <p className="text-xs text-[var(--text-secondary)]">Cupons por plataforma. Nas mensagens, a variável {'{' + 'CUPOM' + '}'} usa o cupom da mesma plataforma da oferta.</p>
+            <Button variant="default" onClick={() => setNewCoupon({ platform: 'shopee', code: '', description: '' })} className="bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] px-4 py-2.5 text-xs font-black flex items-center gap-2"><Plus className="w-4 h-4" /> Novo cupom</Button>
 
             {coupons.map(coupon => (
-              <div key={coupon.id} className="rounded-xl border border-slate-200 bg-white/80 p-3 flex items-center justify-between">
+              <div key={coupon.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${coupon.platform === 'shopee' ? 'bg-orange-100 text-orange-700' : coupon.platform === 'mercado_livre' ? 'bg-yellow-100 text-yellow-700' : coupon.platform === 'amazon' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
+                  <Badge variant={coupon.platform === 'shopee' ? 'warning' : coupon.platform === 'mercado_livre' ? 'secondary' : coupon.platform === 'amazon' ? 'default' : 'secondary'}>
                     {coupon.platform}
-                  </span>
+                  </Badge>
                   <div>
-                    <p className="font-bold text-slate-900 font-mono">{coupon.code}</p>
-                    {coupon.description && <p className="text-[10px] text-slate-500">{coupon.description}</p>}
+                    <p className="font-bold text-[var(--text-primary)] font-mono">{coupon.code}</p>
+                    {coupon.description && <p className="text-[10px] text-[var(--text-secondary)]">{coupon.description}</p>}
                   </div>
                 </div>
-                <button className="p-1.5 rounded hover:bg-red-50"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="p-1.5 rounded hover:bg-[var(--error)]/10"><Trash2 className="w-4 h-4 text-[var(--error)]" /></button>
+                  </TooltipTrigger>
+                  <TooltipContent>Excluir cupom</TooltipContent>
+                </Tooltip>
               </div>
             ))}
 
-            {/* Add Coupon Modal */}
-            {newCoupon.code !== '' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                    <h3 className="font-bold text-slate-900">Novo cupom</h3>
-                    <button onClick={() => setNewCoupon({ platform: 'shopee', code: '', description: '' })} className="p-1 rounded hover:bg-slate-100"><X className="w-5 h-5 text-slate-500" /></button>
-                  </div>
-                  <div className="p-4 space-y-3">
-                    <select
-                      value={newCoupon.platform}
-                      onChange={e => setNewCoupon({ ...newCoupon, platform: e.target.value as 'shopee' | 'mercado_livre' | 'amazon' | 'magalu' })}
-                      className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
-                    >
-                      <option value="shopee">Shopee</option>
-                      <option value="mercado_livre">Mercado Livre</option>
-                      <option value="amazon">Amazon</option>
-                      <option value="magalu">Magalu</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Código do cupom"
-                      value={newCoupon.code}
-                      onChange={e => setNewCoupon({ ...newCoupon, code: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Descrição (opcional)"
-                      value={newCoupon.description}
-                      onChange={e => setNewCoupon({ ...newCoupon, description: e.target.value })}
-                      className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setNewCoupon({ platform: 'shopee', code: '', description: '' })} className="flex-1 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-                      <button onClick={handleCouponSave} className="flex-1 rounded-xl bg-[#EE4D2D] py-2 text-xs font-black text-white hover:bg-orange-600">Salvar</button>
-                    </div>
-                  </div>
+            <Dialog open={newCoupon.code !== ''} onOpenChange={(open) => !open && setNewCoupon({ platform: 'shopee', code: '', description: '' })}>
+              <DialogContent className="w-full max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Novo cupom</DialogTitle>
+                </DialogHeader>
+                <div className="p-4 space-y-3">
+                  <Select value={newCoupon.platform} onValueChange={(value) => setNewCoupon({ ...newCoupon, platform: value as 'shopee' | 'mercado_livre' | 'amazon' | 'magalu' })}>
+                    <SelectTrigger className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="shopee">Shopee</SelectItem>
+                      <SelectItem value="mercado_livre">Mercado Livre</SelectItem>
+                      <SelectItem value="amazon">Amazon</SelectItem>
+                      <SelectItem value="magalu">Magalu</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="text"
+                    placeholder="Código do cupom"
+                    value={newCoupon.code}
+                    onChange={e => setNewCoupon({ ...newCoupon, code: e.target.value })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Descrição (opcional)"
+                    value={newCoupon.description}
+                    onChange={e => setNewCoupon({ ...newCoupon, description: e.target.value })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                  />
                 </div>
-              </div>
-            )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setNewCoupon({ platform: 'shopee', code: '', description: '' })} className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]">Cancelar</Button>
+                  <Button variant="default" onClick={handleCouponSave} className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] py-2 text-xs font-black">Salvar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         );
-
-      } // close cupons case block
+      }
 
       case 'seguranca':
         return (
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-100">
-                  <ShieldIcon className="w-5 h-5 text-blue-700" />
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--primary)]/10">
+                  <ShieldIcon className="w-5 h-5 text-[var(--primary)]" />
                 </div>
                 <div>
-                  <p className="font-bold text-slate-900">Ritmo seguro</p>
-                  <p className="text-xs text-slate-500">Intervalo automático e mínimo de 20 minutos entre envios</p>
+                  <p className="font-bold text-[var(--text-primary)]">Ritmo seguro</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Intervalo automático e mínimo de 20 minutos entre envios</p>
                 </div>
               </div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={settings.security.safeInterval} onChange={e => onSaveSettings({ security: { safeInterval: e.target.checked } })} className="w-5 h-5 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+              <div className="flex items-center gap-3 cursor-pointer">
+                <Switch checked={settings.security.safeInterval} onCheckedChange={(checked) => onSaveSettings({ security: { safeInterval: checked } })} />
                 <div>
-                  <p className="font-bold text-slate-900">Ritmo seguro</p>
-                  <p className="text-xs text-slate-500">Intervalo automático e mínimo de 20 minutos entre envios</p>
+                  <p className="font-bold text-[var(--text-primary)]">Ritmo seguro</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Intervalo automático e mínimo de 20 minutos entre envios</p>
                 </div>
-              </label>
+              </div>
             </div>
           </div>
         );
@@ -414,45 +429,50 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       case 'conta':
         return (
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-[#ff6b45] to-[#EE4D2D] text-lg text-white">
                   CM
                 </div>
                 <div>
-                  <p className="font-bold text-slate-900">{settings.account.plan} | Afiliado Viral</p>
-                  <p className="text-xs text-green-700">Assinatura ativa</p>
+                  <p className="font-bold text-[var(--text-primary)]">{settings.account.plan} | Afiliado Viral</p>
+                  <Badge variant="success">Assinatura ativa</Badge>
                 </div>
-                <button className="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Gerenciar</button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" className="ml-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]">Gerenciar</Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Gerenciar conta</TooltipContent>
+                </Tooltip>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Nome</label>
-                  <input
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Nome</label>
+                  <Input
                     type="text"
                     value={settings.account.name}
                     onChange={e => onSaveSettings({ account: { ...settings.account, name: e.target.value } })}
-                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
-                  <input
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">E-mail</label>
+                  <Input
                     type="email"
                     value={settings.account.email}
                     onChange={e => onSaveSettings({ account: { ...settings.account, email: e.target.value } })}
-                    className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                   />
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Alterar senha</button>
-                <button onClick={() => onSaveSettings(settings)} className="flex-1 rounded-xl bg-[#EE4D2D] px-4 py-2 text-xs font-black text-white hover:bg-orange-600"><Save className="w-3 h-3 mr-1" /> Salvar</button>
+                <Button variant="outline" className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]">Alterar senha</Button>
+                <Button variant="default" onClick={() => onSaveSettings(settings)} className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)]"><Save className="w-3 h-3 mr-1" /> Salvar</Button>
               </div>
             </div>
-            <button className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-700 hover:bg-red-100 flex items-center justify-center gap-2">
+            <Button variant="destructive" className="w-full rounded-xl border border-[var(--error)]/20 bg-[var(--error)]/10 px-4 py-2.5 text-xs font-bold text-[var(--error)] hover:bg-[var(--error)]/20 flex items-center justify-center gap-2">
               <LogOut className="w-4 h-4" /> Sair da conta
-            </button>
+            </Button>
           </div>
         );
 
@@ -462,23 +482,26 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   };
 
   return (
-    <section id="configuracoes" className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+    <section id="configuracoes" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
       <div className="mb-6">
-        <h2 className="text-base font-black text-slate-900">Configurações</h2>
-        <p className="mt-1 text-xs text-slate-500">Conexões, modelos e ajustes. Você configura uma vez.</p>
+        <h2 className="text-base font-black text-[var(--text-primary)]">Configurações</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">Conexões, modelos e ajustes. Você configura uma vez.</p>
       </div>
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-            className={`rounded-xl px-3 py-2 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${activeTab === tab.id ? 'bg-[#EE4D2D] text-white' : 'bg-slate-100 text-slate-600'}`}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+          <TabsList className="flex gap-2">
+            {tabs.map(tab => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="rounded-xl px-3 py-2 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap bg-[var(--surface-elevated)] text-[var(--text-secondary)] data-[state=active]:bg-[var(--primary)] data-[state=active]:text-white"
+              >
+                {tab.icon} {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
       {renderTabContent()}

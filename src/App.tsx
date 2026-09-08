@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import { Product, FilterType, AffiliateSettings, SectionId, QueueItem, Template, Group, Settings as SettingsType, Coupon, GarimparTab, GarimparPlatform, GarimparFilter, DispatchStep, PageType } from './types/product';
 import { productService } from './services/productService';
 import { FilterTabs } from './components/FilterTabs';
@@ -609,6 +610,7 @@ export function App() {
   };
 
   return (
+    <TooltipProvider>
     <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal">
       <div className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center transition-opacity" style={{ opacity: pullDistance > 0 ? 1 : 0 }}>
         <div className="flex items-center gap-2 rounded-full bg-neutral-900 dark:bg-neutral-50 px-3 py-2 text-xs font-bold text-white dark:text-neutral-950 shadow-xl">
@@ -785,6 +787,7 @@ export function App() {
         onOpenAnalytics={() => setIsAnalyticsModalOpen(true)}
       />
     </div>
+    </TooltipProvider>
   );
 }
 

@@ -1,23 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss()
-  ],
-  server: {
-    port: 5173,
-    host: true,
-    allowedHosts: ['.trycloudflare.com'],
-    proxy: {
-      // Backend interno com as credenciais Shopee (server-side only)
-      '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true
-      }
-    }
-  }
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
 })

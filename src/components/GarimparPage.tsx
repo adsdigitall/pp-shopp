@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Product, FilterType, GarimparPlatform, GarimparTab } from '../types/product';
 import { ProductCard } from './ProductCard';
-import { ChevronDown, ChevronRight, Flame, Grid2X2, Search, SearchX, SlidersHorizontal, Sparkles, Tag, TrendingUp, RefreshCw, Star, DollarSign, ArrowDown, Percent } from 'lucide-react';
+import { ChevronDown, Grid2X2, Search, SearchX, SlidersHorizontal, Sparkles, Tag, TrendingUp, RefreshCw, Star, DollarSign, ArrowDown, Percent } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Badge } from '@/components/ui/Badge';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
+import { ScrollArea } from '@/components/ui/ScrollArea';
 
 interface GarimparPageProps {
   activeFilter: FilterType;
@@ -53,222 +59,257 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
   useEffect(() => {
     const target = loadMoreRef.current;
     if (!target) return;
-    const observer = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) onLoadMore(); }, { rootMargin: '500px 0px' });
+    const observer = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) onLoadMore(); }, { rootMargin: '400px 0px' });
     observer.observe(target);
     return () => observer.disconnect();
   }, [onLoadMore]);
 
-  const platforms: Array<{ id: GarimparPlatform; label: string; icon: string; disabled?: boolean }> = [
-    { id: 'shopee', label: 'Shopee', icon: '🛍️' },
-    { id: 'mercado_livre', label: 'Mercado Livre', icon: '🤝' },
-    { id: 'amazon', label: 'Amazon', icon: 'a' },
-    { id: 'magalu', label: 'Magalu', icon: 'M' },
+  const platforms: Array<{ id: GarimparPlatform; label: string; icon: string; color: string }> = [
+    { id: 'shopee', label: 'Shopee', icon: '🛍️', color: 'from-orange-500 to-orange-600' },
+    { id: 'mercado_livre', label: 'Mercado Livre', icon: '🤝', color: 'from-yellow-500 to-yellow-600' },
+    { id: 'amazon', label: 'Amazon', icon: '📦', color: 'from-amber-500 to-amber-600' },
+    { id: 'magalu', label: 'Magalu', icon: '💜', color: 'from-purple-500 to-purple-600' },
   ];
+  
   const tabs: Array<{ id: GarimparTab; label: string }> = [
     { id: 'buscar', label: 'Buscar' }, { id: 'categorias', label: 'Categorias' }, { id: 'mais-buscados', label: 'Mais buscados' }, { id: 'lojas', label: 'Lojas' },
   ];
+  
   const categories = [
-    ['eletrônicos', '💻 Eletrônicos'], ['moda feminina', '👗 Moda feminina'], ['casa e banho', '🏠 Casa, cozinha e banho'],
-    ['infantil', '🧸 Infantil e crianças'], ['beleza', '💄 Beleza'], ['acessórios', '👜 Acessórios'], ['celular', '📱 Celulares e informática'],
+    ['eletrônicos', 'Eletrônicos'], ['moda feminina', 'Moda feminina'], ['casa e banho', 'Casa, cozinha e banho'],
+    ['infantil', 'Infantil e crianças'], ['beleza', 'Beleza'], ['acessórios', 'Acessórios'], ['celular', 'Celulares e informática'],
   ];
-  const filters: Array<{ id: FilterType; label: string; icon: React.ReactNode }> = [
-    { id: 'top_sales', label: 'Mais vendidos', icon: <TrendingUp className="h-4 w-4" /> },
-    { id: 'high_commission', label: 'Maior comissão', icon: <DollarSign className="h-4 w-4" /> },
-    { id: 'best_value', label: 'Menor preço', icon: <ArrowDown className="h-4 w-4" /> },
-    { id: 'high_discount', label: 'Com desconto', icon: <Percent className="h-4 w-4" /> },
-    { id: 'trending', label: 'Avaliação', icon: <Star className="h-4 w-4 fill-current" /> },
+  
+  const filters: Array<{ id: FilterType; label: string; icon: React.ReactNode; color: string }> = [
+    { id: 'top_sales', label: 'Mais vendidos', icon: <TrendingUp className="h-3.5 w-3.5" />, color: 'text-emerald-600 dark:text-emerald-500' },
+    { id: 'high_commission', label: 'Maior comissão', icon: <DollarSign className="h-3.5 w-3.5" />, color: 'text-amber-600 dark:text-amber-500' },
+    { id: 'best_value', label: 'Menor preço', icon: <ArrowDown className="h-3.5 w-3.5" />, color: 'text-blue-600 dark:text-blue-500' },
+    { id: 'high_discount', label: 'Com desconto', icon: <Percent className="h-3.5 w-3.5" />, color: 'text-rose-600 dark:text-rose-500' },
+    { id: 'trending', label: 'Avaliação', icon: <Star className="h-3.5 w-3.5 fill-current" />, color: 'text-purple-600 dark:text-purple-500' },
   ];
+  
   const topSearches = ['air fryer', 'fone de ouvido', 'kit organizador', 'potes de cozinha', 'celular'];
 
   if (selectedPlatform !== 'shopee') {
     return (
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
-        <h2 className="text-lg font-extrabold text-[var(--text-primary)]">Integração em preparação</h2>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">Esta plataforma ficará disponível assim que a conexão oficial for configurada.</p>
-        <button type="button" onClick={() => onSelectPlatform('shopee')} className="mt-4 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-bold text-white">Voltar para Shopee</button>
-      </section>
+      <Card className="pressable-card">
+        <CardContent className="p-6 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+            <SearchX className="h-8 w-8 text-primary" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground">Integração em preparação</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Esta plataforma ficará disponível assim que a conexão oficial for configurada.</p>
+          <Button onClick={() => onSelectPlatform('shopee')} className="mt-4 w-full sm:w-auto">Voltar para Shopee</Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <section className="space-y-3 pb-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black leading-tight text-[var(--text-primary)]">Garimpar</h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p>
-        </div>
-        <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-right text-sm text-[var(--text-secondary)]">
-          <Sparkles className="h-5 w-5 text-[var(--primary)]" />
-          <span>Produtos brasileiros<br />por padrão</span>
-          <span className="text-lg">🇧🇷</span>
+    <section className="space-y-4 pb-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-xl font-black leading-tight text-foreground">Garimpar</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p>
         </div>
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-thin">
         {platforms.map((platform) => (
-          <button
+          <Button
             key={platform.id}
             type="button"
+            variant={selectedPlatform === platform.id ? 'default' : 'outline'}
             onClick={() => onSelectPlatform(platform.id)}
-            className={`
-              pressable flex h-11 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition sm:min-w-[150px]
-              ${selectedPlatform === platform.id
-                ? 'border-[var(--primary)] bg-[var(--primary)] text-white shadow-lg'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:border-[var(--primary)]'
-              }
-            `}
+            className="h-10 shrink-0 gap-1.5 rounded-lg px-2.5 text-sm font-bold transition-all"
           >
-            <span className="text-xl font-black">{platform.icon}</span>
-            <span>{platform.label}</span>
-          </button>
+            <span className="text-base font-black">{platform.icon}</span>
+            <span className="hidden sm:inline">{platform.label}</span>
+          </Button>
         ))}
       </div>
 
-      <div className="flex gap-5 overflow-x-auto border-b border-[var(--border)] pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-2 overflow-x-auto border-b border-border pb-1 scrollbar-thin">
         {tabs.map((tab) => (
-          <button
+          <Button
             key={tab.id}
             type="button"
+            variant={garimparTab === tab.id ? 'default' : 'ghost'}
             onClick={() => onSelectGarimparTab(tab.id)}
-            className={`whitespace-nowrap border-b-2 px-0.5 pb-2 text-sm font-bold ${garimparTab === tab.id ? 'border-[var(--primary)] text-[var(--primary)]' : 'border-transparent text-[var(--text-secondary)]'}`}
+            className="whitespace-nowrap border-b-2 px-0.5 pb-1.5 text-sm font-bold"
           >
             {tab.label}
-          </button>
+          </Button>
         ))}
       </div>
 
       {garimparTab === 'buscar' && (
-        <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <div className="flex items-center gap-2"><Search className="h-6 w-6 text-[var(--primary)]" /><h2 className="text-lg font-extrabold text-[var(--text-primary)]">Buscar produtos</h2></div>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">Pesquise por produtos, marcas ou nichos (ex.: air fryer)</p>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--text-secondary)]" />
-              <input
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Digite o produto que você procura..."
-                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] pl-10 pr-3 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] focus:border-[var(--primary)]"
-              />
+        <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="pressable-card">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Search className="h-5 w-5 text-primary" />
+              <h2 className="text-base font-black text-foreground">Buscar produtos</h2>
             </div>
-            <button
-              type="submit"
-              disabled={searching}
-              className="pressable inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-extrabold text-white hover:bg-[var(--primary-hover)] disabled:cursor-wait disabled:opacity-80"
-            >
-              {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-5 w-5" />}
-              {searching ? 'Carregando…' : 'Garimpar'}
-            </button>
-          </div>
-          <div className="mt-4 flex items-center justify-between gap-2 text-sm">
-            <span className="flex items-center gap-2 font-bold text-[var(--text-primary)]"><Grid2X2 className="h-5 w-5 text-[var(--primary)]" /> {products.length || 12} produtos</span>
-            <span className="hidden text-[var(--text-secondary)] sm:block">Encontre as melhores ofertas e aumente seus ganhos!</span>
-          </div>
+            <p className="text-xs text-muted-foreground mb-3">Pesquise por produtos, marcas ou nichos (ex.: air fryer)</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Digite o produto que você procura..."
+                  className="h-10 pl-9 pr-9"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={searching}
+                className="h-10 gap-2"
+              >
+                {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                <span className="hidden sm:inline">{searching ? 'Carregando…' : 'Garimpar'}</span>
+              </Button>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+              <span className="flex items-center gap-1.5 font-bold text-foreground">
+                <Grid2X2 className="h-4 w-4 text-primary" />
+                {products.length} produtos
+              </span>
+            </div>
+          </CardContent>
         </form>
       )}
 
       {garimparTab === 'categorias' && (
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <p className="col-span-full text-sm font-semibold text-[var(--text-secondary)]">Escolha uma categoria para buscar ofertas reais:</p>
-          {categories.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onSelectCategory(id)}
-              className={`pressable rounded-lg border p-3 text-left text-sm font-bold ${activeCategory === id ? 'border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]' : 'border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-primary)]'}`}
-            >
-              {label}
-              <span className="mt-1 block text-xs font-medium text-[var(--text-secondary)]">{activeCategory === id ? 'Selecionada ✓' : 'Selecionar'}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={submitSearch}
-            disabled={searching || !activeCategory}
-            className="pressable col-span-full inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {searching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-            {searching ? 'Carregando…' : 'Garimpar esta categoria'}
-          </button>
-        </div>
+        <Card className="pressable-card">
+          <CardContent className="p-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Escolha uma categoria para buscar ofertas reais:</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {categories.map(([id, label]) => (
+                <Button
+                  key={id}
+                  type="button"
+                  variant={activeCategory === id ? 'default' : 'outline'}
+                  onClick={() => onSelectCategory(id)}
+                  className="h-auto p-2.5 text-left text-sm font-semibold"
+                >
+                  {label}
+                  <span className="mt-0.5 block text-[10px] font-medium text-muted-foreground">{activeCategory === id ? 'Selecionada' : 'Selecionar'}</span>
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="default"
+                onClick={submitSearch}
+                disabled={searching || !activeCategory}
+                className="col-span-2 h-9 gap-2"
+              >
+                {searching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                <span>{searching ? 'Carregando…' : 'Garimpar esta categoria'}</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {garimparTab === 'mais-buscados' && (
-        <div className="flex flex-wrap gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          {topSearches.map((term) => (
-            <button
-              key={term}
-              type="button"
-              onClick={() => { onSearchChange(term); onSelectGarimparTab('buscar'); }}
-              className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] hover:border-[var(--primary)]"
-            >
-              🔎 {term}
-            </button>
-          ))}
-        </div>
+        <Card className="pressable-card">
+          <CardContent className="p-3">
+            <ScrollArea className="flex flex-wrap gap-1">
+              {topSearches.map((term) => (
+                <Button
+                  key={term}
+                  type="button"
+                  variant="outline"
+                  onClick={() => { onSearchChange(term); onSelectGarimparTab('buscar'); }}
+                  className="rounded-full px-2.5 py-1.5 text-sm font-bold"
+                >
+                  🔎 {term}
+                </Button>
+              ))}
+            </ScrollArea>
+          </CardContent>
+        </Card>
       )}
 
       {garimparTab === 'lojas' && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-secondary)]">Gerencie suas lojas favoritas e selecione uma plataforma acima para continuar.</div>
+        <Card className="pressable-card">
+          <CardContent className="p-4 text-center text-sm text-muted-foreground">
+            Gerencie suas lojas favoritas e selecione uma plataforma acima para continuar.
+          </CardContent>
+        </Card>
       )}
 
-      <div className="flex flex-wrap gap-1.5">
+      <ScrollArea className="flex flex-wrap gap-1 scrollbar-thin pb-1">
         {filters.map((filter) => (
-          <button
+          <Button
             key={filter.id}
             type="button"
+            variant={activeFilter === filter.id ? 'default' : 'outline'}
             onClick={() => onSelectFilter(filter.id)}
-            className={`pressable inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm font-bold ${activeFilter === filter.id ? 'border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)] ring-1 ring-[var(--primary)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:border-[var(--primary)]'}`}
+            className="h-9 gap-1.5 rounded-lg px-3 text-sm font-semibold"
           >
-            {filter.icon}{filter.label}
-          </button>
+            <span className={filter.color}>{filter.icon}</span>
+            {filter.label}
+          </Button>
         ))}
-      </div>
+      </ScrollArea>
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <div className="flex items-center gap-2"><Tag className="h-6 w-6 text-[var(--primary)]" /><div><h2 className="text-lg font-extrabold text-[var(--text-primary)]">Categoria / nicho</h2><p className="mt-0.5 text-sm text-[var(--text-secondary)]">Escolha uma categoria para filtrar as ofertas</p></div></div>
-        <div className="relative mt-3">
-          <button
-            type="button"
-            onClick={() => setCategoryOpen((value) => !value)}
-            className="flex h-11 w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-left text-sm text-[var(--text-primary)]"
-          >
-            <span className="flex items-center gap-3"><Grid2X2 className="h-5 w-5" />{categories.find(([id]) => id === activeCategory)?.[1] || 'Todos os nichos'}</span>
-            <ChevronDown className={`h-5 w-5 transition ${categoryOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {categoryOpen && (
-            <div className="absolute inset-x-0 top-[50px] z-20 grid gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] p-1.5 shadow-xl">
-              {[['', 'Todos os nichos'], ...categories].map(([id, label]) => (
-                <button key={id} type="button" onClick={() => { onSelectCategory(id); setCategoryOpen(false); }} className="rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--primary)]/15">{label}</button>
-              ))}
+      <Card className="pressable-card">
+        <CardContent className="p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Tag className="h-5 w-5 text-primary" />
+            <div>
+              <h2 className="text-sm font-bold text-foreground">Categoria / nicho</h2>
+              <p className="text-[10px] text-muted-foreground">Escolha uma categoria para filtrar as ofertas</p>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+          <div className="relative">
+            <Select value={activeCategory} onValueChange={onSelectCategory}>
+              <SelectTrigger className="h-10 w-full">
+                <Grid2X2 className="h-4 w-4 shrink-0 text-primary" />
+                <SelectValue placeholder={categories.find(([id]) => id === activeCategory)?.[1] || 'Todos os nichos'} />
+              </SelectTrigger>
+              <SelectContent className="scrollbar-thin max-h-48">
+                <SelectItem value="">Todos os nichos</SelectItem>
+                {categories.map(([id, label]) => (
+                  <SelectItem key={id} value={id}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
-        <div id="produtos" className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
+        <div id="produtos" className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="animate-pulse rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
-              <div className="aspect-square rounded-lg bg-[var(--surface-elevated)]" />
-              <div className="mt-2 h-3 rounded bg-[var(--surface-elevated)]" />
-              <div className="mt-2 h-8 rounded-xl bg-[var(--surface-elevated)]" />
-            </div>
+            <Card key={item} className="animate-pulse p-2">
+              <div className="aspect-square rounded-lg bg-muted" />
+              <div className="mt-2 h-3 rounded bg-muted w-3/4" />
+              <div className="mt-2 h-6 rounded-lg bg-muted w-1/2" />
+            </Card>
           ))}
         </div>
       ) : products.length > 0 ? (
-        <div id="produtos" className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
+        <div id="produtos" className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} onGenerateOffer={onGenerateOffer} onShare={onShare} onAddToQueue={onAddToQueue} onPreview={onPreview} onCopyLink={onCopyLink} compact />
           ))}
         </div>
       ) : (
-        <div id="produtos" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-8 text-center">
-          <SearchX className="mx-auto h-8 w-8 text-[var(--primary)]" />
-          <h2 className="mt-2 font-bold text-[var(--text-primary)]">Nenhum produto encontrado</h2>
-        </div>
+        <Card id="produtos" className="pressable-card">
+          <CardContent className="p-6 text-center">
+            <SearchX className="mx-auto h-7 w-7 text-primary" />
+            <h2 className="mt-2 font-bold text-foreground">Nenhum produto encontrado</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Tente buscar por outro termo ou categoria</p>
+          </CardContent>
+        </Card>
       )}
-      <div ref={loadMoreRef} className="flex min-h-10 items-center justify-center text-[10px] font-semibold text-[var(--text-secondary)]">{loadingMore ? 'Carregando mais…' : hasNextPage ? 'Role para carregar mais' : 'Você chegou ao fim desta lista'}</div>
+      
+      <div ref={loadMoreRef} className="flex min-h-8 items-center justify-center text-[10px] font-semibold text-muted-foreground">
+        {loadingMore ? 'Carregando mais…' : hasNextPage ? 'Role para carregar mais' : 'Fim da lista'}
+      </div>
     </section>
   );
 };

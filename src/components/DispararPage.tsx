@@ -1,6 +1,18 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Product, QueueItem, Template, Group, DispatchStep, IntervalUnit } from '../types/product';
 import { ChevronLeft, ChevronRight, Check, X, Send, MessageSquare, Users, Clock, Moon, Sun, Calendar, RotateCcw, AlertTriangle, CheckCircle2, Radio, Layers, Zap, Shuffle, List, Copy, Trash2, Plus, Search, AlertCircle, BarChart2, Box, Image, Eye, Ban } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/Select';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Switch } from '@/components/ui/Switch';
+import { Textarea } from '@/components/ui/Textarea';
+import { Badge } from '@/components/ui/Badge';
+import { Separator } from '@/components/ui/Separator';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
+import { Input } from '@/components/ui/Input';
 
 interface DispararPageProps {
   isOpen: boolean;
@@ -87,6 +99,8 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [activeTab, setActiveTab] = useState<'new' | 'ongoing'>('new');
   const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [pendingCancelJobId, setPendingCancelJobId] = useState<string | null>(null);
 
   const refreshHistory = useCallback(() => fetch('/api/dispatch/history', { cache: 'no-store' })
     .then(response => response.ok ? response.json() : null)
@@ -279,32 +293,39 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   }, {}));
   const recentJobs = dispatchHistory.filter(job => !['pending', 'running', 'waiting_connection'].includes(job.status));
   const dispatchTabs = (
-    <div className="flex gap-5 border-b border-[var(--border)] px-3 pt-3 text-[12px]">
-      <button type="button" onClick={() => setActiveTab('new')} className={`pb-2.5 font-semibold ${activeTab === 'new' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Novo Disparo</button>
-      <button type="button" onClick={() => setActiveTab('ongoing')} className={`flex items-center gap-1.5 pb-2.5 font-semibold ${activeTab === 'ongoing' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Em andamento <span className="grid min-w-5 place-items-center rounded-full bg-[var(--primary)] px-1 text-[9px] text-white">{visibleActiveJobs.length}</span></button>
-    </div>
+    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'new' | 'ongoing')}>
+      <TabsList className="flex gap-5 border-b border-[var(--border)] px-3 pt-3 text-[12px]">
+        <TabsTrigger value="new" className={`pb-2.5 font-semibold ${activeTab === 'new' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Novo Disparo</TabsTrigger>
+        <TabsTrigger value="ongoing" className={`flex items-center gap-1.5 pb-2.5 font-semibold ${activeTab === 'ongoing' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Em andamento <span className="grid min-w-5 place-items-center rounded-full bg-[var(--primary)] px-1 text-[9px] text-white">{visibleActiveJobs.length}</span></TabsTrigger>
+      </TabsList>
+    </Tabs>
   );
 
   if (activeTab === 'ongoing') return (
-    <section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)]">
+<section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)] section-enter">
       {dispatchTabs}
       <div className="space-y-5 px-3 py-4 pb-24">
-        <header><h2 className="text-xl font-black text-[var(--text-primary)]">Disparos em andamento</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado.</p></header>
+          <header><h2 className="text-xl font-black text-[var(--text-primary)]">Disparos em andamento</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado.</p></header>
         <div className="space-y-2.5">
           {visibleActiveJobs.map((job: any) => {
             const total = Math.max(1, (job.offers?.length || 0) * (job.destinations?.groups?.length || 0));
             const done = (job.stats?.sent || 0) + (job.stats?.failed || 0);
             const percent = Math.min(100, Math.round(done / total * 100));
-            return <article key={job.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+            return <Card key={job.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3>{job.jobIds?.length > 1 && <p className="mt-1 text-[9px] text-[var(--text-secondary)]">Piloto automático: {job.jobIds.length} entradas agrupadas nesta linha.</p>}</div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--primary)] transition-[width]" style={{ width: `${percent}%` }} /></div>
               <div className="mt-2 flex justify-between text-[10px] text-[var(--text-secondary)]"><span>{job.stats?.sent || 0} enviados · {job.stats?.failed || 0} falhas</span><span>{percent}% · intervalo {job.destinations?.interval?.value || 30} {job.destinations?.interval?.unit === 'minutes' ? 'min' : job.destinations?.interval?.unit === 'hours' ? 'h' : 's'}</span></div>
-              <button type="button" onClick={() => void handleCancelDispatch(job.jobIds || job.id)} disabled={cancellingJobId === (job.jobIds || [job.id]).join('|')} className="pressable mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--error)]/60 bg-[var(--error)]/10 px-3 text-[10px] font-bold text-[var(--error)] transition hover:bg-[var(--error)]/20 disabled:cursor-wait disabled:opacity-60"><Ban className="h-3.5 w-3.5" />{cancellingJobId === (job.jobIds || [job.id]).join('|') ? 'Cancelando…' : 'Cancelar disparo'}</button>
-            </article>;
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" onClick={() => void handleCancelDispatch(job.jobIds || job.id)} disabled={cancellingJobId === (job.jobIds || [job.id]).join('|')} variant="outline" className="pressable mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--error)]/60 bg-[var(--error)]/10 px-3 text-[10px] font-bold text-[var(--error)] transition hover:bg-[var(--error)]/20 disabled:cursor-wait disabled:opacity-60"><Ban className="h-3.5 w-3.5" />{cancellingJobId === (job.jobIds || [job.id]).join('|') ? 'Cancelando…' : 'Cancelar disparo'}</Button>
+                </TooltipTrigger>
+                <TooltipContent><span>Cancelar este disparo</span></TooltipContent>
+              </Tooltip>
+            </Card>;
           })}
           {!activeJobs.length && <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[11px] text-[var(--text-secondary)]">Nenhum disparo em andamento.</div>}
         </div>
-        <div><h3 className="mb-2 text-[13px] font-bold text-[var(--text-primary)]">Histórico recente</h3><div className="space-y-2">{recentJobs.slice(0, 10).map(job => <article key={job.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) · {job.destinations?.groups?.length || 0} grupo(s)</p><p className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.stats?.sent || 0} enviados</p></div><span className={`text-[10px] font-bold ${job.status === 'completed' ? 'text-[var(--success)]' : 'text-[var(--error)]'}`}>{job.status === 'completed' ? 'Concluído' : 'Falhou'}</span></article>)}</div></div>
+        <div><h3 className="mb-2 text-[13px] font-bold text-[var(--text-primary)]">Histórico recente</h3><div className="space-y-2">{recentJobs.slice(0, 10).map(job => <Card key={job.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) · {job.destinations?.groups?.length || 0} grupo(s)</p><p className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.stats?.sent || 0} enviados</p></div><Badge variant={job.status === 'completed' ? 'success' : 'destructive'} className={`text-[10px] font-bold ${job.status === 'completed' ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--error)]/10 text-[var(--error)]'}`}>{job.status === 'completed' ? 'Concluído' : 'Falhou'}</Badge></Card>)}</div></div>
       </div>
     </section>
   );
@@ -314,7 +335,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
       <div className="flex min-h-[calc(100dvh-5rem)] flex-col overflow-hidden">
         {dispatchTabs}
         {/* Step Indicator - Top Fixed */}
-        <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur-xl overflow-x-auto no-scrollbar">
+        <Card className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur-xl overflow-x-auto no-scrollbar">
           {steps.map((s, i) => (
             <div key={s.num} className="flex items-center gap-1.5 shrink-0">
               <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition ${step >= s.num ? 'bg-[var(--primary)] text-white' : 'bg-[var(--border)] text-[var(--text-secondary)]'}`}>
@@ -324,15 +345,19 @@ export const DispararPage: React.FC<DispararPageProps> = ({
               {i < steps.length - 1 && <span className={`h-0.5 w-6 shrink-0 transition ${step > s.num ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'}`} />}
             </div>
           ))}
-          <button onClick={onClose} className="ml-auto shrink-0 rounded p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]"><X className="h-4 w-4" /></button>
-        </div>
+          <Button onClick={onClose} variant="ghost" size="icon" className="ml-auto shrink-0 rounded p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]"><X className="h-4 w-4" /></Button>
+         </Card>
+         <Separator className="my-2" />
 
-        {/* Step Content */}
-        <div key={step} className="dispatch-step-enter flex-1 overflow-y-auto px-3 py-3 pb-24">
+         {/* Step Content */}
+         <div key={step} className="dispatch-step-enter flex-1 overflow-y-auto px-3 py-3 pb-24 section-enter">
           {/* Step 1: Ofertas - Compact list with images */}
           {step === 1 && (
             <div className="space-y-3">
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div className="flex items-center justify-between gap-3"><div><h3 className="text-[13px] font-black text-[var(--text-primary)]">Escolha as ofertas</h3><p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">Toque no card para incluir ou retirar.</p></div><span className="shrink-0 rounded-lg bg-[var(--primary)]/12 px-2 py-1 text-[10px] font-black text-[var(--primary)]">{selectedOffers.length} selecionadas</span></div><button type="button" onClick={() => setSelectedOffers(selectedOffers.length === queueItems.length ? [] : queueItems.map(item => item.id))} className="mt-2 text-[10px] font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--primary)]">{selectedOffers.length === queueItems.length ? 'Desmarcar todas' : 'Selecionar todas'}</button></div>
+              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3"><div><h3 className="text-[13px] font-black text-[var(--text-primary)]">Escolha as ofertas</h3><p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">Toque no card para incluir ou retirar.</p></div><Badge variant="default" className="shrink-0 rounded-lg bg-[var(--primary)]/12 px-2 py-1 text-[10px] font-black text-[var(--primary)]">{selectedOffers.length} selecionadas</Badge></div>
+                <Button type="button" onClick={() => setSelectedOffers(selectedOffers.length === queueItems.length ? [] : queueItems.map(item => item.id))} variant="ghost" className="mt-2 text-[10px] font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--primary)]">{selectedOffers.length === queueItems.length ? 'Desmarcar todas' : 'Selecionar todas'}</Button>
+              </Card>
               <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
                 {queueItems.map(item => {
                   const isSelected = selectedOffers.includes(item.id);
@@ -345,9 +370,9 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2"><p className="line-clamp-2 text-[11px] font-bold leading-4 text-[var(--text-primary)]">{item.product.name}</p>{discount && <span className="shrink-0 rounded-md bg-[var(--primary)]/12 px-1.5 py-0.5 text-[9px] font-black text-[var(--primary)]">-{discount}%</span>}</div>
                       <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                        <span className={`rounded px-1.5 py-0.5 font-bold ${item.product.marketplace === 'mercado_livre' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-700'}`}>
+                        <Badge variant="outline" className={`rounded px-1.5 py-0.5 font-bold ${item.product.marketplace === 'mercado_livre' ? 'border-yellow-300 text-yellow-700 bg-yellow-50' : 'border-orange-300 text-orange-700 bg-orange-50'}`}>
                           {item.product.marketplace === 'shopee' ? 'Shopee' : item.product.marketplace === 'mercado_livre' ? 'Mercado Livre' : item.product.marketplace}
-                        </span>
+                        </Badge>
                         {item.product.originalPrice && <span className="line-through text-[var(--text-secondary)]">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>}
                         <span className="font-black text-[var(--success)]">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
                       </div>
@@ -369,44 +394,45 @@ export const DispararPage: React.FC<DispararPageProps> = ({
             <div className="space-y-3">
               <p className="text-[11px] text-[var(--text-secondary)]">Configure a mensagem do WhatsApp.</p>
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={whatsappEnabled} onChange={e => setWhatsappEnabled(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                  <Checkbox checked={whatsappEnabled} onCheckedChange={(checked) => setWhatsappEnabled(checked as boolean)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
                   <div className="flex items-center gap-2">
                     <span className="grid h-7 w-7 place-items-center rounded-lg bg-green-100"><MessageSquare className="w-4 h-4 text-green-700" /></span>
                     <span className="font-bold text-[var(--text-primary)]">WhatsApp</span>
                   </div>
                 </label>
-              </div>
+              </Card>
 
               {whatsappEnabled && (
                 <>
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Modelo</label>
-                    <div className="mb-3 grid gap-2 sm:grid-cols-2">
-                      <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'fixed' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
-                        <input type="radio" name="template-mode" checked={templateMode === 'fixed'} onChange={() => setTemplateMode('fixed')} className="mt-0.5 accent-[var(--primary)]" />
-                        <span><strong className="block text-[10px] text-[var(--text-primary)]">Modelo fixo</strong><small className="text-[9px] text-[var(--text-secondary)]">Usa o modelo escolhido em todas as ofertas.</small></span>
-                      </label>
-                      <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'rotate' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
-                        <input type="radio" name="template-mode" checked={templateMode === 'rotate'} onChange={() => setTemplateMode('rotate')} className="mt-0.5 accent-[var(--primary)]" />
-                        <span><strong className="block text-[10px] text-[var(--text-primary)]">Alternar modelos</strong><small className="text-[9px] text-[var(--text-secondary)]">Troca o template a cada oferta.</small></span>
-                      </label>
-                    </div>
-                    <select
-                      value={selectedTemplateId}
-                      onChange={e => { setSelectedTemplateId(e.target.value); setCustomMessage(formatTemplateMessage(allTemplates.find(t => t.id === e.target.value)?.message || '')); }}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-                    >
-                      {allTemplates.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</option>
-                      ))}
-                    </select>
-                  </div>
+                    <Tabs value={templateMode} onValueChange={(v) => setTemplateMode(v as 'fixed' | 'rotate')} className="mb-3">
+                      <TabsList className="grid w-full grid-cols-2 gap-2">
+                        <TabsTrigger value="fixed" className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'fixed' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
+                          <span><strong className="block text-[10px] text-[var(--text-primary)]">Modelo fixo</strong><small className="text-[9px] text-[var(--text-secondary)]">Usa o modelo escolhido em todas as ofertas.</small></span>
+                        </TabsTrigger>
+                        <TabsTrigger value="rotate" className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'rotate' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
+                          <span><strong className="block text-[10px] text-[var(--text-primary)]">Alternar modelos</strong><small className="text-[9px] text-[var(--text-secondary)]">Troca o template a cada oferta.</small></span>
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    <Select value={selectedTemplateId} onValueChange={(e) => { setSelectedTemplateId(e); setCustomMessage(formatTemplateMessage(allTemplates.find(t => t.id === e)?.message || '')); }}>
+                      <SelectTrigger className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allTemplates.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Card>
 
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Mensagem</label>
-                    <textarea
+                    <Textarea
                       role="message-editor"
                       value={customMessage}
                       onChange={e => setCustomMessage(e.target.value)}
@@ -415,34 +441,35 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     />
                     <div className="mt-2 flex flex-wrap gap-1">
                       {variables.map(v => (
-                        <button
+                        <Button
                           key={v.key}
                           type="button"
                           onClick={() => handleVariableInsert(v.key)}
+                          variant="outline"
                           className="rounded border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-2 py-0.5 text-[9px] font-bold text-[var(--primary)] hover:bg-[var(--primary)]/20"
                           title={v.label}
                         >
                           {v.key}
-                        </button>
+                        </Button>
                       ))}
                     </div>
-                  </div>
+                  </Card>
 
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Opções</h4>
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
                         <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">Imagem do produto</span><span className="text-[9px] text-[var(--text-secondary)]">Sempre envia a foto original junto com a legenda.</span></span>
-                        <input type="checkbox" checked readOnly aria-label="Imagem do produto sempre incluída" className="w-4 h-4 accent-[var(--primary)]" />
+                        <Checkbox checked aria-label="Imagem do produto sempre incluída" className="w-4 h-4 accent-[var(--primary)]" />
                       </div>
-                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
+                      <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
                         <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">CTAs rotativas</span><span className="text-[9px] text-[var(--text-secondary)]">Alterna a chamada quando o modelo usar {'{CTA}'}.</span></span>
-                        <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
-                      </label>
+                        <Switch checked={rotatingCTAs} onCheckedChange={(checked) => setRotatingCTAs(checked as boolean)} />
+                      </div>
                     </div>
-                  </div>
+                  </Card>
 
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Prévia no WhatsApp</h4>
                     <div className="grid gap-2 sm:grid-cols-[80px_1fr]">
                       {showImage && (
@@ -450,12 +477,12 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                           {(() => { const offer = offers.find(o => selectedOffers.includes(o.id)) || offers[0]; return offer?.imageUrl ? <img src={offer.imageUrl} alt={offer.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[9px] text-[var(--text-secondary)]">Sem imagem</div>; })()}
                         </div>
                       )}
-                      <div className="whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-[10px] font-medium leading-5 text-white">
+                      <div className="whitespace-pre-wrap rounded-lg bg-[var(--background)] p-3 text-[10px] font-medium leading-5 text-[var(--text-primary)]">
                         {previewMessage()}
                       </div>
                     </div>
                     {rotatingCTAs && <div className="mt-2 flex flex-wrap gap-1">{rotatingCtaExamples.map((cta, index) => <span key={cta} className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[9px] text-[var(--text-secondary)]">CTA {index + 1}: {cta}</span>)}</div>}
-                  </div>
+                  </Card>
                 </>
               )}
             </div>
@@ -466,7 +493,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
             <div className="space-y-3">
               <p className="text-[11px] text-[var(--text-secondary)]">Escolha os grupos que vão receber — nenhum vem marcado.</p>
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="grid h-7 w-7 place-items-center rounded-lg bg-green-100"><Users className="w-4 h-4 text-green-700" /></span>
@@ -474,29 +501,29 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mb-2">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Buscar grupos"
                     value={searchGroups}
                     onChange={e => setSearchGroups(e.target.value)}
                     className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                   />
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setSelectedGroups(prev => prev.length === filteredGroups.length ? [] : filteredGroups.map(g => g.id))}
+                    variant="outline"
                     className="rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
                   >
                     {selectedGroups.length === filteredGroups.length ? 'desmarcar' : 'selecionar todos'}
-                  </button>
+                  </Button>
                 </div>
                 <div className="max-h-[45vh] overflow-y-auto space-y-1">
                   {filteredGroups.map(group => (
                     <label key={group.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 hover:border-[var(--primary)] cursor-pointer">
                       <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selectedGroups.includes(group.id)}
-                          onChange={e => toggleGroup(group.id)}
+                          onCheckedChange={() => toggleGroup(group.id)}
                           className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]"
                         />
                         <div>
@@ -512,22 +539,22 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     </label>
                   ))}
                 </div>
-              </div>
+              </Card>
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2.5">
+              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2.5">
                 <h4 className="text-[10px] font-bold text-[var(--text-secondary)]">Quando</h4>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setSchedule('now')} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'now' ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agora</button>
-                  <button type="button" onClick={() => setSchedule('scheduled')} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'scheduled' ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agendar</button>
+                  <Button type="button" onClick={() => setSchedule('now')} variant={schedule === 'now' ? 'default' : 'outline'} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'now' ? '' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agora</Button>
+                  <Button type="button" onClick={() => setSchedule('scheduled')} variant={schedule === 'scheduled' ? 'default' : 'outline'} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'scheduled' ? '' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agendar</Button>
                 </div>
                 {schedule === 'scheduled' && (
-                  <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
+                  <Input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
                 )}
 
                 <h4 className="text-[10px] font-bold text-[var(--text-secondary)]">Ritmo</h4>
                 <p className="text-[9px] text-[var(--text-secondary)]">Recomendamos intervalos de 20+ min para segurança</p>
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="number"
                     min="1"
                     max="3600"
@@ -535,32 +562,33 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     onChange={e => setIntervalValue(parseInt(e.target.value) || 1)}
                     className="w-16 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)] text-center"
                   />
-                  <select
-                    value={intervalUnit}
-                    onChange={e => setIntervalUnit(e.target.value as IntervalUnit)}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-                  >
-                    <option value="seconds">segundos</option>
-                    <option value="minutes">minutos</option>
-                    <option value="hours">horas</option>
-                  </select>
+                  <Select value={intervalUnit} onValueChange={(e) => setIntervalUnit(e as IntervalUnit)}>
+                    <SelectTrigger className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="seconds">segundos</SelectItem>
+                      <SelectItem value="minutes">minutos</SelectItem>
+                      <SelectItem value="hours">horas</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-1.5 border-t border-[var(--border)] pt-2">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={nightPause} onChange={e => setNightPause(e.target.checked)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                    <Checkbox checked={nightPause} onCheckedChange={(checked) => setNightPause(checked as boolean)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
                     <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar 23h–6h</span><p className="text-[9px] text-[var(--text-secondary)]">Evita disparos de madrugada.</p></div>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={weekendPause} onChange={e => setWeekendPause(e.target.checked)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                    <Checkbox checked={weekendPause} onCheckedChange={(checked) => setWeekendPause(checked as boolean)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
                     <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar fim de semana</span><p className="text-[9px] text-[var(--text-secondary)]">Pausa sáb/dom, retoma segunda.</p></div>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={expirePause} onChange={e => setExpirePause(e.target.checked)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
+                    <Checkbox checked={expirePause} onCheckedChange={(checked) => setExpirePause(checked as boolean)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
                     <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar ofertas expiradas</span><p className="text-[9px] text-[var(--text-secondary)]">Evita mandar link que já saiu da promo.</p></div>
                   </label>
                 </div>
-              </div>
+              </Card>
             </div>
           )}
 
@@ -578,16 +606,16 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                   ['Grupos', `${selectedGroups.length} selecionado(s)`],
                   ['Ritmo', `${intervalValue} ${intervalUnit}`],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
+                  <Card key={label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
                     <p className="text-[9px] text-[var(--text-secondary)]">{label}</p>
                     <p className="mt-1 font-bold text-[var(--text-primary)]">{value}</p>
-                  </div>
+                  </Card>
                 ))}
               </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
+              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
                 <p className="text-[9px] font-bold text-[var(--text-secondary)]">Mensagem</p>
                 <p className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-[var(--text-primary)]">{previewMessage()}</p>
-              </div>
+              </Card>
             </div>
           )}
 
@@ -599,13 +627,13 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                   {/* Header do disparo em andamento */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
+                      <Badge variant="warning" className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
                         <span className="w-1.5 h-1.5 rounded-full bg-yellow-600 animate-pulse" />
                         Enviando
-                      </span>
+                      </Badge>
                       <span className="text-[11px] text-[var(--text-secondary)]">criado {new Date(dispatchJob.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    <button type="button" onClick={() => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); }} className="pressable inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-red-600 border border-red-200 hover:bg-red-50"><Ban className="w-3.5 h-3.5" />Cancelar</button>
+                    <Button type="button" onClick={() => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); }} variant="outline" className="pressable inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-red-600 border-red-200 hover:bg-red-50"><Ban className="w-3.5 h-3.5" />Cancelar</Button>
                   </div>
 
                   {/* Grupos destinatários */}
@@ -635,9 +663,9 @@ export const DispararPage: React.FC<DispararPageProps> = ({
 
                   {/* Stats detalhadas */}
                   <div className="mt-3 grid grid-cols-3 gap-1 text-center">
-                    <div className="rounded-lg bg-[var(--success)]/10 p-3"><b className="block text-xl text-[var(--success)]">{dispatchJob.stats?.sent || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Enviados</span></div>
-                    <div className="rounded-lg bg-[var(--error)]/10 p-3"><b className="block text-xl text-[var(--error)]">{dispatchJob.stats?.failed || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Falhas</span></div>
-                    <div className="rounded-lg bg-[var(--warning)]/10 p-3"><b className="block text-xl text-[var(--warning)]">{dispatchJob.stats?.pending || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Pendentes</span></div>
+                    <Card className="rounded-lg bg-[var(--success)]/10 p-3"><b className="block text-xl text-[var(--success)]">{dispatchJob.stats?.sent || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Enviados</span></Card>
+                    <Card className="rounded-lg bg-[var(--error)]/10 p-3"><b className="block text-xl text-[var(--error)]">{dispatchJob.stats?.failed || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Falhas</span></Card>
+                    <Card className="rounded-lg bg-[var(--warning)]/10 p-3"><b className="block text-xl text-[var(--warning)]">{dispatchJob.stats?.pending || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Pendentes</span></Card>
                   </div>
                 </>
               ) : (
@@ -656,15 +684,16 @@ export const DispararPage: React.FC<DispararPageProps> = ({
 
         {/* Footer Actions */}
         <div className="sticky bottom-0 z-10 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface)]/95 px-3 py-2.5 backdrop-blur-xl safe-bottom">
-          <button
+          <Button
             type="button"
             onClick={handleBack}
             disabled={step === 1}
+            variant="outline"
             className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ChevronLeft className="w-3.5 h-3.5" /> Voltar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={dispatchJob ? () => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); } : step === 5 ? handleExecute : handleNext}
             disabled={dispatching || (step === 5 && selectedGroups.length === 0)}
@@ -675,7 +704,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
             ) : (
               <>Continuar <ChevronRight className="w-3.5 h-3.5" /></>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </section>
