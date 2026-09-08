@@ -23,6 +23,15 @@ const AUTOMATION_CATEGORIES = [
   { id: 'celular', label: 'Celulares' },
 ];
 
+const PRIORITIZED_AUTOMATION_CATEGORIES = [
+  { id: 'casa-cozinha', label: 'Casa e cozinha (50%)' },
+  { id: 'beleza-autocuidado', label: 'Beleza e autocuidado (20%)' },
+  { id: 'organizacao', label: 'Organização (15%)' },
+  { id: 'moda-feminina', label: 'Moda feminina barata (10%)' },
+  { id: 'utilidades', label: 'Utilidades do dia a dia (5%)' },
+  { id: 'maternidade-infantil', label: 'Maternidade / infantil' },
+];
+
 interface FilaPageProps {
   queueItems: QueueItem[];
   groups: Group[];
@@ -173,6 +182,9 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                           {item.product.originalPrice && (
                             <span className="line-through text-muted-foreground">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>
                           )}
+                          {!item.product.affiliateUrl && (
+                            <span className="rounded bg-[var(--warning)]/15 px-1.5 py-0.5 text-[9px] font-black text-[var(--warning)]">Sem link</span>
+                          )}
                         </div>
                       </div>
                       <div className="flex-shrink-0 flex items-center gap-1.5">
@@ -222,9 +234,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                   <CardDescription>Salve grupos e intervalo uma vez.</CardDescription>
                 </div>
               </div>
-              <Button variant={automation.enabled ? 'default' : 'outline'} onClick={() => setAutomation((prev: any) => ({ ...prev, enabled: !prev.enabled }))} className="h-6 w-11 rounded-full" aria-pressed={automation.enabled} aria-label="Ativar envio automático">
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${automation.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
-              </Button>
+              <Switch checked={automation.enabled === true} onCheckedChange={(checked) => setAutomation((prev: any) => ({ ...prev, enabled: checked }))} aria-label="Ativar envio automático" />
             </CardHeader>
             
             {automation.enabled && (
@@ -236,9 +246,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                         <p className="text-xs font-semibold text-foreground">Filtro por IA</p>
                         <p className="mt-0.5 text-[9px] leading-3 text-muted-foreground">A IA só aprova ofertas com dados reais relevantes. Sem aprovação, a oferta continua na fila manual.</p>
                       </div>
-                      <Button variant={automation.aiEnabled ? 'default' : 'outline'} size="sm" onClick={() => setAutomation((prev: any) => ({ ...prev, aiEnabled: !prev.aiEnabled }))} className="h-6 w-11 rounded-full" aria-pressed={automation.aiEnabled === true} aria-label="Ativar filtro por IA">
-                        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${automation.aiEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                      </Button>
+                      <Switch checked={automation.aiEnabled === true} onCheckedChange={(checked) => setAutomation((prev: any) => ({ ...prev, aiEnabled: checked }))} aria-label="Ativar filtro por IA" />
                     </div>
                   </div>
                   
@@ -270,7 +278,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                     <div className="sm:col-span-2 rounded-md border border-border bg-muted p-2 space-y-2">
                       <p className="text-xs font-semibold text-foreground">Categorias que o piloto automático pode buscar</p>
                       <ScrollArea className="flex flex-wrap gap-1.5">
-                        {AUTOMATION_CATEGORIES.map(category => { 
+                        {PRIORITIZED_AUTOMATION_CATEGORIES.map(category => { 
                           const checked = selectedAutomationCategoryIds.includes(category.id); 
                           return (
                             <Button key={category.id} type="button" variant={checked ? 'default' : 'outline'} size="sm" onClick={() => setAutomation((prev: any) => ({ ...prev, categories: checked ? prev.categories.filter((item: string) => item !== category.id) : [...(prev.categories || []), category.id] }))}>
@@ -292,7 +300,9 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                         const checked = selectedAutomationIds.includes(String(group.id)); 
                         return (
                           <Button key={group.id} type="button" variant={checked ? 'default' : 'outline'} className="flex items-center gap-2 justify-start text-left" onClick={() => setAutomation((prev: any) => ({ ...prev, groups: checked ? prev.groups.filter((item: any) => String(item.id) !== String(group.id)) : [...prev.groups, { id: group.id, name: group.name, sessionId: (group as any).sessionId }] }))}>
-                            <Checkbox checked={checked} onCheckedChange={() => {}} className="h-4 w-4 shrink-0" />
+                            <span aria-hidden="true" className={`grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors ${checked ? 'border-white bg-white/25 text-white' : 'border-current opacity-50'}`}>
+                              {checked && <Check className="h-3 w-3" />}
+                            </span>
                             <span className="truncate">{group.name}</span>
                           </Button>
                         );

@@ -175,6 +175,9 @@ async function wahaLogout(sessionName = WAHA_SESSION) {
 
 const notifiedSaleIds = new Set();
 const importedExtensionProducts = [];
+// Cache em memória dos tokens da extensão (espelha o DataStore; sobrevive
+// enquanto a instância estiver quente — o DataStore é a fonte durável).
+const memoryApiTokens = globalThis.__radarMemoryApiTokens || (globalThis.__radarMemoryApiTokens = new Map());
 
 /**
  * Backend interno do PWA de afiliados.
@@ -508,22 +511,540 @@ export function createApp() {
       }
 
       if (req.method === 'POST' && pathOnly === '/api/extension/import') {
-        const expectedToken = String(process.env.EXTENSION_INGEST_TOKEN || '').trim();
-        const receivedToken = String(req.headers['x-extension-token'] || '').trim();
-        if (!expectedToken || receivedToken !== expectedToken) {
+        const legacyToken = String(process.env.EXTENSION_INGEST_TOKEN || '').trim();
+        const receivedLegacy = String(req.headers['x-extension-token'] || '').trim();
+        let authUserId = null;
+        if (legacyToken && receivedLegacy === legacyToken) {
+          authUserId = 'default_user';
+        } else {
+          const auth = await findExtensionTokenRecord(req.headers['x-api-token'] || receivedLegacy);
+          if (auth) authUserId = auth.userId;
+        }
+        if (!authUserId) {
           sendJson(res, 401, { error: { code: 'INVALID_EXTENSION_TOKEN', message: 'Token da extensao invalido.' } });
           return;
         }
         const body = await readJsonBody(req);
         const products = Array.isArray(body?.products) ? body.products.slice(0, 100) : [];
-        const valid = products.filter((item) => item && typeof item.name === 'string' && typeof item.productUrl === 'string').map((item) => ({
-          name: item.name.slice(0, 240), imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl.slice(0, 500) : '',
-          price: typeof item.price === 'string' ? item.price.slice(0, 40) : '', productUrl: item.productUrl.slice(0, 500),
-          marketplace: typeof item.marketplace === 'string' ? item.marketplace.slice(0, 80) : 'unknown', importedAt: new Date().toISOString(),
+        let imported = 0;
+        for (const entry of products) {
+          if (!entry || typeof entry.name !== 'string' || typeof entry.productUrl !== 'string') continue;
+          const clean = String(entry.productUrl).split('#')[0].slice(0, 500);
+          if (!/^https?:\/\//i.test(clean)) continue;
+          const priceNum = Number(String(entry.price || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
+          await PublicationHistoryStore.save(authUserId, {
+            id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            productId: `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            marketplace: typeof entry.marketplace === 'string' && entry.marketplace ? entry.marketplace.slice(0, 80) : 'unknown',
+            marketplaceProductId: null,
+            productName: String(entry.name).slice(0, 240),
+            imageUrl: typeof entry.imageUrl === 'string' ? entry.imageUrl.slice(0, 500) : '',
+            price: Number.isFinite(priceNum) && priceNum > 0 ? priceNum : null,
+            originalPrice: null,
+            affiliateUrl: '', originalUrl: clean,
+            channelId: '', channelName: '',
+            publishedAt: new Date().toISOString(), offerScore: null, affiliateProvider: 'extension',
+          });
+          imported++;
+        }
+        sendJson(res, 201, { ok: true, imported });
+        return;
+      }
+
+      // ========== EXTENSÃO GARIMPO (token por usuário + importar) ==========
+      // Token da extensão: 1 por usuário, persiste no DataStore (apiTokens).
+      // Também aceita o legado EXTENSION_INGEST_TOKEN via x-api-token.
+      async function findExtensionTokenRecord(value) {
+        const token = String(value || '').trim();
+        if (!token) return null;
+        if (memoryApiTokens.has(token)) return memoryApiTokens.get(token);
+        try {
+          const record = await dataStore.findOne('apiTokens', { token });
+          if (record) {
+            memoryApiTokens.set(token, record);
+            dataStore.update('apiTokens', record.id, { lastUsedAt: new Date().toISOString() }).catch(() => null);
+            return record;
+          }
+        } catch { /* coleção ainda não existe / store indisponível */ }
+        const legacy = String(process.env.EXTENSION_INGEST_TOKEN || '').trim();
+        if (legacy && token === legacy) return { id: 'legacy', userId: 'default_user', name: 'legado', token: legacy, legacy: true };
+        return null;
+      }
+
+      async function getOrCreateExtensionToken(userId) {
+        const existing = [...memoryApiTokens.values()].find((r) => r.userId === userId && !r.legacy);
+        if (existing) return existing;
+        try {
+          const stored = await dataStore.findOne('apiTokens', { userId });
+          if (stored) { memoryApiTokens.set(stored.token, stored); return stored; }
+        } catch { /* segue criando em memória */ }
+        const record = {
+          id: `ext_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          userId, name: 'Extensão Radar de Oferta',
+          token: `radar_${crypto.randomBytes(32).toString('hex')}`,
+          createdAt: new Date().toISOString(), lastUsedAt: null,
+        };
+        memoryApiTokens.set(record.token, record);
+        try { await dataStore.add('apiTokens', record); } catch { /* memória basta */ }
+        return record;
+      }
+
+      // GET /api/extension/token - mostra (ou cria) o token da extensão do usuário
+      if (req.method === 'GET' && pathOnly === '/api/extension/token') {
+        const userId = requestUserId(req);
+        const record = await getOrCreateExtensionToken(userId);
+        sendJson(res, 200, { token: record.token, name: record.name, createdAt: record.createdAt });
+        return;
+      }
+
+      // POST /api/extension/token/rotate - invalida o token atual e gera outro
+      if (req.method === 'POST' && pathOnly === '/api/extension/token/rotate') {
+        const userId = requestUserId(req);
+        try {
+          const olds = await dataStore.find('apiTokens', { userId });
+          for (const old of olds || []) {
+            memoryApiTokens.delete(old.token);
+            await dataStore.remove('apiTokens', old.id).catch(() => null);
+          }
+        } catch { /* segue */ }
+        for (const [tok, rec] of [...memoryApiTokens]) {
+          if (rec.userId === userId) memoryApiTokens.delete(tok);
+        }
+        const fresh = {
+          id: `ext_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          userId, name: 'Extensão Radar de Oferta',
+          token: `radar_${crypto.randomBytes(32).toString('hex')}`,
+          createdAt: new Date().toISOString(), lastUsedAt: null,
+        };
+        memoryApiTokens.set(fresh.token, fresh);
+        try { await dataStore.add('apiTokens', fresh); } catch { /* memória basta */ }
+        sendJson(res, 200, { token: fresh.token, name: fresh.name, createdAt: fresh.createdAt });
+        return;
+      }
+
+      // GET /api/garimpar/config - etiquetas do usuário (a extensão monta os links)
+      if (req.method === 'GET' && pathOnly === '/api/garimpar/config') {
+        const auth = await findExtensionTokenRecord(req.headers['x-api-token']);
+        if (!auth) {
+          sendJson(res, 401, { error: { code: 'INVALID_API_TOKEN', message: 'Token inválido.' } });
+          return;
+        }
+        const tags = await getExtensionTags(auth.userId);
+        sendJson(res, 200, {
+          ml: { tag: tags.ml },
+          amazon: { tag: tags.amazon },
+          magalu: { slug: tags.magalu },
+          shopee: { tag: tags.shopee },
+          capacidades: { grupos: false },
+        });
+        return;
+      }
+
+      function extensionMarketplaceId(marketplace, url) {
+        try {
+          if (marketplace === 'mercado_livre') {
+            const m = String(url).match(/MLB-?(\d{8,14})/i);
+            return m ? `MLB${m[1]}` : null;
+          }
+          if (marketplace === 'amazon') {
+            const m = String(url).match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+            return m ? m[1].toUpperCase() : null;
+          }
+          if (marketplace === 'shopee') {
+            const m = String(url).match(/-i\.(\d+)\.(\d+)|product\/(\d+)\/(\d+)/);
+            if (!m) return null;
+            return `${m[1] || m[3]}_${m[2] || m[4]}`;
+          }
+          if (marketplace === 'magalu') {
+            const m = String(url).match(/\/p\/([a-z0-9]+)/i);
+            return m ? m[1].toLowerCase() : null;
+          }
+        } catch { /* segue */ }
+        return null;
+      }
+
+      function mintAmazonTag(url, tag) {
+        const u = new URL(url);
+        if (!/amazon\./i.test(u.hostname)) return null;
+        const m = u.pathname.match(/(?:\/dp\/|\/gp\/product\/|\/gp\/aw\/d\/|\/d\/)([A-Z0-9]{10})/i)
+          || u.pathname.match(/\/([A-Z0-9]{10})(?:[/?]|$)/);
+        const asin = m ? m[1].toUpperCase() : null;
+        if (asin) return `https://${u.hostname}/dp/${asin}?tag=${encodeURIComponent(tag)}`;
+        u.searchParams.set('tag', tag);
+        return u.toString();
+      }
+
+      function mintMagaluSlug(url, slug) {
+        const u = new URL(url);
+        const host = u.hostname.replace(/^www\./, '');
+        if (host === 'magazineluiza.com.br') return `https://www.magazinevoce.com.br/${slug}${u.pathname}${u.search}`;
+        if (host === 'magazinevoce.com.br') {
+          const semLoja = u.pathname.replace(/^\/[^/]+/, '');
+          return `https://www.magazinevoce.com.br/${slug}${semLoja}${u.search}`;
+        }
+        return null;
+      }
+
+      async function mintAfiliadoServidor(marketplace, url, tags, userId) {
+        try {
+          if (marketplace === 'amazon') {
+            if (!tags.amazon) return null;
+            const minted = mintAmazonTag(url, tags.amazon);
+            return minted ? { url: minted, provider: 'amazon-tag' } : null;
+          }
+          if (marketplace === 'magalu') {
+            if (!tags.magalu) return null;
+            const minted = mintMagaluSlug(url, tags.magalu);
+            return minted ? { url: minted, provider: 'magalu-slug' } : null;
+          }
+          if (marketplace === 'mercado_livre') {
+            const affiliateConfig = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre');
+            const tag = tags.ml || affiliateConfig?.affiliateTag || '';
+            if (!affiliateConfig || affiliateConfig.affiliateProvider === 'manual' || !tag) return null;
+            const provider = AffiliateLinkProviderFactory.createFromConfig(affiliateConfig);
+            const result = await provider.generateAffiliateLink({ originalUrl: url, marketplace: 'mercado_livre', affiliateTag: tag, providerConfig: affiliateConfig.providerConfig });
+            if (result && result.status === 'generated' && result.affiliateUrl) {
+              return { url: result.affiliateUrl, provider: result.provider || 'ml-provider' };
+            }
+            return null;
+          }
+        } catch { /* fallback: sem link */ }
+        return null;
+      }
+
+      // POST /api/garimpar/importar - recebe lote da extensão e joga na Fila
+      if (req.method === 'POST' && pathOnly === '/api/garimpar/importar') {
+        const auth = await findExtensionTokenRecord(req.headers['x-api-token']);
+        if (!auth) {
+          sendJson(res, 401, { error: { code: 'INVALID_API_TOKEN', message: 'Token inválido.' } });
+          return;
+        }
+        const body = await readJsonBody(req);
+        const plataformas = { ml: 'mercado_livre', amazon: 'amazon', shopee: 'shopee', magalu: 'magalu' };
+        const marketplace = plataformas[String(body?.plataforma || '').toLowerCase()];
+        if (!marketplace) {
+          sendJson(res, 400, { error: { code: 'INVALID_PLATFORM', message: 'plataforma deve ser ml, amazon, shopee ou magalu.' } });
+          return;
+        }
+        const produtos = Array.isArray(body?.produtos) ? body.produtos.slice(0, 50) : [];
+        const tags = await getExtensionTags(auth.userId);
+        let importados = 0;
+        const falhas = [];
+        for (const p of produtos) {
+          try {
+            const rawUrl = String(p?.url || '').trim();
+            if (!/^https?:\/\//i.test(rawUrl)) throw new Error('URL inválida');
+            const clean = rawUrl.split('#')[0];
+            const pid = extensionMarketplaceId(marketplace, clean) || `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            let linkAfiliado = String(p?.linkAfiliado || '').trim();
+            let provider = 'extension';
+            if (!linkAfiliado) {
+              const minted = await mintAfiliadoServidor(marketplace, clean, tags, auth.userId);
+              if (minted) { linkAfiliado = minted.url; provider = minted.provider; }
+            }
+            const price = Number(p?.price) > 0 ? Number(p.price) : null;
+            const priceOld = Number(p?.priceOld ?? p?.precoAntigo) > 0 ? Number(p.priceOld ?? p.precoAntigo) : null;
+            const item = {
+              id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              productId: pid, marketplace, marketplaceProductId: pid,
+              productName: String(p?.title || 'Produto importado').slice(0, 240),
+              imageUrl: String(p?.image || '').slice(0, 500),
+              price, originalPrice: priceOld,
+              affiliateUrl: linkAfiliado || '', originalUrl: clean,
+              channelId: '', channelName: '',
+              publishedAt: new Date().toISOString(), offerScore: null, affiliateProvider: provider,
+            };
+            await PublicationHistoryStore.save(auth.userId, item);
+            importados++;
+          } catch (err) {
+            falhas.push({ url: String(p?.url || '').slice(0, 120), erro: err instanceof Error ? err.message : 'falha' });
+          }
+        }
+        sendJson(res, 201, { ok: true, importados, falhas });
+        return;
+      }
+
+      function detectarPlataformaUrl(url) {
+        try {
+          const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+          if (host.includes('mercadolivre.com')) return 'ml';
+          if (host.includes('amazon.')) return 'amazon';
+          if (host.includes('shopee.')) return 'shopee';
+          if (host.includes('magazineluiza.com') || host.includes('magazinevoce.com')) return 'magalu';
+        } catch { /* url inválida */ }
+        return null;
+      }
+
+      async function fetchOgMeta(url) {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 12000);
+          const res = await fetch(url, {
+            signal: ctrl.signal, redirect: 'follow',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+              'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html',
+            },
+          });
+          clearTimeout(timer);
+          if (!res.ok) return null;
+          const html = await res.text();
+          const meta = (prop) => {
+            const m = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
+              || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${prop}["']`, 'i'));
+            return m ? m[1] : '';
+          };
+          const titleTag = (html.match(/<title[^>]*>([^<]{3,200})<\/title>/i) || [])[1] || '';
+          return { title: meta('og:title') || titleTag, image: meta('og:image'), price: meta('product:price:amount') };
+        } catch { return null; }
+      }
+
+      // Títulos genéricos de página de bloqueio/capa (Amazon serve <title>
+      // "Amazon.com.br" quando barra o scraper): valem como "sem título".
+      function ehTituloGenerico(title) {
+        const t = String(title || '').trim();
+        if (t.length < 4) return true;
+        if (/^(amazon\.com(\.br)?|mercado\s*l[ií]vre|mercadolivre(\.com(\.br)?)?|shopee(\.com(\.br)?)?|magazine\s*(luiza|voc[eê])|magalu|just a moment|attention required|access denied)$/i.test(t)) return true;
+        if (/captcha|robot check|enter the characters|automated access|verifica[cç][aã]o de seguran[cç]a/i.test(t)) return true;
+        return false;
+      }
+
+      function parsePrecoTexto(s) {        if (!s) return null;
+        const m = String(s).match(/R\$\s*(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{2})?/);
+        if (!m) {
+          const n2 = parseFloat(String(s).replace(',', '.'));
+          return Number.isFinite(n2) && n2 > 0 ? n2 : null;
+        }
+        const num = m[0].replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+        const n = parseFloat(num);
+        return !Number.isNaN(n) && n > 0 ? n : null;
+      }
+
+      // POST /api/garimpar/resolver - resolve links colados em produto + afiliado
+      if (req.method === 'POST' && pathOnly === '/api/garimpar/resolver') {
+        const body = await readJsonBody(req);
+        const rawLinks = Array.isArray(body?.links) ? body.links : [];
+        const links = [...new Set(rawLinks.map((l) => String(l || '').trim()).filter((l) => /^https?:\/\//i.test(l)))].slice(0, 20);
+        if (!links.length) {
+          sendJson(res, 400, { error: { code: 'MISSING_LINKS', message: 'Envie ao menos um link http(s).' } });
+          return;
+        }
+        const userId = requestUserId(req);
+        const tags = await getExtensionTags(userId);
+        // Pool de concorrência: links resolvidos em paralelo (4 por vez) pra
+        // caber no tempo da função serverless mesmo com 20 links colados.
+        const resolverUmLink = async (link) => {
+          const clean = link.split('#')[0];
+          const plat = detectarPlataformaUrl(clean);
+          const base = { url: clean, plataforma: plat, title: '', image: '', price: null, priceOld: null, affiliateUrl: '', status: 'erro', erro: '' };
+          try {
+            if (!plat) {
+              base.erro = 'Loja não suportada (use Shopee, Amazon, Mercado Livre ou Magalu).';
+            } else if (plat === 'ml') {
+              const m = clean.match(/MLB-?(\d{8,14})/i);
+              if (!m) throw new Error('Não achei o ID do anúncio (MLB) no link.');
+              const itemId = `MLB${m[1]}`;
+              const ctrlMl = new AbortController();
+              const timerMl = setTimeout(() => ctrlMl.abort(), 12000);
+              let itemRes;
+              try {
+                itemRes = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+                  headers: { Accept: 'application/json' },
+                  signal: ctrlMl.signal,
+                });
+              } finally {
+                clearTimeout(timerMl);
+              }
+              if (!itemRes.ok) throw new Error('Anúncio não encontrado no Mercado Livre.');
+              const item = await itemRes.json();
+              base.title = String(item.title || '').slice(0, 200);
+              base.price = Number(item.price) > 0 ? Number(item.price) : null;
+              base.priceOld = Number(item.original_price) > 0 ? Number(item.original_price) : null;
+              base.image = String(item.pictures?.[0]?.secure_url || item.thumbnail || '');
+              const minted = await mintAfiliadoServidor('mercado_livre', item.permalink || clean, tags, userId);
+              if (minted) base.affiliateUrl = minted.url;
+              else base.affiliateUrl = String(item.permalink || clean);
+              if (!base.title) throw new Error('Não consegui ler os dados do anúncio.');
+              base.status = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre').then((c) => (c && c.affiliateProvider !== 'manual' ? 'ok' : 'sem_link')).catch(() => 'sem_link');
+              if (base.status === 'ok' && !base.affiliateUrl) base.status = 'sem_link';
+              if (base.status === 'sem_link') base.erro = 'Resolvido sem link de afiliado — configure o provedor de afiliado do ML.';
+            } else if (plat === 'amazon' || plat === 'magalu') {
+              const tag = plat === 'amazon' ? tags.amazon : '';
+              const slug = plat === 'magalu' ? tags.magalu : '';
+              try {
+                const minted = plat === 'amazon'
+                  ? (tag ? mintAmazonTag(clean, tag) : null)
+                  : (slug ? mintMagaluSlug(clean, slug) : null);
+                if (minted) base.affiliateUrl = minted;
+              } catch { /* segue sem link */ }
+              const og = await fetchOgMeta(clean);
+              if (og?.title && !ehTituloGenerico(og.title)) {
+                base.title = og.title.slice(0, 200);
+                base.image = og.image || '';
+                base.price = parsePrecoTexto(og.price);
+              }
+              if (!base.title) {
+                const fallbackId = plat === 'amazon'
+                  ? (clean.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i) || [])[1]
+                  : (clean.match(/\/p\/([a-z0-9]+)/i) || [])[1];
+                base.title = fallbackId ? `Oferta ${plat === 'amazon' ? 'Amazon' : 'Magalu'} ${fallbackId}` : 'Produto importado por link';
+              }
+              base.status = base.affiliateUrl ? 'ok' : 'sem_link';
+              if (base.status === 'sem_link') {
+                base.erro = plat === 'amazon'
+                  ? 'Sem tag da Amazon configurada — o link sai sem comissão.'
+                  : 'Sem slug da loja configurado — o link sai sem comissão.';
+              }
+            } else if (plat === 'shopee') {
+              // Shopee resolve pela API de afiliados: extrai shopId/itemId da
+              // URL, busca pelo slug e casa pelos IDs. Devolve offerLink
+              // (link de afiliado curto) + nome/foto/preço oficiais.
+              const extrairIdsShopee = (u) => u.match(/-i\.(\d+)\.(\d+)(?:[/?#]|$)/) || u.match(/\/product\/(\d+)\/(\d+)(?:[/?#]|$)/);
+              let ids = extrairIdsShopee(clean);
+              if (!ids && /s\.shopee\.com\.br|shope\.ee/i.test(clean)) {
+                try {
+                  const ctrl = new AbortController();
+                  const timer = setTimeout(() => ctrl.abort(), 10000);
+                  const r = await fetch(clean, {
+                    signal: ctrl.signal, redirect: 'follow',
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' },
+                  });
+                  clearTimeout(timer);
+                  if (r.url) ids = extrairIdsShopee(r.url);
+                } catch { /* segue sem ids */ }
+              }
+              if (!ids) throw new Error('Não achei o ID do produto no link da Shopee.');
+              const shopId = ids[1];
+              const itemId = ids[2];
+              let config;
+              try {
+                config = loadShopeeConfig();
+              } catch {
+                throw new Error('Shopee não conectada no painel — vale a busca pelo título no Garimpar.');
+              }
+              const slug = await (async () => {
+                try {
+                  const path = new URL(clean).pathname;
+                  const nome = path.split('/').filter(Boolean)[0] || '';
+                  const s = decodeURIComponent(nome).replace(/-/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 8).join(' ');
+                  if (s && !/^(product|item|produto)$/i.test(s)) return s;
+                } catch { /* tenta og */ }
+                // URL sem slug útil (/product/shop/item ou link curto resolvido):
+                // tenta o título da página pra montar a busca.
+                try {
+                  const og = await fetchOgMeta(clean);
+                  if (og?.title && !ehTituloGenerico(og.title)) {
+                    return og.title.replace(/-/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 8).join(' ');
+                  }
+                } catch { /* segue vazio */ }
+                return '';
+              })();
+              if (!slug) throw new Error('Link sem nome de produto — busque pelo título no Garimpar.');
+              const casaPorIds = (nodes) => (nodes || []).find((n) => String(n.itemId) === itemId && (!shopId || String(n.shopId) === shopId))
+                || (nodes || []).find((n) => String(n.itemId) === itemId);
+              // Cascata de palavras-chave: slug cheio -> 5 palavras -> 3 palavras.
+              // A API aceita busca por NOME (keyword); não há busca por preço nem
+              // por link — então variamos o nome até o item aparecer no top 100.
+              const palavras = slug.split(' ').filter(Boolean);
+              const tentativas = [
+                palavras.slice(0, 8).join(' '),
+                palavras.slice(0, 5).join(' '),
+                palavras.slice(0, 3).join(' '),
+              ].filter((k, i, arr) => k && arr.indexOf(k) === i);
+              let nodes = [];
+              let achado = null;
+              let conferir = false;
+              let vasculhados = 0;
+              for (const keyword of tentativas) {
+                const r = await searchProductOffers({ keyword, limit: 100, config });
+                nodes = r.nodes || [];
+                vasculhados += nodes.length;
+                achado = casaPorIds(nodes);
+                if (achado) break;
+              }
+              if (!achado && nodes.length) {
+                // Último recurso: melhor candidato por similaridade de título.
+                // NÃO entra sozinho: volta marcado pra você conferir (foto/preço
+                // aparecem na tela; link errado = comissão errada).
+                const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\u00e0-\u00ff\s]/gi, ' ').split(/\s+/).filter((w) => w.length > 2);
+                const baseWords = [...new Set(norm(slug))];
+                let melhor = null;
+                let melhorScore = 0;
+                for (const n of nodes) {
+                  const cand = new Set(norm(n.productName));
+                  const inter = baseWords.filter((w) => cand.has(w)).length;
+                  const score = baseWords.length ? inter / baseWords.length : 0;
+                  if (score > melhorScore) { melhorScore = score; melhor = n; }
+                }
+                if (melhor && melhorScore >= 0.5) {
+                  achado = melhor;
+                  conferir = true;
+                }
+              }
+              if (!achado) throw new Error(`ID ${itemId} não voltou em ${vasculhados} resultados da API — busque pelo título no Garimpar.`);
+              base.title = String(achado.productName || '').slice(0, 200);
+              base.image = String(achado.imageUrl || '');
+              const pMin = parseFloat(achado.priceMin);
+              const pMax = parseFloat(achado.priceMax);
+              base.price = Number.isFinite(pMin) && pMin > 0 ? pMin : null;
+              const desconto = parseFloat(achado.priceDiscountRate);
+              if (base.price && Number.isFinite(desconto) && desconto > 0 && desconto < 100) {
+                base.priceOld = base.price / (1 - desconto / 100);
+              } else if (Number.isFinite(pMax) && pMax > (base.price || 0)) {
+                base.priceOld = pMax;
+              }
+              if (achado.offerLink) base.affiliateUrl = String(achado.offerLink);
+              if (!base.title) throw new Error('Resposta da Shopee veio sem nome — tente de novo.');
+              if (conferir) {
+                base.status = 'conferir';
+                base.erro = 'Achado por similaridade de título — confira foto e preço antes de adicionar.';
+              } else {
+                base.status = base.affiliateUrl ? 'ok' : 'sem_link';
+                if (base.status === 'sem_link') base.erro = 'API não devolveu o link — busque pelo título no Garimpar.';
+              }
+            }
+          } catch (err) {
+            base.status = 'erro';
+            base.erro = err instanceof Error ? err.message : 'Falha ao resolver.';
+          }
+          return base;
+        };
+        const resultados = new Array(links.length);
+        let cursor = 0;
+        const CONCORRENCIA = 4;
+        await Promise.all(Array.from({ length: Math.min(CONCORRENCIA, links.length) }, async () => {
+          while (cursor < links.length) {
+            const i = cursor++;
+            try {
+              resultados[i] = await resolverUmLink(links[i]);
+            } catch (err) {
+              resultados[i] = {
+                url: links[i], plataforma: detectarPlataformaUrl(links[i].split('#')[0]),
+                title: '', image: '', price: null, priceOld: null, affiliateUrl: '',
+                status: 'erro', erro: err instanceof Error ? err.message : 'Falha ao resolver.',
+              };
+            }
+          }
         }));
-        importedExtensionProducts.push(...valid);
-        while (importedExtensionProducts.length > 500) importedExtensionProducts.shift();
-        sendJson(res, 201, { ok: true, imported: valid.length });
+        sendJson(res, 200, { resultados });
+        return;
+      }
+
+      // POST /api/integrations/ml/connect - guarda cookies da sessão ML (extensão)
+      if (req.method === 'POST' && pathOnly === '/api/integrations/ml/connect') {
+        const auth = await findExtensionTokenRecord(req.headers['x-api-token']);
+        if (!auth) {
+          sendJson(res, 401, { error: { code: 'INVALID_API_TOKEN', message: 'Token inválido.' } });
+          return;
+        }
+        const body = await readJsonBody(req);
+        const cookies = body?.cookies && typeof body.cookies === 'object' ? body.cookies : null;
+        if (!cookies || Object.keys(cookies).length === 0) {
+          sendJson(res, 400, { error: { code: 'MISSING_COOKIES', message: 'Envie os cookies da sessão do Mercado Livre.' } });
+          return;
+        }
+        await CredentialsStore.save(auth.userId, 'mercado_livre', { cookies, cookieSyncedAt: new Date().toISOString(), source: 'extension' });
+        sendJson(res, 200, { ok: true });
         return;
       }
 
@@ -1604,6 +2125,10 @@ async function handleShopeeAnalytics(req, res) {
       recentConversions,
     });
   } catch (err) {
+    if (err instanceof ShopeeConfigError) {
+      sendJson(res, 503, { error: { code: err.code, message: err.message } });
+      return;
+    }
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar analytics Shopee.' } });
   }
 }
@@ -1807,7 +2332,7 @@ async function handleClearQueue(req, res) {
 const dispatchJobs = new Map();
 let dispatchQueueRunning = false;
 
-const DEFAULT_AUTOMATION_MESSAGE = '👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}';
+const DEFAULT_AUTOMATION_MESSAGE = "💛 Esse achado vale a pena conferir!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}";
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
@@ -1846,6 +2371,10 @@ async function handleSaveDispatchAutomation(req, res) {
 async function enqueueAutomaticOfferForReview(userId, offer) {
   const config = await DispatchAutomationStore.get(userId);
   if (!config?.enabled) return null;
+  if (!offer?.name && !offer?.title) {
+    logLine(`[AUTOMATION] Oferta ${offer?.id} sem nome ignorada (não entra na fila).`);
+    return null;
+  }
   if (!automationIsWithinSchedule(config)) {
     logLine(`[AUTOMATION] Fora do horário configurado; ${offer.id} mantida na fila manual.`);
     return null;
@@ -1912,9 +2441,10 @@ async function runAutomaticOfferDiscovery() {
         const categories = Array.isArray(config.categories) ? config.categories : [];
         const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
         const selectedCategory = categories.length ? String(categories[categoryCursor % categories.length]).trim() : '';
-        const numericCategoryId = Number.parseInt(selectedCategory, 10);
+        const categoryPlan = resolveAutomationCategory(selectedCategory, categoryCursor);
+        const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
         const { nodes } = await searchProductOffers({
-          keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : selectedCategory,
+          keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : categoryPlan.keywords,
           filter: 'trending', page: 1, limit: 50,
           categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
           config: loadShopeeConfig(),
@@ -1926,9 +2456,12 @@ async function runAutomaticOfferDiscovery() {
         const offers = normalizeProductOffers(nodes, 'trending')
           .filter(item => {
             if (!isBrazilianOffer(item)) return false;
+            const price = Number(item?.currentPrice);
+            if (!Number.isFinite(price) || price < 15 || price > 80) return false;
             const key = dispatchProductKey(item);
             return item?.id && !queuedKeys.has(key) && !sentKeys.has(key);
           })
+          .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
           .slice(0, batchSize);
         if (!offers.length) {
           await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
@@ -2067,6 +2600,11 @@ async function handleCreateDispatch(req, res) {
     
     if (!offers || !Array.isArray(offers) || offers.length === 0) {
       sendJson(res, 400, { error: { code: 'MISSING_OFFERS', message: 'Nenhuma oferta selecionada.' } });
+      return;
+    }
+    const semNome = offers.filter(o => !o || !(o.name || o.title)).length;
+    if (semNome > 0) {
+      sendJson(res, 400, { error: { code: 'OFFERS_WITHOUT_NAME', message: `${semNome} oferta(s) sem nome — retire elas da seleção antes de confirmar.` } });
       return;
     }
     if (!destinations || !destinations.groups || destinations.groups.length === 0) {
@@ -2759,10 +3297,49 @@ async function handleUpdatePlatforms(req, res) {
     const settings = userSettings.get(userId) || getDefaultSettings();
     settings.platforms = { ...settings.platforms, ...body };
     userSettings.set(userId, settings);
+    // Espelha as etiquetas no DataStore: a extensão e o Por links leem de lá
+    // (a memória zera a cada restart/serverless).
+    try {
+      const tags = {
+        id: `exttags-${userId}`,
+        userId,
+        ml: settings.platforms?.mercadoLivre?.affiliateTag || '',
+        amazon: settings.platforms?.amazon?.associateTag || '',
+        magalu: settings.platforms?.magalu?.storeSlug || '',
+        shopee: settings.affiliateTag || '',
+        updatedAt: new Date().toISOString(),
+      };
+      const existing = await dataStore.findOne('extensionTags', { userId }).catch(() => null);
+      if (existing) await dataStore.update('extensionTags', existing.id, tags).catch(() => null);
+      else await dataStore.add('extensionTags', tags).catch(() => null);
+    } catch { /* memória basta */ }
     sendJson(res, 200, { ok: true, settings });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar plataformas.' } });
   }
+}
+
+// Etiquetas de afiliado (ML/Amazon/Magalu/Shopee): memória primeiro,
+// DataStore depois (sobrevive a restart).
+async function getExtensionTags(userId) {
+  const mem = userSettings.get(userId);
+  const fromMem = {
+    ml: mem?.platforms?.mercadoLivre?.affiliateTag || '',
+    amazon: mem?.platforms?.amazon?.associateTag || '',
+    magalu: mem?.platforms?.magalu?.storeSlug || '',
+    shopee: mem?.affiliateTag || '',
+  };
+  if (fromMem.ml || fromMem.amazon || fromMem.magalu || fromMem.shopee) return fromMem;
+  try {
+    const stored = await dataStore.findOne('extensionTags', { userId });
+    if (stored) {
+      return {
+        ml: stored.ml || '', amazon: stored.amazon || '',
+        magalu: stored.magalu || '', shopee: stored.shopee || '',
+      };
+    }
+  } catch { /* segue vazio */ }
+  return fromMem;
 }
 
 async function handleUpdateTemplates(req, res) {
@@ -2859,6 +3436,33 @@ function dispatchProductKey(offer) {
   const marketplace = String(offer?.marketplace || 'shopee').trim().toLowerCase();
   const productId = String(offer?.marketplaceProductId || offer?.productId || offer?.id || '').trim();
   return `${marketplace}:${productId}`;
+}
+
+// Mix de categorias para o pÃºblico feminino, priorizando compras low-ticket.
+const AUTOMATION_CATEGORY_PLAN = [
+  { id: 'casa-cozinha', keywords: 'casa cozinha organizador pote escorredor utensílio garrafa copo forma panela suporte prateleira' },
+  { id: 'beleza-autocuidado', keywords: 'beleza autocuidado escova secador chapinha maquiagem espelho skincare necessaire unha cabelo' },
+  { id: 'organizacao', keywords: 'organização colmeia gaveta armário sapateira caixa cabide geladeira' },
+  { id: 'moda-feminina', keywords: 'moda feminina bolsa carteira chinelo pijama legging top vestido acessórios' },
+  { id: 'utilidades', keywords: 'utilidades mini ventilador luminária extensão carregador suporte celular carro garrafa' },
+  { id: 'maternidade-infantil', keywords: 'maternidade infantil organizador copo brinquedo material escolar rotina' },
+];
+const AUTOMATION_CATEGORY_SLOTS = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1, 1, 1, 1, 2, 2, 2, 3, 3];
+
+function resolveAutomationCategory(value, cursor) {
+  const raw = String(value || '').trim().toLowerCase();
+  const selected = AUTOMATION_CATEGORY_PLAN.find(item => item.id === raw);
+  if (selected) return selected;
+  if (!raw) return AUTOMATION_CATEGORY_PLAN[AUTOMATION_CATEGORY_SLOTS[Math.max(0, cursor) % AUTOMATION_CATEGORY_SLOTS.length]];
+  return { id: raw, keywords: raw };
+}
+
+function scoreAutomationOffer(offer) {
+  const price = Number(offer?.currentPrice);
+  const discount = Number(offer?.discountPercentage) || 0;
+  const sales = Number(offer?.salesCount) || 0;
+  const priceScore = Number.isFinite(price) && price >= 15 && price <= 80 ? 30 : 0;
+  return priceScore + Math.min(35, discount) + Math.min(25, Math.log10(Math.max(1, sales)) * 10) + Math.min(10, Number(offer?.offerScore) || 0);
 }
 
 // A garimpagem automática deve permanecer restrita ao catálogo brasileiro.
@@ -3093,12 +3697,13 @@ async function handleGetTemplates(req, res) {
 
 function getDefaultTemplates() {
   return [
-    { id: 'clique-agora', name: 'Clique agora e garanta', message: '[OFERTA QUE PODE ACABAR AGORA!]\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n❌ *Por apenas: {PRECO}*\n_{DESCONTO}% OFF_\n\n*{CTA}:*\n{LINK}\n\n[URGENTE] Pode acabar a qualquer momento ou o preco mudar sem aviso.', isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado-barato', name: 'Achado barato', message: '[ACHADO DO MOMENTO]\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n❌ *Agora por {PRECO}* - _{DESCONTO}% OFF_\n\n*Clique aqui agora e veja:*\n{LINK}\n\nSe gostou, corre: esse preco pode acabar hoje.', isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'vendedor', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado-vale-pena', name: 'Achado que vale a pena', message: "💛 Esse achado vale a pena conferir!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'clique-agora', name: 'Clique agora e garanta', message: "🚨 OFERTA QUE PODE ACABAR AGORA!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado-barato', name: 'Achado barato', message: "👀 ACHADO DO MOMENTO!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'vendedor', name: 'Humanizado', message: "👀 OLHA O QUE EU ACHEI!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'direto', name: 'Oferta rápida', message: "🚨 OFERTA ENCONTRADA!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado', name: 'Sensação de achado', message: "💛 ESSE ACHADO VALE A PENA!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'urgencia', name: 'Urgência', message: "⚠️ PREÇO BAIXOU!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
   ];
 }
 
