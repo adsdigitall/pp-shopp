@@ -31,6 +31,15 @@ test('renders benefits and optional catalog fields without leaking placeholders'
   assert.match(message, /321|4\.7|48% OFF/);
   assert.equal(validateOfferMessage(message, product).valid, true);
 });
+
+test('keeps an evaluation callout when the provider omits the numeric rating', () => {
+  const message = renderWhatsAppMessage(
+    'OLHA ESSE ACHADINHO!\n{TITULO}\nPor apenas {PRECO}\n{BENEFICIOS}\n{AVALIACAO}\n⚠️ Oferta por tempo limitado.\nAPROVEITE A OFERTA:\n{LINK}',
+    { name: 'Organizador de armário', currentPrice: 19.9, affiliateUrl: 'https://exemplo.test/oferta' },
+  );
+  assert.match(message, /avaliações no anúncio/i);
+  assert.doesNotMatch(message, /\{AVALIACAO\}/);
+});
 test('keeps a useful CTA when rotation is disabled', () => {
   assert.match(renderWhatsAppMessage('{CTA}\n{LINK}', offer, { rotatingCTAs: false }), /Confira a oferta/);
 });

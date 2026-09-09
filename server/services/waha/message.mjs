@@ -47,8 +47,10 @@ function renderValues(source, offer, options) {
   if (/(cozinha|casa|banho|utilidade|rotina)/.test(context)) derived.push('✅ Prático para o dia a dia');
   if (/(beleza|cabelo|skincare|maquiagem|unha)/.test(context)) derived.push('✅ Fácil de usar na rotina');
   const benefits = (points.length ? points.map((item) => `✅ ${String(item).trim()}`) : derived.length ? derived : ['✅ Oferta encontrada agora']).slice(0, 4).join('\n');
-  const sales = offer.salesCountText || (Number(offer.salesCount) > 0 ? `+${Number(offer.salesCount).toLocaleString('pt-BR')} vendidos` : '');
-  const rating = Number(offer.rating) > 0 ? `⭐ ${Number(offer.rating).toFixed(1)} de avaliação` : '';
+  const salesValue = offer.salesCount ?? offer.soldCount ?? offer.sales;
+  const sales = offer.salesCountText || (Number(salesValue) > 0 ? `+${Number(salesValue).toLocaleString('pt-BR')} vendidos` : '');
+  const ratingValue = offer.rating ?? offer.ratingStar ?? offer.itemRating ?? offer.reviewScore;
+  const rating = Number(ratingValue) > 0 ? `⭐ ${Number(ratingValue).toFixed(1)} de avaliação` : '⭐ Confira as avaliações no anúncio';
   return source
     .replace(/{TITULO}/g, offer.name || offer.title || offer.productName || 'Oferta especial')
     .replace(/{PRECO}/g, hasCurrentPrice ? `R$ ${brl(currentPrice)}` : 'Preço indisponível')
