@@ -30,6 +30,35 @@ export function validateOfferMessage(message, offer = {}) {
   return { valid: Object.values(checks).every(Boolean), checks };
 }
 
+export function sanitizeOfferCopy(copy, offer = {}) {
+  const currentPrice = Number(offer?.currentPrice);
+  const originalPrice = Number(offer?.originalPrice);
+  const explicitDiscount = Number(offer?.discountPercentage);
+  const discount = Number.isFinite(explicitDiscount) && explicitDiscount > 0
+    ? Math.round(explicitDiscount)
+    : Number.isFinite(originalPrice) && originalPrice > currentPrice && currentPrice > 0
+      ? Math.round((1 - currentPrice / originalPrice) * 100)
+      : null;
+  const ratingValue = offer?.rating ?? offer?.ratingStar ?? offer?.itemRating ?? offer?.reviewScore;
+  const hasRating = Number(ratingValue) > 0;
+  let discountApplied = false;
+  return String(copy || '').replace(/\r/g, '').split('\n')
+    .map((line) => line.trimEnd())
+    .map((line) => {
+      if (/\{[^}]+\}|undefined|null|NaN/i.test(line)) return false;
+      if (!hasRating && /avalia|avaliac/i.test(line)) return false;
+      if (/Oferta encontrada agora/i.test(line)) return false;
+      if (!/^\s*\d{1,3}(?:[.,]\d{1,2})?\s*$/.test(line)) return line;
+      if (discount && !discountApplied) { discountApplied = true; return `${discount}% OFF`; }
+      return false;
+    })
+    .filter(Boolean)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    ;
+}
+
 function renderValues(source, offer, options) {
   const brl = (value) => Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const currentPrice = Number(offer.currentPrice);
@@ -86,8 +115,9 @@ export function renderWhatsAppMessage(template, offer, options = {}) {
   }
   if (!hasOriginalPrice) source = source.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
   if (!discount) source = source.split('\n').filter(line => !line.includes('{DESCONTO}')).join('\n');
-  const rendered = renderValues(source, offer, options);
-  return validateOfferMessage(rendered, offer).valid ? rendered : renderFallback(offer, options);
+  const rendered = sanitizeOfferCopy(renderValues(source, offer, options), offer);
+  const fallback = sanitizeOfferCopy(renderFallback(offer, options), offer);
+  return validateOfferMessage(rendered, offer).valid ? rendered : fallback;
 }
 
 export { FALLBACK_TEMPLATE };

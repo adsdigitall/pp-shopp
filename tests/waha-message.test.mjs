@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderWhatsAppMessage, validateOfferMessage, ROTATING_CTAS } from '../server/services/waha/message.mjs';
+import { renderWhatsAppMessage, validateOfferMessage, sanitizeOfferCopy, ROTATING_CTAS } from '../server/services/waha/message.mjs';
 
 const offer = { name: 'Produto', currentPrice: 29.9, originalPrice: 49.9, affiliateUrl: 'https://exemplo.test/oferta' };
 test('rotates CTA deterministically for each dispatch position', () => {
@@ -37,8 +37,14 @@ test('keeps an evaluation callout when the provider omits the numeric rating', (
     'OLHA ESSE ACHADINHO!\n{TITULO}\nPor apenas {PRECO}\n{BENEFICIOS}\n{AVALIACAO}\n⚠️ Oferta por tempo limitado.\nAPROVEITE A OFERTA:\n{LINK}',
     { name: 'Organizador de armário', currentPrice: 19.9, affiliateUrl: 'https://exemplo.test/oferta' },
   );
-  assert.match(message, /avaliações no anúncio/i);
+  assert.doesNotMatch(message, /avalia|rating/i);
   assert.doesNotMatch(message, /\{AVALIACAO\}/);
+});
+
+test('formats orphan discounts and removes unresolved values', () => {
+  const message = sanitizeOfferCopy('OLHA ESSE ACHADINHO!\nProduto\nR$ 62,90\n37\n{BENEFICIOS}\nundefined\nnull\nNaN\nAPROVEITE A OFERTA:\nhttps://exemplo.test', { currentPrice: 62.9, discountPercentage: 37 });
+  assert.match(message, /37% OFF/);
+  assert.doesNotMatch(message, /\{|undefined|null|NaN|^37$/m);
 });
 test('keeps a useful CTA when rotation is disabled', () => {
   assert.match(renderWhatsAppMessage('{CTA}\n{LINK}', offer, { rotatingCTAs: false }), /Confira a oferta/);
