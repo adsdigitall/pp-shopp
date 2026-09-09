@@ -140,6 +140,8 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     const brl = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${brl(firstOffer.currentPrice)}` : '—');
     msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${brl(firstOffer.originalPrice)}` : '—');
+    const desconto = firstOffer.discountPercentage ?? (firstOffer.originalPrice && firstOffer.currentPrice && firstOffer.originalPrice > firstOffer.currentPrice ? Math.round((1 - firstOffer.currentPrice / firstOffer.originalPrice) * 100) : null);
+    msg = msg.replace(/{DESCONTO}/g, desconto ? `${desconto}% OFF` : '');
     msg = msg.replace(/{CTA}/g, rotatingCTAs ? rotatingCtaExamples[0] : 'Confira a oferta');
     msg = msg.replace(/{LINK}/g, firstOffer.affiliateUrl || firstOffer.productUrl);
     msg = msg.replace(/{CUPOM}/g, 'CUPOM10');
