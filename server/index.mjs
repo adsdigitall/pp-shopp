@@ -3452,8 +3452,13 @@ const AUTOMATION_CATEGORY_PLAN = [
   { id: 'moda-feminina', keywords: 'moda feminina bolsa carteira chinelo pijama legging top vestido acessórios' },
   { id: 'utilidades', keywords: 'utilidades mini ventilador luminária extensão carregador suporte celular carro garrafa' },
   { id: 'maternidade-infantil', keywords: 'maternidade infantil organizador copo brinquedo material escolar rotina' },
+  { id: 'cama-mesa-banho', keywords: 'cama mesa banho toalha lençol tapete pano cozinha' },
+  { id: 'banheiro', keywords: 'banheiro organizador suporte escova sabonete tapete' },
+  { id: 'acessorios-femininos', keywords: 'acessórios femininos brinco colar presilha bolsa carteira' },
+  { id: 'eletronicos-baratos', keywords: 'eletrônicos baratos carregador fone suporte celular luminária' },
 ];
-const AUTOMATION_CATEGORY_SLOTS = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1, 1, 1, 1, 2, 2, 2, 3, 3];
+// Alterna uma categoria por ciclo para evitar lotes repetidos do mesmo nicho.
+const AUTOMATION_CATEGORY_SLOTS = AUTOMATION_CATEGORY_PLAN.map((_, index) => index);
 
 function resolveAutomationCategory(value, cursor) {
   const raw = String(value || '').trim().toLowerCase();

@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/Separator';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
+import { DEFAULT_OFFER_TEMPLATES } from '../services/offerTemplates';
 
 interface DispararPageProps {
   isOpen: boolean;
@@ -28,14 +29,7 @@ interface DispararPageProps {
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-const defaultTemplates: Template[] = [
-  { id: 'clique-agora', name: 'Clique agora e garanta', message: '[OFERTA QUE PODE ACABAR AGORA!]\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n❌ *Por apenas: {PRECO}*\n_{DESCONTO}% OFF_\n\n*{CTA}:*\n{LINK}\n\n[URGENTE] Pode acabar a qualquer momento ou o preco mudar sem aviso.', isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'achado-barato', name: 'Achado barato', message: '[ACHADO DO MOMENTO]\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n❌ *Agora por {PRECO}* - _{DESCONTO}% OFF_\n\n*Clique aqui agora e veja:*\n{LINK}\n\nSe gostou, corre: esse preco pode acabar hoje.', isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'humanizado', name: 'Humanizado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'direto', name: 'Oferta rápida', message: "🚨 *OFERTA ENCONTRADA!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'achado', name: 'Sensação de achado', message: "👀 *OLHA O QUE EU ACHEI!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 *Corre pra ver:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-  { id: 'urgencia', name: 'Urgência', message: "⚠️ *PREÇO BAIXOU!*\n\n*{TITULO}*\n\n~De: {PRECO_ANTIGO}~\n✅ *Agora por: {PRECO}*\n_{DESCONTO}% OFF_\n\n🛒 {LINK}", isCustom: false, createdAt: new Date().toISOString() },
-];
+const defaultTemplates = DEFAULT_OFFER_TEMPLATES;
 
 const variables = [
   { key: '{TITULO}', label: 'Título do produto' },
@@ -80,7 +74,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [step, setStep] = useState<DispatchStep>(1);
   const [selectedOffers, setSelectedOffers] = useState<string[]>([]);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('humanizado');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('achado-vale-pena');
   const [templateMode, setTemplateMode] = useState<'fixed' | 'rotate'>('fixed');
   const [customMessage, setCustomMessage] = useState(formatTemplateMessage(defaultTemplates[0].message));
   const [showImage, setShowImage] = useState(true);
@@ -143,11 +137,16 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     let msg = formatTemplateMessage(customMessage);
     if (!firstOffer.originalPrice || firstOffer.originalPrice <= firstOffer.currentPrice) msg = msg.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
     msg = msg.replace(/{TITULO}/g, firstOffer.name);
-    msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${firstOffer.currentPrice.toFixed(2).replace('.', ',')}` : '—');
-    msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${firstOffer.originalPrice.toFixed(2).replace('.', ',')}` : '—');
+    const brl = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${brl(firstOffer.currentPrice)}` : '—');
+    msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${brl(firstOffer.originalPrice)}` : '—');
     msg = msg.replace(/{CTA}/g, rotatingCTAs ? rotatingCtaExamples[0] : 'Confira a oferta');
     msg = msg.replace(/{LINK}/g, firstOffer.affiliateUrl || firstOffer.productUrl);
     msg = msg.replace(/{CUPOM}/g, 'CUPOM10');
+    const benefits = firstOffer.highlightPoints?.filter(Boolean).slice(0, 4).map(point => `✅ ${point}`).join('\n') || '✅ Oferta encontrada agora';
+    msg = msg.replace(/{BENEFICIOS}/g, benefits);
+    msg = msg.replace(/{VENDAS}|{SALES}/g, firstOffer.salesCountText || (firstOffer.salesCount ? `+${firstOffer.salesCount.toLocaleString('pt-BR')} vendidos` : ''));
+    msg = msg.replace(/{AVALIACAO}|{RATING}/g, firstOffer.rating ? `⭐ ${firstOffer.rating.toFixed(1)} de avaliação` : '');
     return formatTemplateMessage(msg);
   }, [customMessage, offers, selectedOffers, rotatingCTAs]);
 
@@ -638,10 +637,9 @@ export const DispararPage: React.FC<DispararPageProps> = ({
 
                   {/* Grupos destinatários */}
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {selectedGroupsData.slice(0, 4).map(group => (
+                    {selectedGroupsData.map(group => (
                       <span key={group.id} className="max-w-[160px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">#{group.id.slice(-4)} {group.name}</span>
                     ))}
-                    {selectedGroupsData.length > 4 && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">+{selectedGroupsData.length - 4} mais</span>}
                   </div>
 
                   {/* Progress bar */}
@@ -675,6 +673,14 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                   <h2 className="mt-1 text-2xl font-black text-[var(--text-primary)]">Confirmar disparo</h2>
                   <p className="mt-2 max-w-md text-[11px] leading-5 text-[var(--text-secondary)]">Ao confirmar, o Radar cria a fila e envia pelo WhatsApp conectado.</p>
                   <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-[11px] text-[var(--text-secondary)]">{selectedOffers.length} oferta(s) · {selectedGroups.length} grupo(s)</div>
+                  {(() => {
+                    const semNome = offers.filter(o => selectedOffers.includes(o.id) && !(o.name || (o as any).productName || (o as any).title)).length;
+                    return semNome > 0 ? (
+                      <div className="mt-3 rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-4 py-3 text-[11px] font-bold text-[var(--error)]">
+                        {semNome} oferta(s) sem nome — saem como "Oferta especial" no grupo. Volte e retire elas da seleção.
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               )}
             </div>
@@ -696,7 +702,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
           <Button
             type="button"
             onClick={dispatchJob ? () => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); } : step === 5 ? handleExecute : handleNext}
-            disabled={dispatching || (step === 5 && selectedGroups.length === 0)}
+            disabled={dispatching || (step === 5 && (selectedGroups.length === 0 || offers.some(o => selectedOffers.includes(o.id) && !(o.name || (o as any).productName || (o as any).title))))}
             className="pressable flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-[10px] font-black text-white hover:bg-[var(--primary-hover)]"
           >
             {dispatchJob ? <>Novo <Plus className="h-3.5 w-3.5" /></> : step === 5 ? (
