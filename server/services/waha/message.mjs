@@ -54,6 +54,7 @@ export function sanitizeOfferCopy(copy, offer = {}) {
     })
     .filter(Boolean)
     .join('\n')
+    .replace(/(De:\s*)R\$\s*([\d.]+,\d{2})/gi, '$1~R$ $2~')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
     ;

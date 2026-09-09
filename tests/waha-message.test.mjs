@@ -46,6 +46,15 @@ test('formats orphan discounts and removes unresolved values', () => {
   assert.match(message, /37% OFF/);
   assert.doesNotMatch(message, /\{|undefined|null|NaN|^37$/m);
 });
+
+test('formats the anchored original price with WhatsApp strikethrough', () => {
+  const message = renderWhatsAppMessage(
+    'OLHA ESSE ACHADINHO!\n{TITULO}\nDe: {PRECO_ANTIGO}\nAgora por apenas {PRECO}\n{DESCONTO}\n⚠️ Oferta por tempo limitado.\nAPROVEITE A OFERTA:\n{LINK}',
+    { name: 'Produto em oferta', currentPrice: 34.79, originalPrice: 59.98, affiliateUrl: 'https://exemplo.test/oferta' },
+  );
+  assert.match(message, /De:\s*~R\$ 59,98~/);
+  assert.match(message, /R\$ 34,79/);
+});
 test('keeps a useful CTA when rotation is disabled', () => {
   assert.match(renderWhatsAppMessage('{CTA}\n{LINK}', offer, { rotatingCTAs: false }), /Confira a oferta/);
 });
