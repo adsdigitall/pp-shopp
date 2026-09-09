@@ -14,7 +14,7 @@ import { createSettingsReadHandler, createSettingsChannelsHandler, createSetting
 import { fetchRecentConversions } from './services/shopee/reports.mjs';
 import { getPublicKey, saveSubscription, notifySubscribers } from './services/push.mjs';
 import { normalizeWahaGroups } from './services/waha/groups.mjs';
-import { renderWhatsAppMessage, validateOfferMessage } from './services/waha/message.mjs';
+import { renderWhatsAppMessage, sanitizeOfferCopy, validateOfferMessage } from './services/waha/message.mjs';
 
 // Mercado Livre
 import { loadMercadoLivreConfig, MercadoLivreConfigError, buildMercadoLivreAuthUrl } from './services/marketplace/mercadoLivreConfig.mjs';
@@ -2768,10 +2768,10 @@ async function processDispatchJob(jobId) {
         const selectedMessage = message.whatsapp.templateMode === 'rotate' && templatePool.length
           ? templatePool[offerIndex % templatePool.length].message
           : message.whatsapp.customMessage;
-        const msg = renderWhatsAppMessage(selectedMessage, offer, {
+        const msg = sanitizeOfferCopy(renderWhatsAppMessage(selectedMessage, offer, {
           rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
           rotationIndex: deliveryIndex,
-        });
+        }), offer);
         logLine(`[DISPATCH DIAGNOSTIC] ${offer.id || 'unknown'} fields=${Object.keys(offer).sort().join(',')}`);
         const copyValidation = validateOfferMessage(msg, offer);
         if (!copyValidation.valid) {
@@ -2883,6 +2883,9 @@ function renderMessage(template, offer) {
 }
 
 async function sendToWhatsAppGroup(groupId, message, imageUrl, sessionName = WAHA_SESSION) {
+  if (/[{][^}]+[}]|undefined|null|NaN/i.test(String(message || ''))) {
+    throw new Error('Copy bloqueada: possui campos internos não resolvidos.');
+  }
   try {
     const result = await wahaSendMessage(groupId, message, imageUrl, sessionName);
     logLine(`[DISPATCH] Enviado para grupo ${groupId}: ${result?.id || 'ok'}`);
