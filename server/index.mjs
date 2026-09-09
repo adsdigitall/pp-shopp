@@ -5,15 +5,16 @@ import { pathToFileURL } from 'node:url';
 import { initEnv } from './lib/env.mjs';
 import { loadShopeeConfig, ShopeeConfigError } from './services/shopee/config.mjs';
 import { ShopeeApiError } from './services/shopee/client.mjs';
-import {
-  searchProductOffers,
-  mapFilterToShopeeArgs,
-} from './services/shopee/products.mjs';
+import { searchProductOffers } from './services/shopee/products.mjs';
 import { normalizeProductOffers } from './services/shopee/normalizer.mjs';
+import { handleProducts } from './routes/products.mjs';
+import { createTemplateHandlers } from './routes/templates.mjs';
+import { createCouponHandlers } from './routes/coupons.mjs';
+import { createSettingsReadHandler, createSettingsChannelsHandler, createSettingsTemplatesHandler, createSettingsAccountHandler } from './routes/settings.mjs';
 import { fetchRecentConversions } from './services/shopee/reports.mjs';
 import { getPublicKey, saveSubscription, notifySubscribers } from './services/push.mjs';
 import { normalizeWahaGroups } from './services/waha/groups.mjs';
-import { renderWhatsAppMessage } from './services/waha/message.mjs';
+import { renderWhatsAppMessage, validateOfferMessage } from './services/waha/message.mjs';
 
 // Mercado Livre
 import { loadMercadoLivreConfig, MercadoLivreConfigError, buildMercadoLivreAuthUrl } from './services/marketplace/mercadoLivreConfig.mjs';
@@ -34,6 +35,7 @@ import {
 } from './services/storage/DataStore.mjs';
 import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
+import { redactSensitive } from './lib/redactSensitive.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -188,13 +190,6 @@ const memoryApiTokens = globalThis.__radarMemoryApiTokens || (globalThis.__radar
  * SEGURANÇA: credenciais SHOPEE_APP_ID/SHOPEE_SECRET vivem apenas neste processo.
  * Elas NUNCA são retornadas nas respostas nem escritas em logs.
  */
-
-const ALLOWED_FILTERS = [
-  'trending',
-  'top_sales',
-  'high_commission',
-  'high_discount',
-];
 
 const KIND_TO_HTTP = {
   AUTH: 401,
@@ -373,66 +368,6 @@ async function handleOfferCopy(req, res) {
   }
 }
 
-function parseProductsQuery(url) {
-  const qs = url.searchParams;
-  const rawFilter = (qs.get('sort') || qs.get('filter') || 'trending').trim();
-  const filter = ALLOWED_FILTERS.includes(rawFilter)
-    ? /** @type {any} */ (rawFilter)
-    : 'trending';
-
-  const keyword = (qs.get('keyword') || '').toString().slice(0, 80);
-  const categoryIdRaw = Number.parseInt(qs.get('categoryId') || '', 10);
-  const categoryId = Number.isInteger(categoryIdRaw) && categoryIdRaw > 0 ? categoryIdRaw : null;
-
-  let page = Number.parseInt(qs.get('page') || '1', 10);
-  if (!Number.isFinite(page) || page < 1) page = 1;
-  if (page > 50) page = 50;
-
-  let limit = Number.parseInt(qs.get('limit') || '12', 10);
-  if (!Number.isFinite(limit) || limit < 1) limit = 12;
-  // A API oficial aceita atÃ© 500 itens por pÃ¡gina; mantemos 100 como padrÃ£o
-  // no front para trazer muito mais ofertas sem estourar o payload do navegador.
-  if (limit > 500) limit = 500;
-
-  return { filter, keyword, categoryId, page, limit };
-}
-
-async function handleProducts(req, res) {
-  const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
-  const { filter, keyword, categoryId, page, limit } = parseProductsQuery(parsed);
-
-  // Config lida a cada request: permite trocar .env.local sem restart
-  // e facilita testes com variáveis isoladas.
-  const config = loadShopeeConfig();
-
-  const { nodes, pageInfo } = await searchProductOffers({
-    keyword,
-    filter,
-    page,
-    limit,
-    categoryId,
-    config,
-  });
-
-  const products = normalizeProductOffers(nodes, filter);
-
-  sendJson(res, 200, {
-    products,
-    meta: {
-      source: 'shopee-affiliate-api',
-      operation: 'productOfferV2',
-      listType: mapFilterToShopeeArgs(filter).listType,
-      sortType: mapFilterToShopeeArgs(filter).sortType,
-      page: pageInfo.page,
-      limit: pageInfo.limit,
-      hasNextPage: pageInfo.hasNextPage,
-      count: products.length,
-    },
-    // Contrato público interno — campos privados NUNCA devem ser removidos
-    // deste painel, mas também JAMAIS propagados para payloads de compartilhamento.
-  });
-}
-
 async function handleSales(req, res) {
   const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
   const hoursRaw = Number.parseInt(parsed.searchParams.get('hours') || '24', 10);
@@ -491,7 +426,7 @@ export function createApp() {
       }
 
       if (req.method === 'GET' && pathOnly === '/api/products') {
-        await handleProducts(req, res);
+        await handleProducts(req, res, { sendJson });
         logLine(`GET /api/products 200 ${Date.now() - startedAt}ms`);
         return;
       }
@@ -1343,7 +1278,7 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
       // PUT /api/settings/templates - Templates
       if (req.method === 'PUT' && pathOnly === '/api/settings/templates') {
-        await handleUpdateTemplates(req, res);
+        await handleUpdateSettingsTemplates(req, res);
         return;
       }
       // PUT /api/settings/coupons - Cupons
@@ -1358,7 +1293,7 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
       // PUT /api/settings/account - Conta
       if (req.method === 'PUT' && pathOnly === '/api/settings/account') {
-        await handleUpdateAccount(req, res);
+        await handleUpdateSettingsAccount(req, res);
         return;
       }
 
@@ -1831,7 +1766,7 @@ async function handleMercadoLivreAffiliateConfig(req, res) {
       isEnabled: isEnabled !== false,
     });
     
-    sendJson(res, 200, { success: true, config });
+    sendJson(res, 200, { success: true, config: redactSensitive(config) });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao salvar configuração.' } });
   }
@@ -1843,12 +1778,12 @@ async function handleGetMercadoLivreAffiliateConfig(req, res) {
     const config = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre');
     
     sendJson(res, 200, { 
-      config: config || {
+      config: redactSensitive(config || {
         affiliateTag: '',
         affiliateProvider: AffiliateProviderType.MANUAL,
         providerConfig: {},
         isEnabled: true,
-      },
+      }),
       availableProviders: AffiliateLinkProviderFactory.getAvailableTypes(),
     });
   } catch (err) {
@@ -2237,13 +2172,13 @@ async function handleGetQueue(req, res) {
         imageUrl: item.imageUrl || '',
         currentPrice: item.price,
         originalPrice: item.originalPrice,
-        discountPercentage: item.originalPrice && item.price ? Math.round((1 - item.price / item.originalPrice) * 100) : null,
-        salesCount: null,
-        salesCountText: null,
-        rating: null,
-        reviewsCount: null,
-        category: '',
-        categoryId: null,
+        discountPercentage: item.discountPercentage ?? (item.originalPrice && item.price ? Math.round((1 - item.price / item.originalPrice) * 100) : null),
+        salesCount: item.salesCount ?? null,
+        salesCountText: item.salesCountText ?? null,
+        rating: item.rating ?? null,
+        reviewsCount: item.reviewsCount ?? null,
+        category: item.category || '',
+        categoryId: item.categoryId ?? null,
         productUrl: item.originalUrl,
         affiliateUrl: item.affiliateUrl,
         sellerId: '',
@@ -2260,8 +2195,8 @@ async function handleGetQueue(req, res) {
         commissionRate: null,
         commissionAmount: null,
         offerScore: item.offerScore,
-        shortDescription: '',
-        highlightPoints: [],
+        shortDescription: item.shortDescription || '',
+        highlightPoints: Array.isArray(item.highlightPoints) ? item.highlightPoints : [],
         categoryIds: [],
         fetchedAt: item.publishedAt,
       },
@@ -2292,6 +2227,15 @@ async function handleAddToQueue(req, res) {
       imageUrl: product.imageUrl || '',
       price: product.currentPrice,
       originalPrice: product.originalPrice,
+      discountPercentage: product.discountPercentage,
+      salesCount: product.salesCount,
+      salesCountText: product.salesCountText,
+      rating: product.rating,
+      reviewsCount: product.reviewsCount,
+      category: product.category,
+      categoryId: product.categoryId,
+      shortDescription: product.shortDescription,
+      highlightPoints: Array.isArray(product.highlightPoints) ? product.highlightPoints.slice(0, 4) : [],
       affiliateUrl: product.affiliateUrl,
       originalUrl: product.productUrl,
       channelId: '',
@@ -2334,7 +2278,7 @@ async function handleClearQueue(req, res) {
 const dispatchJobs = new Map();
 let dispatchQueueRunning = false;
 
-const DEFAULT_AUTOMATION_MESSAGE = "💛 Esse achado vale a pena conferir!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}";
+const DEFAULT_AUTOMATION_MESSAGE = "💛 OLHA ESSE ACHADINHO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\n👉 *APROVEITE A OFERTA:*\n{LINK}";
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
@@ -2373,8 +2317,16 @@ async function handleSaveDispatchAutomation(req, res) {
 async function enqueueAutomaticOfferForReview(userId, offer) {
   const config = await DispatchAutomationStore.get(userId);
   if (!config?.enabled) return null;
-  if (!offer?.name && !offer?.title) {
-    logLine(`[AUTOMATION] Oferta ${offer?.id} sem nome ignorada (não entra na fila).`);
+  const productTitle = String(offer?.name || offer?.productName || offer?.title || '').trim();
+  const currentPrice = Number(offer?.currentPrice);
+  const affiliateUrl = String(offer?.affiliateUrl || '').trim();
+  if (!productTitle || !Number.isFinite(currentPrice) || currentPrice <= 0 || !/^https?:\/\/\S+$/i.test(affiliateUrl)) {
+    const missingFields = [
+      !productTitle ? 'title' : null,
+      !Number.isFinite(currentPrice) || currentPrice <= 0 ? 'currentPrice' : null,
+      !/^https?:\/\/\S+$/i.test(affiliateUrl) ? 'affiliateUrl' : null,
+    ].filter(Boolean).join(',');
+    logLine(`[AUTOMATION] Oferta ${offer?.id || 'sem-id'} incompleta ignorada; campos=${missingFields}.`);
     return null;
   }
   if (!automationIsWithinSchedule(config)) {
@@ -2394,11 +2346,18 @@ async function enqueueAutomaticOfferForReview(userId, offer) {
     logLine(`[AUTOMATION] Oferta ${offer.id} já está na fila de revisão.`);
     return null;
   }
+  const stableQueueId = `queue-auto-${productKey.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 90)}`;
   const item = {
-    id: `queue-auto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    // O ID estável torna a inclusão idempotente entre ciclos e workers.
+    id: stableQueueId,
     productId: offer.id, marketplace: offer.marketplace, marketplaceProductId: offer.marketplaceProductId,
-    productName: offer.name || offer.title || '', imageUrl: offer.imageUrl || '', price: offer.currentPrice,
-    originalPrice: offer.originalPrice, affiliateUrl: offer.affiliateUrl, originalUrl: offer.productUrl,
+    productName: productTitle, imageUrl: offer.imageUrl || '', price: currentPrice,
+    originalPrice: offer.originalPrice, discountPercentage: offer.discountPercentage,
+    salesCount: offer.salesCount ?? offer.soldCount ?? null,
+    salesCountText: offer.salesCountText || null, rating: offer.rating ?? null,
+    reviewsCount: offer.reviewsCount ?? null, category: offer.category || '', categoryId: offer.categoryId ?? null,
+    shortDescription: offer.shortDescription || '', highlightPoints: Array.isArray(offer.highlightPoints) ? offer.highlightPoints.slice(0, 4) : [],
+    affiliateUrl, originalUrl: offer.productUrl,
     channelId: '', channelName: '', publishedAt: new Date().toISOString(), selected: true,
     offerScore: offer.offerScore, affiliateProvider: offer.affiliateProvider, source: 'automatic_discovery',
   };
@@ -2442,7 +2401,17 @@ async function runAutomaticOfferDiscovery() {
       try {
         const categories = Array.isArray(config.categories) ? config.categories : [];
         const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
-        const selectedCategory = categories.length ? String(categories[categoryCursor % categories.length]).trim() : '';
+        // Migra ids legados (slugs com hífen) pras palavras-chave atuais.
+        const LEGACY_CATEGORY_KEYWORDS = {
+          'casa-cozinha': 'casa e cozinha',
+          'beleza-autocuidado': 'beleza',
+          'organizacao': 'organizadores',
+          'moda-feminina': 'moda feminina barata',
+          'utilidades': 'utilidades domésticas',
+          'maternidade-infantil': 'maternidade e infantil',
+        };
+        const rawCategory = categories.length ? String(categories[categoryCursor % categories.length]).trim() : '';
+        const selectedCategory = LEGACY_CATEGORY_KEYWORDS[rawCategory] || rawCategory;
         const categoryPlan = resolveAutomationCategory(selectedCategory, categoryCursor);
         const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
         const { nodes } = await searchProductOffers({
@@ -2454,14 +2423,17 @@ async function runAutomaticOfferDiscovery() {
         const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
         const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
         const sentKeys = await recentlySentProductKeys(config.userId);
-        const batchSize = Math.min(50, Math.max(1, Number(config.batchSize) || 10));
+        const recentDiscoveryKeys = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys.map(String) : []);
+        // "Nova oferta a cada X" representa uma oferta por ciclo.
+        const batchSize = 1;
         const offers = normalizeProductOffers(nodes, 'trending')
           .filter(item => {
             if (!isBrazilianOffer(item)) return false;
+            if (!String(item?.title || '').trim()) return false;
             const price = Number(item?.currentPrice);
             if (!Number.isFinite(price) || price < 15 || price > 80) return false;
             const key = dispatchProductKey(item);
-            return item?.id && !queuedKeys.has(key) && !sentKeys.has(key);
+            return item?.id && !queuedKeys.has(key) && !sentKeys.has(key) && !recentDiscoveryKeys.has(key);
           })
           .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
           .slice(0, batchSize);
@@ -2479,7 +2451,10 @@ async function runAutomaticOfferDiscovery() {
           ...config,
           nextDiscoveryAt,
           categoryCursor: categoryCursor + 1,
-          recentOfferKeys: offers.map(dispatchProductKey).slice(0, 300),
+          recentOfferKeys: [...new Set([
+            ...offers.map(dispatchProductKey),
+            ...(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys : []),
+          ])].slice(0, 300),
         });
         logLine(`[AUTOMATION] ${queuedItems.length} oferta(s) do lote adicionada(s) à fila para revisão manual.`);
       } catch (error) {
@@ -2594,6 +2569,45 @@ async function handleUpdateQueueItem(req, res, pathOnly) {
   }
 }
 
+async function hydrateDispatchOffer(userId, incoming) {
+  const candidate = incoming && typeof incoming === 'object' ? incoming : {};
+  const history = await PublicationHistoryStore.getByUser(userId, 300).catch(() => []);
+  const stored = history.find((item) => item.id === candidate.id
+    || item.productId === candidate.productId
+    || item.productId === candidate.id);
+  const source = stored ? {
+    id: stored.productId || stored.id,
+    name: stored.productName,
+    productName: stored.productName,
+    title: stored.productName,
+    currentPrice: stored.price,
+    originalPrice: stored.originalPrice,
+    discountPercentage: stored.discountPercentage,
+    salesCount: stored.salesCount,
+    salesCountText: stored.salesCountText,
+    rating: stored.rating,
+    reviewsCount: stored.reviewsCount,
+    category: stored.category,
+    categoryId: stored.categoryId,
+    shortDescription: stored.shortDescription,
+    highlightPoints: stored.highlightPoints,
+    affiliateUrl: stored.affiliateUrl,
+    productUrl: stored.originalUrl,
+    imageUrl: stored.imageUrl,
+  } : {};
+  const merged = { ...source, ...candidate };
+  merged.name = candidate.name || candidate.productName || candidate.title || source.name || source.productName || source.title || '';
+  merged.currentPrice = candidate.currentPrice ?? candidate.price ?? source.currentPrice ?? source.price ?? null;
+  merged.originalPrice = candidate.originalPrice ?? source.originalPrice ?? null;
+  merged.affiliateUrl = candidate.affiliateUrl || candidate.affiliateLink || source.affiliateUrl || '';
+  merged.productUrl = candidate.productUrl || candidate.originalUrl || source.productUrl || '';
+  merged.imageUrl = candidate.imageUrl || candidate.image || source.imageUrl || '';
+  merged.discountPercentage = candidate.discountPercentage ?? candidate.discountPercent ?? source.discountPercentage ?? null;
+  merged.salesCount = candidate.salesCount ?? candidate.sales ?? source.salesCount ?? null;
+  merged.rating = candidate.rating ?? source.rating ?? null;
+  return merged;
+}
+
 async function handleCreateDispatch(req, res) {
   try {
     const userId = 'default_user';
@@ -2604,9 +2618,10 @@ async function handleCreateDispatch(req, res) {
       sendJson(res, 400, { error: { code: 'MISSING_OFFERS', message: 'Nenhuma oferta selecionada.' } });
       return;
     }
-    const semNome = offers.filter(o => !o || !(o.name || o.title)).length;
-    if (semNome > 0) {
-      sendJson(res, 400, { error: { code: 'OFFERS_WITHOUT_NAME', message: `${semNome} oferta(s) sem nome — retire elas da seleção antes de confirmar.` } });
+    const hydratedOffers = await Promise.all(offers.map((offer) => hydrateDispatchOffer(userId, offer)));
+    const semDadosObrigatorios = hydratedOffers.filter((offer) => !offer.name || !Number.isFinite(Number(offer.currentPrice)) || Number(offer.currentPrice) <= 0 || !/^https?:\/\/\S+$/i.test(String(offer.affiliateUrl || ''))).length;
+    if (semDadosObrigatorios > 0) {
+      sendJson(res, 400, { error: { code: 'INCOMPLETE_OFFER_DATA', message: `${semDadosObrigatorios} oferta(s) sem nome, preço atual ou link de afiliado válido.` } });
       return;
     }
     if (!destinations || !destinations.groups || destinations.groups.length === 0) {
@@ -2625,13 +2640,13 @@ async function handleCreateDispatch(req, res) {
       userId,
       status: 'pending',
       step: 3,
-      offers,
+      offers: hydratedOffers,
       message: { whatsapp: { ...(message?.whatsapp || {}), customMessage: message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
       destinations: { ...destinations, groups },
       createdAt: new Date().toISOString(),
       startedAt: null,
       completedAt: null,
-      stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: groups.length * offers.length },
+      stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: groups.length * hydratedOffers.length },
       currentGroupIndex: 0,
       attempts: [],
       idempotencyKey: String(req.headers['idempotency-key'] || body.idempotencyKey || jobId),
@@ -2649,7 +2664,7 @@ async function handleCreateDispatch(req, res) {
           delay_between_groups: destinations.delay_between_groups || 30,
           delay_between_products: destinations.delay_between_products || 120,
           groups: groups.map(g => ({ id: g.id, name: g.name })),
-          products: offers.map(o => ({
+          products: hydratedOffers.map(o => ({
             marketplace: o.marketplace || 'shopee',
             product_id: o.id,
             title: o.name,
@@ -2657,6 +2672,8 @@ async function handleCreateDispatch(req, res) {
             current_price: o.currentPrice,
             discount_percentage: o.discountPercentage,
             commission_percentage: o.commissionRate,
+            sales: o.salesCount,
+            rating: o.rating,
             image_url: o.imageUrl,
             affiliate_url: o.affiliateUrl,
             category: o.category,
@@ -2751,6 +2768,11 @@ async function processDispatchJob(jobId) {
           rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
           rotationIndex: deliveryIndex,
         });
+        logLine(`[DISPATCH DIAGNOSTIC] ${offer.id || 'unknown'} fields=${Object.keys(offer).sort().join(',')}`);
+        const copyValidation = validateOfferMessage(msg, offer);
+        if (!copyValidation.valid) {
+          throw new Error(`Copy inválida: campos obrigatórios ausentes (${Object.entries(copyValidation.checks).filter(([, ok]) => !ok).map(([key]) => key).join(', ')})`);
+        }
         const imageUrl = resolveDispatchImageUrl(offer.imageUrl);
         const result = await sendToWhatsAppGroup(group.id, msg, imageUrl, sessionName);
         job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
@@ -3254,20 +3276,6 @@ function renderPublicPage(page) {
 
 const userSettings = new Map();
 
-async function handleGetSettings(req, res) {
-  try {
-    const userId = 'default_user';
-    let settings = userSettings.get(userId);
-    if (!settings) {
-      settings = getDefaultSettings();
-      userSettings.set(userId, settings);
-    }
-    sendJson(res, 200, settings);
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar configurações.' } });
-  }
-}
-
 function getDefaultSettings() {
   return {
     channels: { whatsapp: { connected: false }, telegram: { connected: false } },
@@ -3279,18 +3287,36 @@ function getDefaultSettings() {
   };
 }
 
-async function handleUpdateChannels(req, res) {
-  try {
-    const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const settings = userSettings.get(userId) || getDefaultSettings();
-    settings.channels = { ...settings.channels, ...body };
-    userSettings.set(userId, settings);
-    sendJson(res, 200, { ok: true, settings });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar canais.' } });
-  }
-}
+const handleGetSettings = createSettingsReadHandler({
+  sendJson,
+  getSettings: (userId) => userSettings.get(userId),
+  setSettings: (userId, settings) => userSettings.set(userId, settings),
+  getDefaultSettings,
+});
+
+const handleUpdateChannels = createSettingsChannelsHandler({
+  sendJson,
+  readJsonBody,
+  getSettings: (userId) => userSettings.get(userId),
+  setSettings: (userId, settings) => userSettings.set(userId, settings),
+  getDefaultSettings,
+});
+
+const handleUpdateSettingsTemplates = createSettingsTemplatesHandler({
+  sendJson,
+  readJsonBody,
+  getSettings: (userId) => userSettings.get(userId),
+  setSettings: (userId, settings) => userSettings.set(userId, settings),
+  getDefaultSettings,
+});
+
+const handleUpdateSettingsAccount = createSettingsAccountHandler({
+  sendJson,
+  readJsonBody,
+  getSettings: (userId) => userSettings.get(userId),
+  setSettings: (userId, settings) => userSettings.set(userId, settings),
+  getDefaultSettings,
+});
 
 async function handleUpdatePlatforms(req, res) {
   try {
@@ -3315,7 +3341,7 @@ async function handleUpdatePlatforms(req, res) {
       if (existing) await dataStore.update('extensionTags', existing.id, tags).catch(() => null);
       else await dataStore.add('extensionTags', tags).catch(() => null);
     } catch { /* memória basta */ }
-    sendJson(res, 200, { ok: true, settings });
+    sendJson(res, 200, { ok: true, settings: redactSensitive(settings) });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar plataformas.' } });
   }
@@ -3344,19 +3370,6 @@ async function getExtensionTags(userId) {
   return fromMem;
 }
 
-async function handleUpdateTemplates(req, res) {
-  try {
-    const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const settings = userSettings.get(userId) || getDefaultSettings();
-    settings.templates = body;
-    userSettings.set(userId, settings);
-    sendJson(res, 200, { ok: true, settings });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar templates.' } });
-  }
-}
-
 async function handleUpdateCoupons(req, res) {
   try {
     const userId = 'default_user';
@@ -3364,7 +3377,7 @@ async function handleUpdateCoupons(req, res) {
     const settings = userSettings.get(userId) || getDefaultSettings();
     settings.coupons = body;
     userSettings.set(userId, settings);
-    sendJson(res, 200, { ok: true, settings });
+    sendJson(res, 200, { ok: true, settings: redactSensitive(settings) });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar cupons.' } });
   }
@@ -3377,22 +3390,9 @@ async function handleUpdateSecurity(req, res) {
     const settings = userSettings.get(userId) || getDefaultSettings();
     settings.security = { ...settings.security, ...body };
     userSettings.set(userId, settings);
-    sendJson(res, 200, { ok: true, settings });
+    sendJson(res, 200, { ok: true, settings: redactSensitive(settings) });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar segurança.' } });
-  }
-}
-
-async function handleUpdateAccount(req, res) {
-  try {
-    const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const settings = userSettings.get(userId) || getDefaultSettings();
-    settings.account = { ...settings.account, ...body };
-    userSettings.set(userId, settings);
-    sendJson(res, 200, { ok: true, settings });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar conta.' } });
   }
 }
 
@@ -3681,116 +3681,31 @@ async function handleDeleteWhatsAppSession(req, res, pathOnly) {
 
 // ========== TEMPLATES HANDLERS ==========
 
-const userTemplates = new Map();
-
-async function handleGetTemplates(req, res) {
-  try {
-    const userId = 'default_user';
-    let templates = userTemplates.get(userId);
-    if (!templates) {
-      templates = getDefaultTemplates();
-      userTemplates.set(userId, templates);
-    }
-    sendJson(res, 200, { templates });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar templates.' } });
-  }
-}
-
 function getDefaultTemplates() {
   return [
-    { id: 'achado-vale-pena', name: 'Achado que vale a pena', message: "💛 Esse achado vale a pena conferir!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'clique-agora', name: 'Clique agora e garanta', message: "🚨 OFERTA QUE PODE ACABAR AGORA!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado-barato', name: 'Achado barato', message: "👀 ACHADO DO MOMENTO!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'vendedor', name: 'Humanizado', message: "👀 OLHA O QUE EU ACHEI!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'direto', name: 'Oferta rápida', message: "🚨 OFERTA ENCONTRADA!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'achado', name: 'Sensação de achado', message: "💛 ESSE ACHADO VALE A PENA!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
-    { id: 'urgencia', name: 'Urgência', message: "⚠️ PREÇO BAIXOU!\n\n📦 {TITULO}\n\nO preço caiu de ~{PRECO_ANTIGO}~ para apenas\n{PRECO} 🔥\n\nPra quem já estava querendo comprar, essa pode ser uma boa hora 👀\n\n👉 Veja a oferta:\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado-vale-pena', name: 'Achado que vale a pena', message: "💛 OLHA ESSE ACHADINHO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Pode sair desse preço a qualquer momento.\n\n👉 *APROVEITE A OFERTA:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'clique-agora', name: 'Clique agora e garanta', message: "🔥 PREÇO MUITO BOM NESSE PRODUTO!\n\n*{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\n👉 *CLIQUE AQUI PARA VER:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado-barato', name: 'Achado barato', message: "👀 ACHADO BARATO DO MOMENTO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Oferta por tempo limitado.\n\n🛒 *PEGUE A OFERTA AQUI:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'vendedor', name: 'Humanizado', message: "✨ ESSA OFERTA TÁ VALENDO MUITO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Por esse preço, pode acabar rápido.\n\n👉 *CONFIRA A OFERTA:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'direto', name: 'Oferta rápida', message: "🚨 OFERTA ENCONTRADA!\n\n🔥 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Se gostou, aproveita antes que vire o preço.\n\n👉 *CLIQUE AQUI AGORA:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'achado', name: 'Sensação de achado', message: "💛 ESSE ACHADO VALE A PENA!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Não deixe para depois: confira enquanto está disponível.\n\n👉 *APROVEITE AGORA:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
+    { id: 'urgencia', name: 'Urgência', message: "⚠️ OLHA O PREÇO DESSE ACHADO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Pode sair desse preço a qualquer momento.\n\n👉 *CONFIRA A OFERTA:*\n{LINK}", isCustom: false, createdAt: new Date().toISOString() },
   ];
 }
 
-async function handleSaveTemplate(req, res) {
-  try {
-    const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const { id, name, message, isCustom } = body;
-    if (!name || !message) {
-      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Nome e mensagem são obrigatórios.' } });
-      return;
-    }
-    let templates = userTemplates.get(userId) || getDefaultTemplates();
-    const template = { id: id || `tpl-${Date.now()}`, name, message, isCustom: true, createdAt: new Date().toISOString() };
-    templates = templates.filter(t => t.id !== template.id);
-    templates.push(template);
-    userTemplates.set(userId, templates);
-    sendJson(res, 200, { template });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao salvar template.' } });
-  }
-}
+const {
+  handleGetTemplates,
+  handleSaveTemplate,
+  handleDeleteTemplate,
+} = createTemplateHandlers({ sendJson, readJsonBody, getDefaultTemplates });
 
-async function handleDeleteTemplate(req, res, pathOnly) {
-  try {
-    const userId = 'default_user';
-    const templateId = pathOnly.replace('/api/templates/', '');
-    let templates = userTemplates.get(userId) || getDefaultTemplates();
-    templates = templates.filter(t => t.id !== templateId);
-    userTemplates.set(userId, templates);
-    sendJson(res, 200, { ok: true });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover template.' } });
-  }
-}
+const {
+  handleGetCoupons,
+  handleCreateCoupon,
+  handleDeleteCoupon,
+} = createCouponHandlers({ sendJson, readJsonBody });
 
 // ========== COUPONS HANDLERS ==========
-
-const userCoupons = new Map();
-
-async function handleGetCoupons(req, res) {
-  try {
-    const userId = 'default_user';
-    let coupons = userCoupons.get(userId);
-    if (!coupons) {
-      coupons = [];
-      userCoupons.set(userId, coupons);
-    }
-    sendJson(res, 200, { coupons });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar cupons.' } });
-  }
-}
-
-async function handleCreateCoupon(req, res) {
-  try {
-    const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const { platform, code, description } = body;
-    if (!platform || !code) {
-      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Plataforma e código são obrigatórios.' } });
-      return;
-    }
-    let coupons = userCoupons.get(userId) || [];
-    const coupon = { id: `coupon-${Date.now()}`, platform, code, description, expiresAt: null, isActive: true };
-    coupons.push(coupon);
-    userCoupons.set(userId, coupons);
-    sendJson(res, 201, { coupon });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar cupom.' } });
-  }
-}
-
-async function handleDeleteCoupon(req, res, pathOnly) {
-  try {
-    const userId = 'default_user';
-    const couponId = pathOnly.replace('/api/coupons/', '');
-    let coupons = userCoupons.get(userId) || [];
-    coupons = coupons.filter(c => c.id !== couponId);
-    userCoupons.set(userId, coupons);
-    sendJson(res, 200, { ok: true });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao remover cupom.' } });
-  }
-}
 
 // ========== ANALYTICS HANDLERS ==========
 

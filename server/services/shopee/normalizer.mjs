@@ -87,7 +87,9 @@ export function normalizeProductOffer(node) {
 
   return {
     id,
-    title: typeof node.productName === 'string' ? node.productName : '',
+    title: typeof (node.productName || node.itemName || node.title || node.name) === 'string'
+      ? String(node.productName || node.itemName || node.title || node.name).trim()
+      : '',
     imageUrl: typeof node.imageUrl === 'string' ? node.imageUrl : '',
     currentPrice,
     originalPrice: deriveOriginalPrice(currentPrice, node.priceDiscountRate),

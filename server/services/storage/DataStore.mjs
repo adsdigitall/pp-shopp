@@ -26,6 +26,8 @@ const STORAGE_FILES = {
   whatsappSessions: 'whatsapp_sessions.json',
   whatsappGroups: 'whatsapp_groups.json',
   workerStatus: 'worker_status.json',
+  apiTokens: 'api_tokens.json',
+  extensionTags: 'extension_tags.json',
 };
 
 class DataStore {

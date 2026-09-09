@@ -4,32 +4,82 @@ export const ROTATING_CTAS = [
   'Toque no link e aproveite essa oportunidade',
   'Clique aqui agora antes que acabe',
   'Aproveite agora: pode acabar a qualquer momento',
-  'Nao deixe para depois: confira enquanto esta disponivel',
+  'Não deixe para depois: confira enquanto está disponível',
   'Veja agora todos os detalhes da promoção',
 ];
 
-export function renderWhatsAppMessage(template, offer, options = {}) {
-  const cta = ROTATING_CTAS[Math.abs(Number(options.rotationIndex) || 0) % ROTATING_CTAS.length];
+const FALLBACK_TEMPLATE = `OLHA ESSE ACHADINHO!\n\n{TITULO}\n\n{PRECO_ANTIGO}\nPor apenas {PRECO}\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\n👉 *{CTA}:*\n{LINK}`;
+
+const hasPrice = (offer) => Number.isFinite(Number(offer?.currentPrice)) && Number(offer.currentPrice) > 0;
+
+export function validateOfferMessage(message, offer = {}) {
+  const text = String(message || '').trim();
+  const link = String(offer.affiliateUrl || offer.productUrl || '').trim();
+  const name = String(offer.name || offer.title || offer.productName || '').trim();
+  const checks = {
+    hook: /(?:olha|oferta|achadinho|preço|preco|promoção|promocao)/i.test(text.split('\n').slice(0, 3).join(' ')),
+    name: Boolean(name) && text.toLowerCase().includes(name.toLowerCase().slice(0, 24)),
+    price: !hasPrice(offer) || /R\$\s*[\d.]+,\d{2}/.test(text),
+    urgency: /(?:pode acabar|tempo limitado|enquanto ainda|antes que|não deixe|nao deixe|aproveite enquanto)/i.test(text),
+    cta: /(?:aproveite|clique|confira|pegue|veja|garanta|toque)[^\n]{0,100}/i.test(text),
+    link: /^https?:\/\/\S+$/i.test(link) && text.includes(link),
+    placeholders: !/(?:\{(?:[A-Z_]+)\}|undefined|null|NaN)/i.test(text),
+    brokenEncoding: !/[ÃÂ][\x80-\xBF]|ðŸ|â[œ™šž]/.test(text),
+    notTooShort: text.length >= 45,
+  };
+  return { valid: Object.values(checks).every(Boolean), checks };
+}
+
+function renderValues(source, offer, options) {
+  const brl = (value) => Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const currentPrice = Number(offer.currentPrice);
   const originalPrice = Number(offer.originalPrice);
-  const hasCurrentPrice = Number.isFinite(currentPrice) && currentPrice > 0;
+  const hasCurrentPrice = hasPrice(offer);
   const hasOriginalPrice = Number.isFinite(originalPrice) && originalPrice > currentPrice;
   const discount = Number.isFinite(Number(offer.discountPercentage)) && Number(offer.discountPercentage) > 0
     ? Math.round(Number(offer.discountPercentage))
     : hasOriginalPrice ? Math.round((1 - currentPrice / originalPrice) * 100) : null;
-  let source = String(template || '');
+  const cta = ROTATING_CTAS[Math.abs(Number(options.rotationIndex) || 0) % ROTATING_CTAS.length];
+  const points = Array.isArray(offer.highlightPoints) ? offer.highlightPoints.filter(Boolean).slice(0, 4) : [];
+  const benefits = points.length ? points.map((item) => `✅ ${String(item).trim()}`).join('\n') : '✅ Oferta encontrada agora';
+  const sales = offer.salesCountText || (Number(offer.salesCount) > 0 ? `+${Number(offer.salesCount).toLocaleString('pt-BR')} vendidos` : '');
+  const rating = Number(offer.rating) > 0 ? `⭐ ${Number(offer.rating).toFixed(1)} de avaliação` : '';
+  return source
+    .replace(/{TITULO}/g, offer.name || offer.title || offer.productName || 'Oferta especial')
+    .replace(/{PRECO}/g, hasCurrentPrice ? `R$ ${brl(currentPrice)}` : 'Preço indisponível')
+    .replace(/{PRECO_ANTIGO}/g, hasOriginalPrice ? `❌ De: R$ ${brl(originalPrice)}` : '')
+    .replace(/{DESCONTO}/g, discount ? `${discount}% OFF` : '')
+    .replace(/{BENEFICIOS}/g, benefits)
+    .replace(/{VENDAS}|{SALES}/g, sales)
+    .replace(/{AVALIACAO}|{RATING}/g, rating)
+    .replace(/{CUPOM}/g, offer.couponCode || '')
+    .replace(/{CTA}/g, options.rotatingCTAs === false ? 'Confira a oferta' : cta)
+    .replace(/{LINK}/g, offer.affiliateUrl || offer.productUrl || '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function renderFallback(offer, options) {
+  return renderValues(FALLBACK_TEMPLATE, offer, options);
+}
+
+export function renderWhatsAppMessage(template, offer, options = {}) {
+  const currentPrice = Number(offer?.currentPrice);
+  const originalPrice = Number(offer?.originalPrice);
+  const hasCurrentPrice = hasPrice(offer);
+  const hasOriginalPrice = Number.isFinite(originalPrice) && originalPrice > currentPrice;
+  const discount = Number.isFinite(Number(offer?.discountPercentage)) && Number(offer.discountPercentage) > 0
+    ? Math.round(Number(offer.discountPercentage))
+    : hasOriginalPrice ? Math.round((1 - currentPrice / originalPrice) * 100) : null;
+  let source = String(template || '').trim();
   if (!source.includes('{PRECO}')) {
-    const priceBlock = `${hasOriginalPrice ? '~De: {PRECO_ANTIGO}~\n' : ''}✅ *Agora por: {PRECO}*${discount ? `\n_${discount}% OFF_` : ''}`;
-    source = source.includes('{LINK}') ? source.replace('{LINK}', `${priceBlock}\n\n{LINK}`) : `${source.trim()}\n\n${priceBlock}`;
+    const priceBlock = `${hasOriginalPrice ? '❌ De: {PRECO_ANTIGO}\n' : ''}✅ Por apenas {PRECO}${discount ? `\n${discount}% OFF` : ''}`;
+    source = source.includes('{LINK}') ? source.replace('{LINK}', `${priceBlock}\n\n{LINK}`) : `${source}\n\n${priceBlock}`;
   }
   if (!hasOriginalPrice) source = source.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
   if (!discount) source = source.split('\n').filter(line => !line.includes('{DESCONTO}')).join('\n');
-  let rendered = source
-    .replace(/{TITULO}/g, offer.name || offer.title || 'Oferta especial')
-    .replace(/{PRECO}/g, hasCurrentPrice ? `R$ ${currentPrice.toFixed(2).replace('.', ',')}` : 'Preço indisponível')
-    .replace(/{PRECO_ANTIGO}/g, hasOriginalPrice ? `R$ ${originalPrice.toFixed(2).replace('.', ',')}` : '')
-    .replace(/{DESCONTO}/g, discount ? String(discount) : '')
-    .replace(/{CUPOM}/g, 'CUPOM10');
-  if (rendered.includes('{CTA}')) rendered = rendered.replace(/{CTA}/g, options.rotatingCTAs ? cta : 'Confira a oferta');
-  return rendered.replace(/{LINK}/g, offer.affiliateUrl || offer.productUrl || '').replace(/\n{3,}/g, '\n\n').trim();
+  const rendered = renderValues(source, offer, options);
+  return validateOfferMessage(rendered, offer).valid ? rendered : renderFallback(offer, options);
 }
+
+export { FALLBACK_TEMPLATE };

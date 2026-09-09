@@ -12,9 +12,12 @@ test('automatic discovery only adds offers to the manual review queue', async ()
   assert.match(activePath, /PublicationHistoryStore\.save/);
   assert.doesNotMatch(activePath, /DispatchStore\.save|resumeDispatchQueue|processDispatchJob/);
   assert.match(source, /for \(const config of configs\.filter\(item => item\?\.enabled\)\)/);
-  assert.match(source, /const batchSize = Math\.min\(50, Math\.max\(1, Number\(config\.batchSize\) \|\| 10\)\)/);
+  assert.match(source, /const batchSize = 1;/);
   assert.match(source, /for \(const offer of offers\)/);
   assert.match(source, /if \(!isBrazilianOffer\(item\)\) return false;/);
+  assert.match(source, /!recentDiscoveryKeys\.has\(key\)/);
+  assert.match(source, /const stableQueueId = `queue-auto-/);
+  assert.match(source, /if \(!String\(item\?\.title \|\| ''\)\.trim\(\)\) return false;/);
 });
 
 test('manual queue additions do not enqueue dispatches', async () => {
