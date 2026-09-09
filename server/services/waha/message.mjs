@@ -41,7 +41,12 @@ function renderValues(source, offer, options) {
     : hasOriginalPrice ? Math.round((1 - currentPrice / originalPrice) * 100) : null;
   const cta = ROTATING_CTAS[Math.abs(Number(options.rotationIndex) || 0) % ROTATING_CTAS.length];
   const points = Array.isArray(offer.highlightPoints) ? offer.highlightPoints.filter(Boolean).slice(0, 4) : [];
-  const benefits = points.length ? points.map((item) => `✅ ${String(item).trim()}`).join('\n') : '✅ Oferta encontrada agora';
+  const context = `${offer.name || offer.title || offer.productName || ''} ${offer.shortDescription || offer.description || ''} ${offer.category || ''}`.toLowerCase();
+  const derived = [];
+  if (/(organiza|caixa|pote|prateleira|arm[aá]rio|gaveta)/.test(context)) derived.push('✅ Ajuda a manter tudo organizado');
+  if (/(cozinha|casa|banho|utilidade|rotina)/.test(context)) derived.push('✅ Prático para o dia a dia');
+  if (/(beleza|cabelo|skincare|maquiagem|unha)/.test(context)) derived.push('✅ Fácil de usar na rotina');
+  const benefits = (points.length ? points.map((item) => `✅ ${String(item).trim()}`) : derived.length ? derived : ['✅ Oferta encontrada agora']).slice(0, 4).join('\n');
   const sales = offer.salesCountText || (Number(offer.salesCount) > 0 ? `+${Number(offer.salesCount).toLocaleString('pt-BR')} vendidos` : '');
   const rating = Number(offer.rating) > 0 ? `⭐ ${Number(offer.rating).toFixed(1)} de avaliação` : '';
   return source
@@ -55,6 +60,7 @@ function renderValues(source, offer, options) {
     .replace(/{CUPOM}/g, offer.couponCode || '')
     .replace(/{CTA}/g, options.rotatingCTAs === false ? 'Confira a oferta' : cta)
     .replace(/{LINK}/g, offer.affiliateUrl || offer.productUrl || '')
+    .replace(/\{(?:BENEFICIOS|VENDAS|SALES|AVALIACAO|RATING)\}/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

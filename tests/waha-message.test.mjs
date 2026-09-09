@@ -10,6 +10,27 @@ test('rotates CTA deterministically for each dispatch position', () => {
   assert.match(second, new RegExp(ROTATING_CTAS[1]));
   assert.notEqual(first, second);
 });
+
+test('renders benefits and optional catalog fields without leaking placeholders', () => {
+  const product = {
+    name: 'Kit de caixas organizadoras para cozinha',
+    currentPrice: 61.99,
+    originalPrice: 119.21,
+    salesCount: 321,
+    rating: 4.7,
+    affiliateUrl: 'https://exemplo.test/caixas',
+    category: 'Casa e cozinha',
+  };
+  const message = renderWhatsAppMessage(
+    'OLHA ESSE ACHADINHO!\n\n{TITULO}\n{PRECO_ANTIGO}\nPor apenas {PRECO}\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\nAPROVEITE A OFERTA:\n{LINK}',
+    product,
+    { rotationIndex: 0 },
+  );
+  assert.doesNotMatch(message, /\{(?:BENEFICIOS|VENDAS|AVALIACAO|TITULO|PRECO|LINK)\}/);
+  assert.match(message, /organizado|dia a dia/i);
+  assert.match(message, /321|4\.7|48% OFF/);
+  assert.equal(validateOfferMessage(message, product).valid, true);
+});
 test('keeps a useful CTA when rotation is disabled', () => {
   assert.match(renderWhatsAppMessage('{CTA}\n{LINK}', offer, { rotatingCTAs: false }), /Confira a oferta/);
 });

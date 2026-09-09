@@ -2664,7 +2664,7 @@ async function handleCreateDispatch(req, res) {
           delay_between_groups: destinations.delay_between_groups || 30,
           delay_between_products: destinations.delay_between_products || 120,
           groups: groups.map(g => ({ id: g.id, name: g.name })),
-          products: hydratedOffers.map(o => ({
+          products: hydratedOffers.map((o, index) => ({
             marketplace: o.marketplace || 'shopee',
             product_id: o.id,
             title: o.name,
@@ -2677,7 +2677,11 @@ async function handleCreateDispatch(req, res) {
             image_url: o.imageUrl,
             affiliate_url: o.affiliateUrl,
             category: o.category,
-            message: message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}'
+            message: renderWhatsAppMessage(
+              message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}',
+              o,
+              { rotatingCTAs: message?.whatsapp?.rotatingCTAs !== false, rotationIndex: index }
+            )
           }))
         };
         await fetch(N8N_WEBHOOK_URL, {
