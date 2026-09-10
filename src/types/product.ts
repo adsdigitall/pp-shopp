@@ -1,5 +1,8 @@
-export type FilterType = 'trending' | 'top_sales' | 'high_commission' | 'high_discount' | 'commission_8' | 'commission_10' | 'best_value';
-export type MarketplaceType = 'shopee' | 'mercado_livre' | 'amazon' | 'tiktok_shop' | 'shein' | 'aliexpress';
+export type FilterType = 'trending' | 'top_sales' | 'high_commission' | 'high_discount' | 'commission_8' | 'commission_10' | 'best_value' | 'nacionais';
+
+/** Texto do tooltip do filtro Nacionais (fonte única; não afirma origem do vendedor). */
+export const NACIONAIS_FILTER_HINT = 'Prioriza produtos do catálogo Shopee Brasil com vendas e avaliação mínima de 4 estrelas. Não indica vendedor brasileiro nem origem nacional; a API não informa esse dado.';
+export type MarketplaceType = 'shopee' | 'mercado_livre' | 'amazon' | 'magalu' | 'tiktok_shop' | 'shein' | 'aliexpress';
 export type AffiliateProviderType = 'official' | 'bot_do_afiliado' | 'afilitools' | 'afilimax' | 'manual';
 export type AffiliateLinkStatus = 'pending' | 'generated' | 'failed' | 'expired' | 'manual_required';
 
