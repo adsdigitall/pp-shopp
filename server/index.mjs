@@ -2558,7 +2558,14 @@ async function runAutomaticOfferDiscovery() {
           'utilidades': 'utilidades domésticas',
           'maternidade-infantil': 'maternidade e infantil',
         };
-        const activeSlot = activeAutomationSchedule(config);
+        // Faixa desligada no horário atual pausa a descoberta (antes caía no
+        // fallback de categorias gerais e o interruptor não surtia efeito).
+        const activeSlot = automationSlotAt(config);
+        if (activeSlot && activeSlot.enabled === false) {
+          await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt });
+          logLine(`[AUTOMATION] Faixa ${activeSlot.from}–${activeSlot.until} desligada; ciclo pausado.`);
+          continue;
+        }
         const scheduledCategories = activeSlot?.categories || [];
         const categoryPool = scheduledCategories.length ? scheduledCategories : categories;
         const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
@@ -3752,15 +3759,20 @@ function normalizeAutomationSchedule(value) {
   }));
 }
 
-function activeAutomationSchedule(config, now = new Date()) {
+function automationSlotAt(config, now = new Date()) {
   const schedule = normalizeAutomationSchedule(config?.scheduleSlots);
   const current = now.getHours() * 60 + now.getMinutes();
   const parse = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  return schedule.find(slot => slot.enabled !== false && (() => {
+  return schedule.find(slot => {
     const from = parse(slot.from);
     const until = parse(slot.until);
     return from < until ? current >= from && current < until : current >= from || current < until;
-  })()) || null;
+  }) || null;
+}
+
+function activeAutomationSchedule(config, now = new Date()) {
+  const slot = automationSlotAt(config, now);
+  return slot && slot.enabled !== false ? slot : null;
 }
 
 function resolveAutomationCategory(value, cursor) {
