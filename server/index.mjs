@@ -2488,26 +2488,48 @@ async function enqueueAutomaticOfferForReview(userId, offer) {
     offerScore: offer.offerScore, affiliateProvider: offer.affiliateProvider, source: 'automatic_discovery',
   };
   await PublicationHistoryStore.save(userId, item);
-  logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila para revisão manual: ${item.id}`);
-  return item;
+  if (config.mode !== 'auto') {
+    logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila para revisão manual: ${item.id}`);
+    return item;
+  }
 
-  /* Legacy automatic dispatch is deliberately unreachable. It will be removed
-     after deployed workers have consumed this compatible change. */
-  /* Legacy dispatch path intentionally disabled: discovery only queues for review.
+  const groups = Array.isArray(config.groups) ? config.groups.filter(group => group?.id) : [];
+  if (!groups.length) {
+    logLine(`[AUTOMATION] Oferta ${offer.id} aprovada, mas nenhum grupo está selecionado; mantida para revisão.`);
+    return item;
+  }
+
+  const decision = evaluateAutomationOffer(offer);
+  if (!decision.approved) {
+    logLine(`[AUTOMATION] Oferta ${offer.id} bloqueada antes do disparo: ${decision.reasons.join(', ')}.`);
+    return item;
+  }
+
+  const humanMin = Math.max(1, Math.round(Number(config.humanMessageInterval?.minOffers) || 8));
+  const humanMax = Math.max(humanMin, Math.round(Number(config.humanMessageInterval?.maxOffers) || 12));
+  const offersSinceHumanMessage = Math.max(0, Number(config.offersSinceHumanMessage) || 0) + 1;
+  const nextHumanMessageAt = Math.min(humanMax, Math.max(humanMin, Number(config.nextHumanMessageAt) || humanMin));
+  const humanMessageAfter = offersSinceHumanMessage >= nextHumanMessageAt;
+
   const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const job = {
     id: jobId, userId, source: 'queue_automation', status: 'pending', step: 3, offers: [offer],
     message: { whatsapp: { enabled: true, customMessage: config.template || DEFAULT_AUTOMATION_MESSAGE, showImage: true, rotatingCTAs: config.rotatingCTAs !== false } },
-    destinations: { groups: config.groups, sessionId: config.sessionId, interval: config.interval || { value: 30, unit: 'seconds' }, nightPause: true, weekendPause: false, expirePause: true },
+    destinations: { groups, sessionId: config.sessionId, interval: config.interval || { value: 30, unit: 'seconds' }, humanMessageInterval: config.humanMessageInterval, humanMessageAfter, nightPause: true, weekendPause: false, expirePause: true },
     createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
     stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: config.groups.length }, currentGroupIndex: 0, attempts: [], idempotencyKey: `auto:${dispatchProductKey(offer)}:${Date.now()}`,
   };
   dispatchJobs.set(jobId, job);
   await DispatchStore.save(job);
-  if (PROCESS_DISPATCH_INLINE && !USE_LEGACY_N8N_DISPATCH) void resumeDispatchQueue();
+  await DispatchAutomationStore.save(userId, {
+    offersSinceHumanMessage: humanMessageAfter ? 0 : offersSinceHumanMessage,
+    nextHumanMessageAt: humanMessageAfter
+      ? humanMin + ((Date.now() + offersSinceHumanMessage) % (humanMax - humanMin + 1))
+      : nextHumanMessageAt,
+  });
+  if (PROCESS_DISPATCH_INLINE) void resumeDispatchQueue();
   logLine(`[AUTOMATION] Oferta ${offer.id} adicionada à fila automática: ${jobId}`);
   return job;
-  */
 }
 
 let automaticDiscoveryRunning = false;
@@ -2579,7 +2601,7 @@ async function runAutomaticOfferDiscovery() {
           .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
           .slice(0, batchSize);
         if (!offers.length) {
-          await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
+          await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
           logLine(`[AUTOMATION] Nenhuma oferta inédita disponível para ${config.userId}.`);
           continue;
         }
@@ -2589,7 +2611,6 @@ async function runAutomaticOfferDiscovery() {
           if (queuedItem) queuedItems.push(queuedItem);
         }
         await DispatchAutomationStore.save(config.userId, {
-          ...config,
           nextDiscoveryAt,
           categoryCursor: categoryCursor + 1,
           recentOfferKeys: [...new Set([
@@ -2599,7 +2620,7 @@ async function runAutomaticOfferDiscovery() {
         });
         logLine(`[AUTOMATION] ${queuedItems.length} oferta(s) do lote adicionada(s) à fila para revisão manual.`);
       } catch (error) {
-        await DispatchAutomationStore.save(config.userId, { ...config, nextDiscoveryAt });
+        await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt });
         logLine(`[AUTOMATION ERROR] Busca automática falhou: ${error.message}`);
       }
     }
@@ -2864,6 +2885,15 @@ async function processDispatchJob(jobId) {
   const job = dispatchJobs.get(jobId) || await DispatchStore.get('default_user', jobId);
   if (!job) return;
   if (job.status === 'cancelled') return;
+  if (job.source === 'queue_automation') {
+    const automation = await DispatchAutomationStore.get(job.userId);
+    if (!automation?.enabled) {
+      job.status = 'paused';
+      dispatchJobs.set(jobId, job);
+      await DispatchStore.save(job);
+      return;
+    }
+  }
 
   const scheduledAt = job.destinations?.scheduledAt ? new Date(job.destinations.scheduledAt).getTime() : 0;
   if (scheduledAt && scheduledAt > Date.now()) return;
@@ -2895,6 +2925,15 @@ async function processDispatchJob(jobId) {
     const offer = offers[offerIndex];
     for (let i = 0; i < groups.length; i++) {
     if (await dispatchWasCancelled(job)) return;
+    if (job.source === 'queue_automation') {
+      const automation = await DispatchAutomationStore.get(job.userId);
+      if (!automation?.enabled) {
+        job.status = 'paused';
+        dispatchJobs.set(jobId, job);
+        await DispatchStore.save(job);
+        return;
+      }
+    }
     const group = groups[i];
     job.currentGroupIndex = i;
     
@@ -2982,6 +3021,18 @@ async function processDispatchJob(jobId) {
       }
       nextHumanMessageAt += humanMin + Math.floor(Math.random() * (humanMax - humanMin + 1));
     }
+    if (destinations.humanMessageAfter === true && offerIndex === offers.length - 1) {
+      const humanMessage = getSafeHumanMessage(Number(job.createdAt?.replace(/\D/g, '').slice(-6)) || 0);
+      for (const group of groups) {
+        try {
+          const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
+          await sendToWhatsAppGroup(group.id, humanMessage, null, sessionName);
+          logLine(`[DISPATCH] Mensagem de relacionamento enviada ao grupo ${group.id}.`);
+        } catch (error) {
+          logLine(`[DISPATCH] Mensagem de relacionamento não enviada ao grupo ${group.id}: ${error.message}`);
+        }
+      }
+    }
     // Aguarda somente depois de enviar a oferta para todos os grupos.
     // O intervalo não pode separar os grupos da mesma oferta.
     if (offerIndex < offers.length - 1 && await sleepUntilNextDispatch(job, intervalMs)) return;
@@ -3046,10 +3097,12 @@ async function resumeDispatchQueue() {
   try {
     const jobs = await DispatchStore.list('default_user', 200);
     const queued = jobs
-      .filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection')
+      .filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection' || item.status === 'paused')
       .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    const automation = await DispatchAutomationStore.get('default_user').catch(() => null);
     const nextJob = queued.find(item => item.status === 'running')
       || queued.find(item => item.status === 'waiting_connection')
+      || (automation?.enabled ? queued.find(item => item.status === 'paused' && item.source === 'queue_automation') : null)
       || queued.find(item => {
         const scheduledAt = item.destinations?.scheduledAt ? new Date(item.destinations.scheduledAt).getTime() : 0;
         return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now());
@@ -3665,6 +3718,9 @@ const AUTOMATION_CATEGORY_PLAN = [
   { id: 'banheiro', keywords: 'banheiro organizador suporte escova sabonete tapete' },
   { id: 'acessorios-femininos', keywords: 'acessórios femininos brinco colar presilha bolsa carteira' },
   { id: 'eletronicos-baratos', keywords: 'eletrônicos baratos carregador fone suporte celular luminária' },
+  { id: 'compra-por-impulso', keywords: 'achadinhos baratos oferta relâmpago desconto utilidade presente até 50 reais' },
+  { id: 'melhores-ofertas', keywords: 'melhores ofertas promoção desconto cupom mais vendidos' },
+  { id: 'ofertas-fortes', keywords: 'oferta relâmpago desconto alto promoção imperdível mais vendidos' },
 ];
 // Alterna uma categoria por ciclo para evitar lotes repetidos do mesmo nicho.
 const AUTOMATION_CATEGORY_SLOTS = AUTOMATION_CATEGORY_PLAN.map((_, index) => index);
@@ -3674,12 +3730,12 @@ const AUTOMATION_CATEGORY_SLOTS = AUTOMATION_CATEGORY_PLAN.map((_, index) => ind
 const DEFAULT_AUTOMATION_SCHEDULE = [
   { from: '08:00', until: '10:00', categories: ['casa-cozinha'] },
   { from: '10:00', until: '12:00', categories: ['organizacao'] },
-  { from: '12:00', until: '14:00', categories: ['utilidades', 'casa-cozinha'] },
+  { from: '12:00', until: '14:00', categories: ['compra-por-impulso'] },
   { from: '14:00', until: '16:00', categories: ['beleza-autocuidado'] },
   { from: '16:00', until: '18:00', categories: ['moda-feminina'] },
   { from: '18:00', until: '20:00', categories: ['casa-cozinha', 'utilidades'] },
-  { from: '20:00', until: '22:00', categories: [] },
-  { from: '22:00', until: '23:00', categories: ['eletronicos-baratos', 'beleza-autocuidado'] },
+  { from: '20:00', until: '22:00', categories: ['melhores-ofertas'] },
+  { from: '22:00', until: '23:00', categories: ['ofertas-fortes'] },
 ];
 
 function normalizeAutomationSchedule(value) {

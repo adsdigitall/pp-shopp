@@ -57,6 +57,12 @@ const CATEGORY_CANONICAL = new Map([
   ['eletrônicos', 'eletronicos-baratos'],
   ['eletronicos', 'eletronicos-baratos'],
   ['celular', 'eletronicos-baratos'],
+  ['compra por impulso', 'compra-por-impulso'],
+  ['compra-por-impulso', 'compra-por-impulso'],
+  ['melhores ofertas', 'melhores-ofertas'],
+  ['melhores-ofertas', 'melhores-ofertas'],
+  ['ofertas fortes', 'ofertas-fortes'],
+  ['ofertas-fortes', 'ofertas-fortes'],
 ]);
 
 export function canonicalAutomationCategoryId(value) {

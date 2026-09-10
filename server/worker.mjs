@@ -1,9 +1,12 @@
 import { initEnv } from './lib/env.mjs';
 import { dataStore } from './services/storage/DataStore.mjs';
-import { resumeDispatchQueue, runAutomaticOfferDiscovery } from './index.mjs';
 
 initEnv();
 process.env.DISPATCH_WORKER = 'external';
+// Carregamento dinâmico é intencional: index.mjs calcula o modo do worker
+// durante a avaliação do módulo. Um import estático era executado antes da
+// atribuição acima e fazia o processo externo se comportar como inline.
+const { resumeDispatchQueue, runAutomaticOfferDiscovery } = await import('./index.mjs');
 await dataStore.init();
 console.log('[worker] Dispatch queue worker started.');
 const writeHeartbeat = async () => {
