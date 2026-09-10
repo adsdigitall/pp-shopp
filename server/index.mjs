@@ -49,7 +49,10 @@ const RADAR_API_TOKEN = process.env.RADAR_API_TOKEN || '';
 const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL || '';
 const WAHA_WEBHOOK_HMAC_KEY = process.env.WAHA_WEBHOOK_HMAC_KEY || '';
 const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || 'https://radarfertas.shop').replace(/\/$/, '');
-const ENABLE_CLICK_TRACKING = process.env.ENABLE_CLICK_TRACKING === 'true';
+// Links enviados aos grupos permanecem limpos por padrão. O nome novo evita
+// que uma variável legada ativada no Vercel reative rastreamento sem intenção.
+// Para habilitar tracking explicitamente, use ENABLE_CLICK_TRACKING_V2=true.
+const ENABLE_CLICK_TRACKING = process.env.ENABLE_CLICK_TRACKING_V2 === 'true';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
 // O fluxo padrão é Radar -> worker -> WAHA. Um webhook legado só pode ser
