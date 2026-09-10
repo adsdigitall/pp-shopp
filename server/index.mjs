@@ -37,6 +37,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds } from './services/automation/config.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2359,15 +2360,30 @@ async function handleSaveDispatchAutomation(req, res) {
     const minimumOfferInterval = offerUnit === 'seconds' ? 10 : 1;
     const offerValue = Math.min(1440, Math.max(minimumOfferInterval, Number(body.offerInterval?.value) || value));
     const batchSize = Math.min(50, Math.max(1, Math.round(Number(body.batchSize) || 10)));
+    // Persiste exatamente o que o usuário selecionou: descartar groupIds aqui
+    // apagava a seleção de grupos a cada save (voltava zerada na tela).
+    const groupIds = normalizeAutomationGroupIds(body.groupIds ?? body.groups);
+    let knownGroups = [];
+    try {
+      knownGroups = (await WhatsAppGroupsStore.get(userId)) || [];
+    } catch {
+      knownGroups = [];
+    }
+    const groups = groupIds.map(({ id }) => {
+      const known = knownGroups.find((group) => String(group?.id ?? group?.groupId ?? '') === id);
+      return known
+        ? { id, name: known.name, sessionId: known.sessionId }
+        : { id };
+    });
     const config = await DispatchAutomationStore.save(userId, {
-      enabled: body.enabled === true, groups: [], interval: { value, unit },
+      enabled: body.enabled === true, groups, interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
       batchSize,
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : WAHA_SESSION,
       template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
       rotatingCTAs: body.rotatingCTAs !== false,
       aiEnabled: body.aiEnabled === true,
-      categories: Array.isArray(body.categoryIds) ? [...new Set(body.categoryIds.map(item => String(item).trim()).filter(item => item.length > 0 && item.length <= 80))].slice(0, 12) : [],
+      categories: normalizeAutomationCategoryIds(body.categoryIds ?? body.categories),
       activeFrom: isValidAutomationTime(body.activeFrom) ? String(body.activeFrom) : '08:00',
       activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '23:00',
       scheduleSlots: normalizeAutomationSchedule(body.scheduleSlots),
