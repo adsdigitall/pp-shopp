@@ -1733,6 +1733,7 @@ async function handleMercadoLivreAffiliateLink(req, res) {
   try {
     const userId = 'default_user';
     const body = await readJsonBody(req);
+    const automationConfig = await DispatchAutomationStore.get(userId).catch(() => null);
     const { productId, originalUrl } = body;
     
     if (!productId) {
@@ -2346,7 +2347,7 @@ function getSafeHumanMessage(index = 0) {
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
+  sendJson(res, 200, { config: config || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -2375,9 +2376,16 @@ async function handleSaveDispatchAutomation(req, res) {
         ? { id, name: known.name, sessionId: known.sessionId }
         : { id };
     });
+    const humanMin = Math.min(1000, Math.max(1, Math.round(Number(body.humanMessageInterval?.minOffers) || 8)));
+    const humanMax = Math.min(1000, Math.max(humanMin, Math.round(Number(body.humanMessageInterval?.maxOffers) || 12)));
+    const repeatCooldownHours = Math.min(720, Math.max(1, Number(body.repeatCooldownHours) || 4));
+    const championRepostAfterHours = Math.min(720, Math.max(repeatCooldownHours, Number(body.championRepostAfterHours) || 6));
     const config = await DispatchAutomationStore.save(userId, {
-      enabled: body.enabled === true, groups, interval: { value, unit },
+      enabled: body.enabled === true, mode: body.mode === 'auto' ? 'auto' : 'manual', groups, interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
+      humanMessageInterval: { minOffers: humanMin, maxOffers: humanMax },
+      repeatCooldownHours,
+      championRepostAfterHours,
       batchSize,
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : WAHA_SESSION,
       template: typeof body.template === 'string' && body.template.trim() ? body.template.slice(0, 3500) : DEFAULT_AUTOMATION_MESSAGE,
@@ -2744,7 +2752,7 @@ async function handleCreateDispatch(req, res) {
       step: 3,
       offers: hydratedOffers,
       message: { whatsapp: { ...(message?.whatsapp || {}), customMessage: message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
-      destinations: { ...destinations, groups },
+      destinations: { ...destinations, groups, humanMessageInterval: destinations.humanMessageInterval || body.humanMessageInterval || automationConfig?.humanMessageInterval || { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: destinations.repeatCooldownHours || automationConfig?.repeatCooldownHours || 4 },
       createdAt: new Date().toISOString(),
       startedAt: null,
       completedAt: null,
@@ -2827,6 +2835,9 @@ async function processDispatchJob(jobId) {
   const intervalMs = getIntervalMs(destinations.interval);
   const groups = destinations.groups;
   const totalDeliveries = groups.length * offers.length;
+  const humanMin = Math.max(1, Math.round(Number(destinations.humanMessageInterval?.minOffers) || 8));
+  const humanMax = Math.max(humanMin, Math.round(Number(destinations.humanMessageInterval?.maxOffers) || 12));
+  let nextHumanMessageAt = humanMin + Math.floor(Math.random() * (humanMax - humanMin + 1));
   let deliveryIndex = (job.stats.sent || 0) + (job.stats.failed || 0);
 
   const sessionStatus = await wahaGetSession(destinations.sessionId || groups[0]?.sessionId || WAHA_SESSION);
@@ -2916,8 +2927,8 @@ async function processDispatchJob(jobId) {
       await DispatchStore.save(job);
       
     }
-    if ((offerIndex + 1) % 10 === 0 && offerIndex < offers.length - 1) {
-      const humanMessage = getSafeHumanMessage(Math.floor((offerIndex + 1) / 10) - 1);
+    if (offerIndex + 1 >= nextHumanMessageAt && offerIndex < offers.length - 1) {
+      const humanMessage = getSafeHumanMessage(offerIndex);
       for (const group of groups) {
         try {
           const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
@@ -2927,6 +2938,7 @@ async function processDispatchJob(jobId) {
           logLine(`[DISPATCH] Mensagem de relacionamento não enviada ao grupo ${group.id}: ${error.message}`);
         }
       }
+      nextHumanMessageAt += humanMin + Math.floor(Math.random() * (humanMax - humanMin + 1));
     }
     // Aguarda somente depois de enviar a oferta para todos os grupos.
     // O intervalo não pode separar os grupos da mesma oferta.
@@ -3627,7 +3639,10 @@ const DEFAULT_AUTOMATION_SCHEDULE = [
 
 function normalizeAutomationSchedule(value) {
   if (!Array.isArray(value) || !value.length) return DEFAULT_AUTOMATION_SCHEDULE;
-  return value.slice(0, 12).map(slot => ({
+  return value.slice(0, 12).map((slot, index) => ({
+    id: typeof slot?.id === 'string' && slot.id.trim() ? slot.id.trim().slice(0, 80) : `slot-${index + 1}`,
+    enabled: slot?.enabled !== false,
+    order: Number.isFinite(Number(slot?.order)) ? Number(slot.order) : index,
     from: isValidAutomationTime(slot?.from) ? String(slot.from) : '08:00',
     until: isValidAutomationTime(slot?.until) ? String(slot.until) : '23:00',
     categories: Array.isArray(slot?.categories)
@@ -3640,11 +3655,11 @@ function activeAutomationSchedule(config, now = new Date()) {
   const schedule = normalizeAutomationSchedule(config?.scheduleSlots);
   const current = now.getHours() * 60 + now.getMinutes();
   const parse = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  return schedule.find(slot => {
+  return schedule.find(slot => slot.enabled !== false && (() => {
     const from = parse(slot.from);
     const until = parse(slot.until);
     return from < until ? current >= from && current < until : current >= from || current < until;
-  }) || null;
+  })()) || null;
 }
 
 function resolveAutomationCategory(value, cursor) {
