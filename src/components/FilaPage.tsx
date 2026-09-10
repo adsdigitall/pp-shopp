@@ -51,7 +51,7 @@ interface FilaPageProps {
   onOpenDispatch: () => void;
   onOpenGroups: () => void;
   showToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
-  /** Recarrega a lista de grupos do WhatsApp (sync ao vivo). */
+  /** Puxa a lista completa de grupos em silêncio ao abrir a Automação. */
   onRefreshGroups?: () => Promise<void> | void;
 }
 
@@ -89,9 +89,15 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   onRefreshGroups,
 }) => {
   const [activeTab, setActiveTab] = useState<'fila' | 'grupos' | 'automacao'>('fila');
-  const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [automation, setAutomation] = useState<any>({ enabled: false, mode: 'manual', groups: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, activeFrom: '08:00', activeUntil: '23:00' });
   const [savingAutomation, setSavingAutomation] = useState(false);
+
+  // Ao abrir a Automação, puxa a lista completa em silêncio: sem botão,
+  // só scroll com todos os grupos (união ao vivo + salvos).
+  useEffect(() => {
+    if (activeTab !== 'automacao' || !onRefreshGroups) return;
+    onRefreshGroups().catch(() => undefined);
+  }, [activeTab, onRefreshGroups]);
 
   useEffect(() => {
     fetch('/api/dispatch/automation', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(body => {
@@ -388,27 +394,6 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                     <div className="flex justify-end"><Button type="button" variant="outline" size="sm" onClick={() => setAutomation((prev: any) => ({ ...prev, groups: groups.map(group => ({ id: group.id, name: group.name, sessionId: (group as any).sessionId })) }))}>Selecionar todos os grupos</Button></div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-[var(--text-secondary)]">Grupos que receberão as próximas ofertas ({groups.length})</p>
-                      {onRefreshGroups && (
-                        <button
-                          type="button"
-                          disabled={refreshingGroups}
-                          onClick={async () => {
-                            setRefreshingGroups(true);
-                            try {
-                              await onRefreshGroups();
-                              showToast('Lista de grupos atualizada', groups.length ? undefined : 'Nenhum grupo retornado — confira a conexão do WhatsApp.', 'success');
-                            } catch {
-                              showToast('Não foi possível atualizar', 'Tente novamente.', 'error');
-                            } finally {
-                              setRefreshingGroups(false);
-                            }
-                          }}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)] transition hover:text-[var(--foreground)] disabled:opacity-60"
-                        >
-                          <RotateCw className={`h-3 w-3 ${refreshingGroups ? 'animate-spin' : ''}`} />
-                          {refreshingGroups ? 'Atualizando…' : 'Atualizar'}
-                        </button>
-                      )}
                     </div>
                     <ScrollArea className="grid h-64 max-h-[45vh] gap-1.5 pr-1 sm:grid-cols-2">
                       {groups.map(group => { 

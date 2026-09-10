@@ -29,3 +29,18 @@ export function normalizeAutomationCategoryIds(value, max = 12) {
 export function normalizeAutomationGroupIds(value, max = 50) {
   return normalizeIdList(value, { max }).map((id) => ({ id }));
 }
+
+/**
+ * Une lista salva + lista ao vivo sem perder grupos.
+ * O ao vivo vence em caso de conflito (dado mais fresco); ids inéditos de
+ * qualquer lado são preservados. Sync vazio/falho nunca reduz a lista.
+ */
+export function mergeGroupLists(saved, live) {
+  const keyOf = (group) => String(group?.id ?? group?.groupId ?? '').trim();
+  const merged = new Map();
+  for (const group of [...(Array.isArray(saved) ? saved : []), ...(Array.isArray(live) ? live : [])]) {
+    const key = keyOf(group);
+    if (key) merged.set(key, group);
+  }
+  return [...merged.values()];
+}

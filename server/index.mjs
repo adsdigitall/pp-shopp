@@ -37,7 +37,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
-import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds } from './services/automation/config.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists } from './services/automation/config.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -3153,9 +3153,12 @@ async function handleSyncGroups(req, res) {
     const userId = requestUserId(req);
     const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
     const sessionId = parsed.searchParams.get('session') || WAHA_SESSION;
-    const groups = await syncWhatsAppGroups(userId, sessionId);
-    await WhatsAppGroupsStore.save(userId, groups);
-    sendJson(res, 200, { groups, synced: true });
+    const fresh = await syncWhatsAppGroups(userId, sessionId);
+    // Sync vazio/falho nunca apaga a lista salva: WAHA instável já zerou
+    // os grupos do usuário antes. Só substitui quando retorna dados.
+    if (fresh.length) await WhatsAppGroupsStore.save(userId, fresh);
+    const stored = await WhatsAppGroupsStore.get(userId).catch(() => []);
+    sendJson(res, 200, { groups: mergeGroupLists(stored, fresh), synced: true });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao sincronizar grupos.' } });
   }

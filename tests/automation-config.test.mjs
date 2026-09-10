@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeAutomationCategoryIds,
   normalizeAutomationGroupIds,
+  mergeGroupLists,
 } from '../server/services/automation/config.mjs';
 
 // Regressão: o save da automação descartava groupIds (groups: [] fixo),
@@ -41,4 +42,23 @@ test('category ids ignore non-array input and cap at 12', () => {
   assert.deepEqual(normalizeAutomationCategoryIds(undefined), []);
   const many = Array.from({ length: 20 }, (_, i) => `cat-${i}`);
   assert.equal(normalizeAutomationCategoryIds(many).length, 12);
+});
+
+// Regressão: o sync ao vivo já voltou parcial e o save zerava a lista,
+// então a tela mostrava só 4 grupos. A união salvos+ao vivo garante todos.
+test('merge keeps every known group with live winning conflicts', () => {
+  const saved = [{ id: 'a@g.us', name: 'A salvo' }, { id: 'b@g.us', name: 'B salvo' }];
+  const live = [{ id: 'b@g.us', name: 'B ao vivo' }, { id: 'c@g.us', name: 'C ao vivo' }];
+  assert.deepEqual(mergeGroupLists(saved, live), [
+    { id: 'a@g.us', name: 'A salvo' },
+    { id: 'b@g.us', name: 'B ao vivo' },
+    { id: 'c@g.us', name: 'C ao vivo' },
+  ]);
+});
+
+test('merge tolerates empty or invalid inputs without shrinking', () => {
+  const saved = [{ id: 'a@g.us' }];
+  assert.deepEqual(mergeGroupLists(saved, []), saved);
+  assert.deepEqual(mergeGroupLists(saved, null), saved);
+  assert.deepEqual(mergeGroupLists(null, []), []);
 });
