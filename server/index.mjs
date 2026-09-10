@@ -37,7 +37,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
-import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists } from './services/automation/config.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals } from './services/automation/config.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2783,6 +2783,10 @@ async function handleCreateDispatch(req, res) {
     }
 
     const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // A config da automação precisa ser declarada aqui: um `?.` sobre variável
+    // inexistente lança ReferenceError e derrubava o POST com 500.
+    const automationConfig = await DispatchAutomationStore.get(userId).catch(() => null);
+    const { humanMessageInterval, repeatCooldownHours } = resolveDispatchIntervals(destinations, body, automationConfig);
     const job = {
       id: jobId,
       userId,
@@ -2790,7 +2794,7 @@ async function handleCreateDispatch(req, res) {
       step: 3,
       offers: hydratedOffers,
       message: { whatsapp: { ...(message?.whatsapp || {}), customMessage: message?.whatsapp?.customMessage || '{TITULO}\n{PRECO}\n{LINK}', showImage: true } },
-      destinations: { ...destinations, groups, humanMessageInterval: destinations.humanMessageInterval || body.humanMessageInterval || automationConfig?.humanMessageInterval || { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: destinations.repeatCooldownHours || automationConfig?.repeatCooldownHours || 4 },
+      destinations: { ...destinations, groups, humanMessageInterval, repeatCooldownHours },
       createdAt: new Date().toISOString(),
       startedAt: null,
       completedAt: null,

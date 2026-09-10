@@ -88,3 +88,24 @@ export function mergeGroupLists(saved, live) {
   }
   return [...merged.values()];
 }
+
+/**
+ * Intervalos efetivos do disparo manual: valor explícito do wizard vence;
+ * senão usa a config da automação; senão o padrão seguro.
+ * Extração pura para travar o contrato em teste (um `?.` sobre variável
+ * não declarada aqui já derrubou o POST /api/dispatch com 500).
+ */
+export function resolveDispatchIntervals(destinations = {}, body = {}, automationConfig = null) {
+  const pick = (key) => destinations?.[key] ?? body?.[key] ?? automationConfig?.[key];
+  const human = pick('humanMessageInterval') || {};
+  const min = Math.round(Number(human.minOffers));
+  const max = Math.round(Number(human.maxOffers));
+  const repeat = Number(pick('repeatCooldownHours'));
+  return {
+    humanMessageInterval: {
+      minOffers: Number.isFinite(min) ? Math.min(1000, Math.max(1, min)) : 8,
+      maxOffers: Number.isFinite(max) ? Math.min(1000, Math.max(Number.isFinite(min) ? min : 1, max)) : 12,
+    },
+    repeatCooldownHours: Number.isFinite(repeat) ? Math.min(720, Math.max(1, repeat)) : 4,
+  };
+}

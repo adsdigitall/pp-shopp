@@ -5,6 +5,7 @@ import {
   normalizeAutomationGroupIds,
   canonicalAutomationCategoryId,
   mergeGroupLists,
+  resolveDispatchIntervals,
 } from '../server/services/automation/config.mjs';
 
 // Regressão: o save da automação descartava groupIds (groups: [] fixo),
@@ -81,4 +82,33 @@ test('merge tolerates empty or invalid inputs without shrinking', () => {
   assert.deepEqual(mergeGroupLists(saved, []), saved);
   assert.deepEqual(mergeGroupLists(saved, null), saved);
   assert.deepEqual(mergeGroupLists(null, []), []);
+});
+
+// Regressão: `?.` sobre variável não declarada no handler derrubava o
+// POST /api/dispatch com 500. O cálculo agora é puro e total (sem throw).
+test('dispatch intervals fall back to safe defaults with no input', () => {
+  assert.deepEqual(resolveDispatchIntervals(), {
+    humanMessageInterval: { minOffers: 8, maxOffers: 12 },
+    repeatCooldownHours: 4,
+  });
+  assert.deepEqual(resolveDispatchIntervals(undefined, undefined, null), {
+    humanMessageInterval: { minOffers: 8, maxOffers: 12 },
+    repeatCooldownHours: 4,
+  });
+});
+
+test('dispatch intervals prefer wizard, then body, then automation config', () => {
+  const auto = { humanMessageInterval: { minOffers: 3, maxOffers: 9 }, repeatCooldownHours: 6 };
+  assert.deepEqual(
+    resolveDispatchIntervals({ humanMessageInterval: { minOffers: 5, maxOffers: 15 } }, {}, auto).humanMessageInterval,
+    { minOffers: 5, maxOffers: 15 },
+  );
+  assert.deepEqual(
+    resolveDispatchIntervals({}, { repeatCooldownHours: 10 }, auto).repeatCooldownHours,
+    10,
+  );
+  assert.deepEqual(resolveDispatchIntervals({}, {}, auto), {
+    humanMessageInterval: { minOffers: 3, maxOffers: 9 },
+    repeatCooldownHours: 6,
+  });
 });
