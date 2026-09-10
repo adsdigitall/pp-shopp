@@ -36,6 +36,7 @@ import {
 import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
+import { evaluateAutomationOffer, scoreAutomationOffer } from './services/automation/scoring.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2451,8 +2452,11 @@ async function runAutomaticOfferDiscovery() {
           .filter(item => {
             if (!isBrazilianOffer(item)) return false;
             if (!String(item?.title || '').trim()) return false;
-            const price = Number(item?.currentPrice);
-            if (!Number.isFinite(price) || price < 15 || price > 80) return false;
+            const evaluation = evaluateAutomationOffer(item);
+            if (!evaluation.approved) {
+              logLine(`[AUTOMATION] Oferta ${item?.id || 'sem-id'} rejeitada: ${evaluation.reasons.join(', ')}.`);
+              return false;
+            }
             const key = dispatchProductKey(item);
             return item?.id && !queuedKeys.has(key) && !sentKeys.has(key) && !recentDiscoveryKeys.has(key);
           })
@@ -3490,14 +3494,6 @@ function resolveAutomationCategory(value, cursor) {
   if (selected) return selected;
   if (!raw) return AUTOMATION_CATEGORY_PLAN[AUTOMATION_CATEGORY_SLOTS[Math.max(0, cursor) % AUTOMATION_CATEGORY_SLOTS.length]];
   return { id: raw, keywords: raw };
-}
-
-function scoreAutomationOffer(offer) {
-  const price = Number(offer?.currentPrice);
-  const discount = Number(offer?.discountPercentage) || 0;
-  const sales = Number(offer?.salesCount) || 0;
-  const priceScore = Number.isFinite(price) && price >= 15 && price <= 80 ? 30 : 0;
-  return priceScore + Math.min(35, discount) + Math.min(25, Math.log10(Math.max(1, sales)) * 10) + Math.min(10, Number(offer?.offerScore) || 0);
 }
 
 // A garimpagem automática deve permanecer restrita ao catálogo brasileiro.
