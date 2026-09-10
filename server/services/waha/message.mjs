@@ -12,6 +12,23 @@ const FALLBACK_TEMPLATE = `OLHA ESSE ACHADINHO!\n\n{TITULO}\n\n{PRECO_ANTIGO}\nP
 
 const hasPrice = (offer) => Number.isFinite(Number(offer?.currentPrice)) && Number(offer.currentPrice) > 0;
 
+function parseSalesCount(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? Math.round(raw) : null;
+  const text = String(raw).trim().toLowerCase();
+  const match = text.match(/([\d.,]+)\s*(k|mil|m|mi)?/i);
+  if (!match) return null;
+  let valueText = match[1];
+  if (match[2]) valueText = valueText.replace(',', '.');
+  else if (/^\d{1,3}([.,]\d{3})+$/.test(valueText)) valueText = valueText.replace(/[.,]/g, '');
+  else valueText = valueText.replace(',', '.');
+  const value = Number.parseFloat(valueText);
+  if (!Number.isFinite(value)) return null;
+  const suffix = match[2]?.toLowerCase();
+  const multiplier = suffix === 'k' || suffix === 'mil' ? 1_000 : suffix === 'm' || suffix === 'mi' ? 1_000_000 : 1;
+  return Math.round(value * multiplier);
+}
+
 export function validateOfferMessage(message, offer = {}) {
   const text = String(message || '').trim();
   const link = String(offer.affiliateUrl || offer.productUrl || '').trim();
@@ -79,8 +96,12 @@ function renderValues(source, offer, options) {
   if (/(cozinha|casa|banho|utilidade|rotina)/.test(context)) derived.push('✅ Prático para o dia a dia');
   if (/(beleza|cabelo|skincare|maquiagem|unha)/.test(context)) derived.push('✅ Fácil de usar na rotina');
   const benefits = (points.length ? points.map((item) => `✅ ${String(item).trim()}`) : derived.length ? derived : ['✅ Oferta encontrada agora']).slice(0, 4).join('\n');
-  const salesValue = offer.salesCount ?? offer.soldCount ?? offer.sales;
-  const sales = offer.salesCountText || (Number(salesValue) > 0 ? `+${Number(salesValue).toLocaleString('pt-BR')} vendidos` : '');
+  const salesCandidates = [offer.salesCount, offer.soldCount, offer.sales, offer.sold, offer.sold_quantity]
+    .map(parseSalesCount).filter((value) => value !== null && value > 0);
+  const textSalesValue = parseSalesCount(offer.salesCountText);
+  if (textSalesValue !== null && textSalesValue > 0) salesCandidates.push(textSalesValue);
+  const salesValue = salesCandidates.length ? Math.max(...salesCandidates) : null;
+  const sales = salesValue !== null ? `+${salesValue.toLocaleString('pt-BR')} vendidos` : '';
   const ratingValue = offer.rating ?? offer.ratingStar ?? offer.itemRating ?? offer.reviewScore;
   const rating = Number(ratingValue) > 0 ? `⭐ ${Number(ratingValue).toFixed(1)} de avaliação` : '⭐ Confira as avaliações no anúncio';
   return source

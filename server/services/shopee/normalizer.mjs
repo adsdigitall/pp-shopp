@@ -37,6 +37,24 @@ export function parseNumber(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Parse Shopee sales counts, including abbreviated values such as "2.7k". */
+export function parseSalesCount(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? Math.round(raw) : null;
+  const text = String(raw).trim().toLowerCase();
+  const match = text.match(/([\d.,]+)\s*(k|mil|m|mi)?/i);
+  if (!match) return null;
+  let valueText = match[1];
+  if (match[2]) valueText = valueText.replace(',', '.');
+  else if (/^\d{1,3}([.,]\d{3})+$/.test(valueText)) valueText = valueText.replace(/[.,]/g, '');
+  else valueText = valueText.replace(',', '.');
+  const value = Number.parseFloat(valueText);
+  if (!Number.isFinite(value)) return null;
+  const suffix = match[2]?.toLowerCase();
+  const multiplier = suffix === 'k' || suffix === 'mil' ? 1_000 : suffix === 'm' || suffix === 'mi' ? 1_000_000 : 1;
+  return Math.round(value * multiplier);
+}
+
 function round2(n) {
   return Math.round(n * 100) / 100;
 }
@@ -107,10 +125,9 @@ export function normalizeProductOffer(node) {
         ? node.offerLink
         : null,
     rating: parseNumber(node.ratingStar),
-    soldCount: (() => {
-      const s = parseNumber(node.sales);
-      return s === null ? null : Math.round(s);
-    })(),
+    soldCount: parseSalesCount(
+      node.salesCount ?? node.soldCount ?? node.sales ?? node.sold ?? node.sold_quantity,
+    ),
     categoryIds: Array.isArray(node.productCatIds) ? node.productCatIds : [],
     periodStartTime: parseNumber(node.periodStartTime),
     periodEndTime: parseNumber(node.periodEndTime),

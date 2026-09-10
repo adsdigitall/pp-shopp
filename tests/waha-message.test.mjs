@@ -55,6 +55,23 @@ test('formats the anchored original price with WhatsApp strikethrough', () => {
   assert.match(message, /De:\s*~R\$ 59,98~/);
   assert.match(message, /R\$ 34,79/);
 });
+
+test('formats abbreviated sales counts instead of truncating them', () => {
+  const message = renderWhatsAppMessage(
+    '{TITULO}\n{PRECO}\n{VENDAS}\nAPROVEITE A OFERTA:\n{LINK}',
+    { name: 'Produto popular', currentPrice: 19.9, salesCount: '2.7k', salesCountText: '2 vendidos', affiliateUrl: 'https://exemplo.test/oferta' },
+  );
+  assert.match(message, /2\.700 vendidos/);
+  assert.doesNotMatch(message, /\+?2 vendidos/);
+});
+
+test('uses sold aliases when building the final copy', () => {
+  const message = renderWhatsAppMessage(
+    '{TITULO}\n{PRECO}\n{VENDAS}\nAPROVEITE A OFERTA:\n{LINK}',
+    { name: 'Outro produto', currentPrice: 39.9, sold_quantity: 900, affiliateUrl: 'https://exemplo.test/oferta' },
+  );
+  assert.match(message, /900 vendidos/);
+});
 test('keeps a useful CTA when rotation is disabled', () => {
   assert.match(renderWhatsAppMessage('{CTA}\n{LINK}', offer, { rotatingCTAs: false }), /Confira a oferta/);
 });

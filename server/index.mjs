@@ -6,7 +6,7 @@ import { initEnv } from './lib/env.mjs';
 import { loadShopeeConfig, ShopeeConfigError } from './services/shopee/config.mjs';
 import { ShopeeApiError } from './services/shopee/client.mjs';
 import { searchProductOffers } from './services/shopee/products.mjs';
-import { normalizeProductOffers } from './services/shopee/normalizer.mjs';
+import { normalizeProductOffers, parseSalesCount } from './services/shopee/normalizer.mjs';
 import { handleProducts } from './routes/products.mjs';
 import { createTemplateHandlers } from './routes/templates.mjs';
 import { createCouponHandlers } from './routes/coupons.mjs';
@@ -49,6 +49,7 @@ const RADAR_API_TOKEN = process.env.RADAR_API_TOKEN || '';
 const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL || '';
 const WAHA_WEBHOOK_HMAC_KEY = process.env.WAHA_WEBHOOK_HMAC_KEY || '';
 const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || 'https://radarfertas.shop').replace(/\/$/, '');
+const ENABLE_CLICK_TRACKING = process.env.ENABLE_CLICK_TRACKING === 'true';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
 // O fluxo padrão é Radar -> worker -> WAHA. Um webhook legado só pode ser
@@ -2678,7 +2679,14 @@ async function hydrateDispatchOffer(userId, incoming) {
   merged.productUrl = candidate.productUrl || candidate.originalUrl || source.productUrl || '';
   merged.imageUrl = candidate.imageUrl || candidate.image || source.imageUrl || '';
   merged.discountPercentage = candidate.discountPercentage ?? candidate.discountPercent ?? source.discountPercentage ?? null;
-  merged.salesCount = candidate.salesCount ?? candidate.sales ?? source.salesCount ?? null;
+  const salesCandidates = [
+    candidate.salesCount, candidate.soldCount, candidate.sales, candidate.sold, candidate.sold_quantity,
+    candidate.salesCountText, source.salesCount, source.salesCountText,
+  ].map(parseSalesCount).filter((value) => value !== null && value > 0);
+  merged.salesCount = salesCandidates.length ? Math.max(...salesCandidates) : null;
+  merged.salesCountText = merged.salesCount !== null
+    ? `+${merged.salesCount.toLocaleString('pt-BR')} vendidos`
+    : null;
   merged.rating = candidate.rating ?? source.rating ?? null;
   return merged;
 }
@@ -2845,20 +2853,22 @@ async function processDispatchJob(jobId) {
         }
         let trackedClickId = null;
         let offerForMessage = offer;
-        try {
-          const click = await ClickTrackingStore.add({
-            userId: job.userId,
-            marketplace: offer.marketplace || 'shopee',
-            productId: offer.id,
-            productKey: dispatchProductKey(offer),
-            category: offer.category || '',
-            groupId: group.id,
-            affiliateUrl: offer.affiliateUrl,
-          });
-          trackedClickId = click?.id || null;
-          if (trackedClickId) offerForMessage = { ...offer, affiliateUrl: `${PUBLIC_APP_URL}/api/track/click/${encodeURIComponent(trackedClickId)}` };
-        } catch (trackingError) {
-          logLine(`[DISPATCH] Rastreamento indisponível para ${offer.id}: ${trackingError.message}`);
+        if (ENABLE_CLICK_TRACKING) {
+          try {
+            const click = await ClickTrackingStore.add({
+              userId: job.userId,
+              marketplace: offer.marketplace || 'shopee',
+              productId: offer.id,
+              productKey: dispatchProductKey(offer),
+              category: offer.category || '',
+              groupId: group.id,
+              affiliateUrl: offer.affiliateUrl,
+            });
+            trackedClickId = click?.id || null;
+            if (trackedClickId) offerForMessage = { ...offer, affiliateUrl: `${PUBLIC_APP_URL}/api/track/click/${encodeURIComponent(trackedClickId)}` };
+          } catch (trackingError) {
+            logLine(`[DISPATCH] Rastreamento indisponível para ${offer.id}: ${trackingError.message}`);
+          }
         }
         const templatePool = Array.isArray(message.whatsapp.templatePool) ? message.whatsapp.templatePool.filter(item => item?.message) : [];
         const selectedMessage = message.whatsapp.templateMode === 'rotate' && templatePool.length
