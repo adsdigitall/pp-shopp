@@ -691,7 +691,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 z-10 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface)]/95 px-3 py-2.5 backdrop-blur-xl safe-bottom">
+        <div className="dispatch-footer sticky bottom-0 z-10 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface)]/95 px-3 py-2.5 backdrop-blur-xl safe-bottom">
           <Button
             type="button"
             onClick={handleBack}
