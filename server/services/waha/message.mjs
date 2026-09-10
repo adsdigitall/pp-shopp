@@ -43,7 +43,9 @@ export function sanitizeOfferCopy(copy, offer = {}) {
   const hasRating = Number(ratingValue) > 0;
   let discountApplied = false;
   return String(copy || '').replace(/\r/g, '').split('\n')
-    .map((line) => line.trimEnd())
+    // WAHA/WhatsApp pode colapsar linhas totalmente vazias em captions.
+    // Um separador invisível preserva o espaçamento visual entre blocos.
+    .map((line) => line.trimEnd() || '\u2063')
     .map((line) => {
       if (/\{[^}]+\}|undefined|null|NaN/i.test(line)) return false;
       if (!hasRating && /avalia|avaliac/i.test(line)) return false;
