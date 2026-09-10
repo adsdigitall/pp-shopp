@@ -392,14 +392,15 @@ export function App() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 8000);
     try {
-      let response = await fetch('/api/whatsapp/groups?session=default', { signal: controller.signal });
-      let body = await response.json().catch(() => null);
-      if (!response.ok || !Array.isArray(body?.groups) || body.groups.length === 0) {
-        response = await fetch('/api/groups', { cache: 'no-store' });
-        body = await response.json().catch(() => null);
-      }
-      if (!response.ok || !Array.isArray(body?.groups) || body.groups.length === 0) throw new Error('sync failed');
-      setGroups(body.groups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
+      const liveResponse = await fetch('/api/whatsapp/groups?session=default', { signal: controller.signal }).catch(() => null);
+      const liveBody = await liveResponse?.json().catch(() => null);
+      const savedResponse = await fetch('/api/groups', { cache: 'no-store' }).catch(() => null);
+      const savedBody = await savedResponse?.json().catch(() => null);
+      const liveGroups = liveResponse?.ok && Array.isArray(liveBody?.groups) ? liveBody.groups : [];
+      const savedGroups = savedResponse?.ok && Array.isArray(savedBody?.groups) ? savedBody.groups : [];
+      const mergedGroups = Array.from(new Map([...savedGroups, ...liveGroups].filter((group: any) => group?.id).map((group: any) => [String(group.id), group])).values());
+      if (!mergedGroups.length) throw new Error('sync failed');
+      setGroups(mergedGroups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
     } finally {
       window.clearTimeout(timeout);
     }
