@@ -36,7 +36,7 @@ import {
 import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
-import { evaluateAutomationOffer, scoreAutomationOffer } from './services/automation/scoring.mjs';
+import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2793,6 +2793,10 @@ async function processDispatchJob(jobId) {
         continue;
       }
       try {
+        const productValidation = validateAutomationOfferForDispatch(offer);
+        if (!productValidation.valid) {
+          throw new Error(`Produto indisponível: ${productValidation.errors.join(', ')}`);
+        }
         const templatePool = Array.isArray(message.whatsapp.templatePool) ? message.whatsapp.templatePool.filter(item => item?.message) : [];
         const selectedMessage = message.whatsapp.templateMode === 'rotate' && templatePool.length
           ? templatePool[offerIndex % templatePool.length].message

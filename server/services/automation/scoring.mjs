@@ -27,7 +27,8 @@ export function scoreAutomationOffer(offer) {
   const discount = Math.max(0, Math.min(100, finiteNumber(offer?.discountPercentage)));
   const price = finiteNumber(offer?.currentPrice, NaN);
   const commission = Math.max(0, finiteNumber(offer?.commissionRate ?? offer?.commissionPercentage));
-  const stock = finiteNumber(offer?.stock, NaN);
+  const stockRaw = offer?.stock;
+  const stock = stockRaw === null || stockRaw === undefined || stockRaw === '' ? NaN : finiteNumber(stockRaw, NaN);
 
   const salesPoints = Math.min(25, Math.log10(Math.max(1, sales)) / 4 * 25);
   const ratingPoints = (rating / 5) * 20;
@@ -57,7 +58,8 @@ export function evaluateAutomationOffer(offer, overrides = {}) {
   const rating = finiteNumber(offer?.rating ?? offer?.ratingStar, 0);
   const reviews = Math.max(0, finiteNumber(offer?.reviewsCount ?? offer?.reviewCount));
   const price = finiteNumber(offer?.currentPrice, NaN);
-  const stock = finiteNumber(offer?.stock, NaN);
+  const stockRaw = offer?.stock;
+  const stock = stockRaw === null || stockRaw === undefined || stockRaw === '' ? NaN : finiteNumber(stockRaw, NaN);
   const score = scoreAutomationOffer(offer);
   const reasons = [];
 
@@ -77,6 +79,20 @@ export function evaluateAutomationOffer(offer, overrides = {}) {
     reasons,
     filters,
   };
+}
+
+export function validateAutomationOfferForDispatch(offer) {
+  const title = String(offer?.name || offer?.productName || offer?.title || '').trim();
+  const price = finiteNumber(offer?.currentPrice, NaN);
+  const affiliateUrl = String(offer?.affiliateUrl || offer?.affiliateLink || '').trim();
+  const stockRaw = offer?.stock;
+  const stock = stockRaw === null || stockRaw === undefined || stockRaw === '' ? NaN : finiteNumber(stockRaw, NaN);
+  const errors = [];
+  if (!title) errors.push('nome ausente');
+  if (!Number.isFinite(price) || price <= 0) errors.push('preço ausente');
+  if (!/^https?:\/\/\S+$/i.test(affiliateUrl)) errors.push('link de afiliado ausente');
+  if (Number.isFinite(stock) && stock <= 0) errors.push('produto sem estoque');
+  return { valid: errors.length === 0, errors };
 }
 
 export { DEFAULT_AUTOMATION_FILTERS };
