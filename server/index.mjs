@@ -2301,6 +2301,42 @@ const dispatchJobs = new Map();
 let dispatchQueueRunning = false;
 
 const DEFAULT_AUTOMATION_MESSAGE = "💛 OLHA ESSE ACHADINHO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\n👉 *APROVEITE A OFERTA:*\n{LINK}";
+const SAFE_HUMAN_MESSAGES = [
+  'Galera, vou continuar garimpando as melhores ofertas ao longo do dia.',
+  'Hoje ainda tem muita coisa boa de casa, beleza e organização para aparecer por aqui.',
+  'Se surgir uma promoção realmente boa, eu mando aqui na hora.',
+  'Fica de olho porque alguns preços mudam rapidamente.',
+  'O garimpo continua ativo e só entram ofertas que valem a pena conferir.',
+  'Mais tarde vou separar uma sequência com os melhores achados do dia.',
+  'Vou seguir acompanhando os preços e atualizando as oportunidades.',
+  'As próximas ofertas já estão sendo filtradas para manter só os bons achados.',
+  'Tem mais novidades chegando por aqui ao longo do dia.',
+  'Quando aparecer desconto junto com cupom, eu mando tudo organizado.',
+  'Continuo de olho nas categorias que mais valem a pena.',
+  'O radar segue buscando preços baixos e boas avaliações.',
+  'Ainda vem mais oferta interessante por aí.',
+  'Vou manter o grupo atualizado com oportunidades selecionadas.',
+  'As ofertas passam por uma triagem antes de aparecerem aqui.',
+  'Tem bastante produto útil sendo monitorado neste momento.',
+  'Vou continuar acompanhando as melhores quedas de preço.',
+  'O próximo bloco de achados já está sendo preparado.',
+  'As oportunidades de hoje ainda não acabaram.',
+  'Sigo filtrando produtos com bom preço e boa procura.',
+  'Quando o desconto fizer sentido, ele aparece por aqui.',
+  'O radar continua ligado para encontrar boas oportunidades.',
+  'Mais achados de utilidades e casa podem aparecer em breve.',
+  'Vou alternar as categorias para trazer variedade ao grupo.',
+  'As próximas ofertas serão enviadas conforme forem validadas.',
+  'Continuo monitorando novidades e promoções reais.',
+  'O dia ainda reserva boas oportunidades de compra.',
+  'Vou priorizar produtos úteis, bem avaliados e com preço interessante.',
+  'Novos achados entram no grupo assim que passam pela conferência.',
+  'Seguimos acompanhando os melhores preços do momento.',
+];
+
+function getSafeHumanMessage(index = 0) {
+  return SAFE_HUMAN_MESSAGES[Math.max(0, Number(index) || 0) % SAFE_HUMAN_MESSAGES.length];
+}
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
@@ -2832,6 +2868,18 @@ async function processDispatchJob(jobId) {
       dispatchJobs.set(jobId, job);
       await DispatchStore.save(job);
       
+    }
+    if ((offerIndex + 1) % 10 === 0 && offerIndex < offers.length - 1) {
+      const humanMessage = getSafeHumanMessage(Math.floor((offerIndex + 1) / 10) - 1);
+      for (const group of groups) {
+        try {
+          const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
+          await sendToWhatsAppGroup(group.id, humanMessage, null, sessionName);
+          logLine(`[DISPATCH] Mensagem de relacionamento enviada ao grupo ${group.id}.`);
+        } catch (error) {
+          logLine(`[DISPATCH] Mensagem de relacionamento não enviada ao grupo ${group.id}: ${error.message}`);
+        }
+      }
     }
     // Aguarda somente depois de enviar a oferta para todos os grupos.
     // O intervalo não pode separar os grupos da mesma oferta.
