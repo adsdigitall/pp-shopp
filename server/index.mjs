@@ -57,6 +57,7 @@ const USE_LEGACY_N8N_DISPATCH = process.env.ENABLE_LEGACY_N8N_DISPATCH === 'true
 // Impede que uma requisição ao WAHA deixe um disparo preso indefinidamente.
 // O valor pode ser ajustado no ambiente, mas sempre precisa ser positivo.
 const WAHA_REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.WAHA_REQUEST_TIMEOUT_MS || 30000) || 30000);
+const WAHA_SEND_TEXT_FALLBACK = process.env.WAHA_SEND_TEXT_FALLBACK === 'true';
 // Regra comercial: uma mesma oferta não pode voltar para o mesmo grupo antes
 // de três dias. A variável permite aumentar a janela, mas nunca reduzi-la.
 const WHATSAPP_DEDUP_WINDOW_HOURS = Math.max(72, Number(process.env.WHATSAPP_DEDUP_WINDOW_HOURS || 72) || 72);
@@ -170,11 +171,10 @@ async function wahaSendMessage(chatId, text, mediaUrl, sessionName = WAHA_SESSIO
   if (mediaUrl) {
     const imageResult = await wahaRequest('/api/sendImage', {
       method: 'POST',
-      body: JSON.stringify({ chatId, session: sessionName, file: { url: mediaUrl } }),
+      body: JSON.stringify({ chatId, session: sessionName, file: { url: mediaUrl }, ...(String(text || '').trim() ? { caption: text } : {}) }),
     });
-    // Algumas versões do WAHA/GOWS aceitam a imagem, mas descartam caption.
-    // Enviar a copy em uma mensagem de texto separada garante que ela chegue.
-    if (String(text || '').trim()) {
+    // Fallback opcional para instalações antigas que descartam caption.
+    if (WAHA_SEND_TEXT_FALLBACK && String(text || '').trim()) {
       await wahaRequest('/api/sendText', {
         method: 'POST',
         body: JSON.stringify({ chatId, session: sessionName, text }),
