@@ -2380,7 +2380,12 @@ async function handleSendQueueItemNow(req, res, pathOnly) {
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
+  // Canonicaliza na leitura (sem escrever no store): configs antigas com ids
+  // legados passam a dar match exato na tela; o próximo save migra o salvo.
+  const out = config && Array.isArray(config.categories)
+    ? { ...config, categories: normalizeAutomationCategoryIds(config.categories) }
+    : config;
+  sendJson(res, 200, { config: out || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {

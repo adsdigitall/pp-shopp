@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeAutomationCategoryIds,
   normalizeAutomationGroupIds,
+  canonicalAutomationCategoryId,
   mergeGroupLists,
 } from '../server/services/automation/config.mjs';
 
@@ -33,9 +34,28 @@ test('group ids are trimmed, deduped and capped', () => {
 
 test('category ids are preserved for discovery', () => {
   assert.deepEqual(
-    normalizeAutomationCategoryIds(['casa e cozinha', 'beleza']),
-    ['casa e cozinha', 'beleza'],
+    normalizeAutomationCategoryIds(['banheiro', '  ']),
+    ['banheiro'],
   );
+});
+
+test('category ids unify UI labels and legacy variants into plan slugs', () => {
+  assert.deepEqual(
+    normalizeAutomationCategoryIds(['casa e cozinha', 'beleza', 'casa-cozinha', 'beleza']),
+    ['casa-cozinha', 'beleza-autocuidado'],
+  );
+  assert.equal(canonicalAutomationCategoryId('organizadores'), 'organizacao');
+  assert.equal(canonicalAutomationCategoryId('moda feminina barata'), 'moda-feminina');
+  assert.equal(canonicalAutomationCategoryId('moda feminina'), 'moda-feminina');
+  assert.equal(canonicalAutomationCategoryId('utilidades domésticas'), 'utilidades');
+  assert.equal(canonicalAutomationCategoryId('maternidade e infantil'), 'maternidade-infantil');
+  assert.equal(canonicalAutomationCategoryId('cama mesa e banho'), 'cama-mesa-banho');
+  assert.equal(canonicalAutomationCategoryId('casa e banho'), 'cama-mesa-banho');
+  assert.equal(canonicalAutomationCategoryId('acessórios'), 'acessorios-femininos');
+  assert.equal(canonicalAutomationCategoryId('eletrônicos'), 'eletronicos-baratos');
+  assert.equal(canonicalAutomationCategoryId('celular'), 'eletronicos-baratos');
+  // Desconhecidos passam como estão (viram keyword na descoberta).
+  assert.equal(canonicalAutomationCategoryId('melhores-ofertas'), 'melhores-ofertas');
 });
 
 test('category ids ignore non-array input and cap at 12', () => {

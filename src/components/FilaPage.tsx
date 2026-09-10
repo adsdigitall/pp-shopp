@@ -13,17 +13,20 @@ import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Separator } from '@/components/ui/Separator';
 import { Checkbox } from '@/components/ui/Checkbox';
 
+// Ids = slugs do plano de descoberta do backend (AUTOMATION_CATEGORY_PLAN);
+// os rótulos exibidos continuam humanos. Não mudar os ids sem alinhar com
+// canonicalAutomationCategoryId no backend, senão o salvo não dá match.
 const PRIORITIZED_AUTOMATION_CATEGORIES = [
-  { id: 'casa e cozinha', label: 'Casa e cozinha (50%)' },
-  { id: 'beleza', label: 'Beleza e autocuidado (20%)' },
-  { id: 'organizadores', label: 'Organização (15%)' },
-  { id: 'moda feminina barata', label: 'Moda feminina barata (10%)' },
-  { id: 'utilidades domésticas', label: 'Utilidades do dia a dia (5%)' },
-  { id: 'maternidade e infantil', label: 'Maternidade e infantil' },
-  { id: 'cama mesa e banho', label: 'Cama, mesa e banho' },
+  { id: 'casa-cozinha', label: 'Casa e cozinha (50%)' },
+  { id: 'beleza-autocuidado', label: 'Beleza e autocuidado (20%)' },
+  { id: 'organizacao', label: 'Organização (15%)' },
+  { id: 'moda-feminina', label: 'Moda feminina barata (10%)' },
+  { id: 'utilidades', label: 'Utilidades do dia a dia (5%)' },
+  { id: 'maternidade-infantil', label: 'Maternidade e infantil' },
+  { id: 'cama-mesa-banho', label: 'Cama, mesa e banho' },
   { id: 'banheiro', label: 'Banheiro' },
-  { id: 'acessórios femininos', label: 'Acessórios femininos' },
-  { id: 'eletrônicos baratos', label: 'Eletrônicos baratos' },
+  { id: 'acessorios-femininos', label: 'Acessórios femininos' },
+  { id: 'eletronicos-baratos', label: 'Eletrônicos baratos' },
 ];
 
 const DEFAULT_SLOT_CATEGORIES = [
@@ -96,7 +99,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   // só scroll com todos os grupos (união ao vivo + salvos).
   useEffect(() => {
     if (activeTab !== 'automacao' || !onRefreshGroups) return;
-    onRefreshGroups().catch(() => undefined);
+    Promise.resolve(onRefreshGroups()).catch(() => undefined);
   }, [activeTab, onRefreshGroups]);
 
   useEffect(() => {

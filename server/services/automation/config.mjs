@@ -18,7 +18,51 @@ function normalizeIdList(value, { max }) {
 
 /** IDs de categorias selecionadas (ex.: "casa e cozinha", "beleza"). */
 export function normalizeAutomationCategoryIds(value, max = 12) {
-  return normalizeIdList(value, { max });
+  return normalizeIdList(value, { max }).map(canonicalAutomationCategoryId).filter(Boolean).filter((id, index, list) => list.indexOf(id) === index);
+}
+
+/**
+ * Unifica as três gerações de ids de categoria nos slugs do plano de
+ * descoberta (AUTOMATION_CATEGORY_PLAN): rótulos da UI atual, slugs e
+ * variantes antigas salvas. Sem isso, o salvo nunca dá match exato com a
+ * tela e a seleção "some" visualmente — além de se perder no próximo save.
+ * Desconhecidos passam como estão (viram keyword na descoberta).
+ */
+const CATEGORY_CANONICAL = new Map([
+  ['casa e cozinha', 'casa-cozinha'],
+  ['casa-cozinha', 'casa-cozinha'],
+  ['beleza', 'beleza-autocuidado'],
+  ['beleza-autocuidado', 'beleza-autocuidado'],
+  ['organizadores', 'organizacao'],
+  ['organizacao', 'organizacao'],
+  ['moda feminina barata', 'moda-feminina'],
+  ['moda feminina', 'moda-feminina'],
+  ['moda-feminina', 'moda-feminina'],
+  ['utilidades domésticas', 'utilidades'],
+  ['utilidades domesticas', 'utilidades'],
+  ['utilidades', 'utilidades'],
+  ['maternidade e infantil', 'maternidade-infantil'],
+  ['maternidade-infantil', 'maternidade-infantil'],
+  ['cama mesa e banho', 'cama-mesa-banho'],
+  ['cama-mesa-banho', 'cama-mesa-banho'],
+  ['casa e banho', 'cama-mesa-banho'],
+  ['banheiro', 'banheiro'],
+  ['acessórios femininos', 'acessorios-femininos'],
+  ['acessorios femininos', 'acessorios-femininos'],
+  ['acessórios', 'acessorios-femininos'],
+  ['acessorios', 'acessorios-femininos'],
+  ['eletrônicos baratos', 'eletronicos-baratos'],
+  ['eletronicos baratos', 'eletronicos-baratos'],
+  ['eletronicos-baratos', 'eletronicos-baratos'],
+  ['eletrônicos', 'eletronicos-baratos'],
+  ['eletronicos', 'eletronicos-baratos'],
+  ['celular', 'eletronicos-baratos'],
+]);
+
+export function canonicalAutomationCategoryId(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  return CATEGORY_CANONICAL.get(raw.toLowerCase()) || raw;
 }
 
 /**
