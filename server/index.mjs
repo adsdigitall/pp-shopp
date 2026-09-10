@@ -48,6 +48,7 @@ const WAHA_SESSION = process.env.WAHA_SESSION || 'default';
 const RADAR_API_TOKEN = process.env.RADAR_API_TOKEN || '';
 const WAHA_WEBHOOK_URL = process.env.WAHA_WEBHOOK_URL || '';
 const WAHA_WEBHOOK_HMAC_KEY = process.env.WAHA_WEBHOOK_HMAC_KEY || '';
+const PUBLIC_APP_URL = String(process.env.PUBLIC_APP_URL || 'https://radarfertas.shop').replace(/\/$/, '');
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
 // O fluxo padrão é Radar -> worker -> WAHA. Um webhook legado só pode ser
@@ -2842,22 +2843,39 @@ async function processDispatchJob(jobId) {
         if (!productValidation.valid) {
           throw new Error(`Produto indisponível: ${productValidation.errors.join(', ')}`);
         }
+        let trackedClickId = null;
+        let offerForMessage = offer;
+        try {
+          const click = await ClickTrackingStore.add({
+            userId: job.userId,
+            marketplace: offer.marketplace || 'shopee',
+            productId: offer.id,
+            productKey: dispatchProductKey(offer),
+            category: offer.category || '',
+            groupId: group.id,
+            affiliateUrl: offer.affiliateUrl,
+          });
+          trackedClickId = click?.id || null;
+          if (trackedClickId) offerForMessage = { ...offer, affiliateUrl: `${PUBLIC_APP_URL}/api/track/click/${encodeURIComponent(trackedClickId)}` };
+        } catch (trackingError) {
+          logLine(`[DISPATCH] Rastreamento indisponível para ${offer.id}: ${trackingError.message}`);
+        }
         const templatePool = Array.isArray(message.whatsapp.templatePool) ? message.whatsapp.templatePool.filter(item => item?.message) : [];
         const selectedMessage = message.whatsapp.templateMode === 'rotate' && templatePool.length
           ? templatePool[offerIndex % templatePool.length].message
           : message.whatsapp.customMessage;
-        const msg = sanitizeOfferCopy(renderWhatsAppMessage(selectedMessage, offer, {
+        const msg = sanitizeOfferCopy(renderWhatsAppMessage(selectedMessage, offerForMessage, {
           rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
           rotationIndex: deliveryIndex,
         }), offer);
         logLine(`[DISPATCH DIAGNOSTIC] ${offer.id || 'unknown'} fields=${Object.keys(offer).sort().join(',')}`);
-        const copyValidation = validateOfferMessage(msg, offer);
+        const copyValidation = validateOfferMessage(msg, offerForMessage);
         if (!copyValidation.valid) {
           throw new Error(`Copy inválida: campos obrigatórios ausentes (${Object.entries(copyValidation.checks).filter(([, ok]) => !ok).map(([key]) => key).join(', ')})`);
         }
         const imageUrl = resolveDispatchImageUrl(offer.imageUrl);
         const result = await sendToWhatsAppGroup(group.id, msg, imageUrl, sessionName);
-        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, clickId: trackedClickId, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
         job.stats.sent++;
       } catch (e) {
         job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
