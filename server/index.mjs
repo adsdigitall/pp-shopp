@@ -52,6 +52,9 @@ const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
 // O fluxo padrão é Radar -> worker -> WAHA. Um webhook legado só pode ser
 // ativado explicitamente, pois ele não recebe o sinal de cancelamento do Radar.
 const USE_LEGACY_N8N_DISPATCH = process.env.ENABLE_LEGACY_N8N_DISPATCH === 'true' && Boolean(N8N_WEBHOOK_URL);
+// Impede que uma requisição ao WAHA deixe um disparo preso indefinidamente.
+// O valor pode ser ajustado no ambiente, mas sempre precisa ser positivo.
+const WAHA_REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.WAHA_REQUEST_TIMEOUT_MS || 30000) || 30000);
 // Regra comercial: uma mesma oferta não pode voltar para o mesmo grupo antes
 // de três dias. A variável permite aumentar a janela, mas nunca reduzi-la.
 const WHATSAPP_DEDUP_WINDOW_HOURS = Math.max(72, Number(process.env.WHATSAPP_DEDUP_WINDOW_HOURS || 72) || 72);
@@ -65,15 +68,33 @@ async function wahaRequest(endpoint, options = {}) {
     ...(WAHA_API_KEY && { 'X-Api-Key': WAHA_API_KEY }),
     ...options.headers,
   };
-  const res = await fetch(url, { ...options, headers });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`WAHA ${res.status}: ${text}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WAHA_REQUEST_TIMEOUT_MS);
+  const externalSignal = options.signal;
+  const abortFromCaller = () => controller.abort(externalSignal?.reason);
+  if (externalSignal) {
+    if (externalSignal.aborted) abortFromCaller();
+    else externalSignal.addEventListener('abort', abortFromCaller, { once: true });
   }
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) return res.json();
-  const binary = Buffer.from(await res.arrayBuffer()).toString('base64');
-  return { binary, contentType };
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal, headers });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`WAHA ${res.status}: ${text}`);
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) return res.json();
+    const binary = Buffer.from(await res.arrayBuffer()).toString('base64');
+    return { binary, contentType };
+  } catch (error) {
+    if (error?.name === 'AbortError' && !externalSignal?.aborted) {
+      throw new Error(`WAHA timeout após ${WAHA_REQUEST_TIMEOUT_MS}ms: ${endpoint}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    externalSignal?.removeEventListener?.('abort', abortFromCaller);
+  }
 }
 
 async function wahaGetSession(sessionName = WAHA_SESSION) {
