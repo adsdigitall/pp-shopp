@@ -26,6 +26,19 @@ const PRIORITIZED_AUTOMATION_CATEGORIES = [
   { id: 'eletrônicos baratos', label: 'Eletrônicos baratos' },
 ];
 
+const DEFAULT_SLOT_CATEGORIES = [
+  ['casa-cozinha'], ['organizacao'], ['utilidades', 'casa-cozinha'],
+  ['beleza-autocuidado'], ['moda-feminina'], ['casa-cozinha', 'utilidades'],
+  ['melhores-ofertas'], ['eletronicos-baratos', 'beleza-autocuidado'],
+];
+
+const normalizeScheduleSlotsForUi = (slots: any[]) => slots.map((slot, index) => ({
+  ...slot,
+  categories: Array.isArray(slot?.categories) && slot.categories.length
+    ? slot.categories
+    : (DEFAULT_SLOT_CATEGORIES[index] || ['utilidades']),
+}));
+
 interface FilaPageProps {
   queueItems: QueueItem[];
   groups: Group[];
@@ -82,7 +95,12 @@ export const FilaPage: React.FC<FilaPageProps> = ({
 
   useEffect(() => {
     fetch('/api/dispatch/automation', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(body => {
-      if (body?.config) setAutomation(body.config);
+      if (body?.config) setAutomation({
+        ...body.config,
+        scheduleSlots: Array.isArray(body.config.scheduleSlots)
+          ? normalizeScheduleSlotsForUi(body.config.scheduleSlots)
+          : body.config.scheduleSlots,
+      });
     }).catch(() => undefined);
   }, []);
 
@@ -392,7 +410,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                         </button>
                       )}
                     </div>
-                    <ScrollArea className="grid max-h-40 gap-1.5 sm:grid-cols-2">
+                    <ScrollArea className="grid h-64 max-h-[45vh] gap-1.5 pr-1 sm:grid-cols-2">
                       {groups.map(group => { 
                         const checked = selectedAutomationIds.includes(String(group.id)); 
                         return (
