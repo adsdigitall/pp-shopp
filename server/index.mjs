@@ -37,7 +37,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
-import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals } from './services/automation/config.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -3732,48 +3732,8 @@ const AUTOMATION_CATEGORY_PLAN = [
 // Alterna uma categoria por ciclo para evitar lotes repetidos do mesmo nicho.
 const AUTOMATION_CATEGORY_SLOTS = AUTOMATION_CATEGORY_PLAN.map((_, index) => index);
 
-// Janelas padrão do garimpo. Podem ser substituídas por scheduleSlots na
-// configuração da automação sem alterar o contrato existente de categorias.
-const DEFAULT_AUTOMATION_SCHEDULE = [
-  { from: '08:00', until: '10:00', categories: ['casa-cozinha'] },
-  { from: '10:00', until: '12:00', categories: ['organizacao'] },
-  { from: '12:00', until: '14:00', categories: ['compra-por-impulso'] },
-  { from: '14:00', until: '16:00', categories: ['beleza-autocuidado'] },
-  { from: '16:00', until: '18:00', categories: ['moda-feminina'] },
-  { from: '18:00', until: '20:00', categories: ['casa-cozinha', 'utilidades'] },
-  { from: '20:00', until: '22:00', categories: ['melhores-ofertas'] },
-  { from: '22:00', until: '23:00', categories: ['ofertas-fortes'] },
-];
-
-function normalizeAutomationSchedule(value) {
-  if (!Array.isArray(value) || !value.length) return DEFAULT_AUTOMATION_SCHEDULE;
-  return value.slice(0, 12).map((slot, index) => ({
-    id: typeof slot?.id === 'string' && slot.id.trim() ? slot.id.trim().slice(0, 80) : `slot-${index + 1}`,
-    enabled: slot?.enabled !== false,
-    order: Number.isFinite(Number(slot?.order)) ? Number(slot.order) : index,
-    from: isValidAutomationTime(slot?.from) ? String(slot.from) : '08:00',
-    until: isValidAutomationTime(slot?.until) ? String(slot.until) : '23:00',
-    categories: Array.isArray(slot?.categories)
-      ? [...new Set(slot.categories.map(item => String(item).trim()).filter(Boolean))].slice(0, 8)
-      : [],
-  }));
-}
-
-function automationSlotAt(config, now = new Date()) {
-  const schedule = normalizeAutomationSchedule(config?.scheduleSlots);
-  const current = now.getHours() * 60 + now.getMinutes();
-  const parse = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  return schedule.find(slot => {
-    const from = parse(slot.from);
-    const until = parse(slot.until);
-    return from < until ? current >= from && current < until : current >= from || current < until;
-  }) || null;
-}
-
-function activeAutomationSchedule(config, now = new Date()) {
-  const slot = automationSlotAt(config, now);
-  return slot && slot.enabled !== false ? slot : null;
-}
+// Janelas padrão e normalização de faixas vivem em services/automation/config.mjs
+// (testáveis e com fonte única junto das demais regras da automação).
 
 function resolveAutomationCategory(value, cursor) {
   const raw = String(value || '').trim().toLowerCase();

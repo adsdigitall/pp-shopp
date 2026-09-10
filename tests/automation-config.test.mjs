@@ -6,6 +6,9 @@ import {
   canonicalAutomationCategoryId,
   mergeGroupLists,
   resolveDispatchIntervals,
+  normalizeAutomationSchedule,
+  automationSlotAt,
+  activeAutomationSchedule,
 } from '../server/services/automation/config.mjs';
 
 // Regressão: o save da automação descartava groupIds (groups: [] fixo),
@@ -111,4 +114,39 @@ test('dispatch intervals prefer wizard, then body, then automation config', () =
     humanMessageInterval: { minOffers: 3, maxOffers: 9 },
     repeatCooldownHours: 6,
   });
+});
+
+// Prova que a lógica das faixas funciona: datas locais fixas, sem depender de TZ.
+const at = (h, m = 0) => new Date(2026, 8, 10, h, m, 0);
+
+test('faixa cobre o instante e default vale sem config', () => {
+  const slot = automationSlotAt(null, at(13));
+  assert.equal(slot.from, '12:00');
+  assert.deepEqual(activeAutomationSchedule(null, at(13))?.categories, slot.categories);
+  assert.equal(automationSlotAt(null, at(3)), null);
+});
+
+test('faixa desligada aparece no relógio mas não ativa (pausa)', () => {
+  const config = { scheduleSlots: [{ id: 's', enabled: false, from: '12:00', until: '14:00', categories: ['x'] }] };
+  const timed = automationSlotAt(config, at(13));
+  assert.equal(timed.enabled, false);
+  assert.equal(activeAutomationSchedule(config, at(13)), null);
+});
+
+test('faixa ligada ativa normalmente e janela overnight funciona', () => {
+  const config = { scheduleSlots: [{ id: 's', enabled: true, from: '22:00', until: '02:00', categories: ['y'] }] };
+  assert.equal(activeAutomationSchedule(config, at(23, 30))?.id, 's');
+  assert.equal(activeAutomationSchedule(config, at(1))?.id, 's');
+  assert.equal(activeAutomationSchedule(config, at(3)), null);
+  // Fora da faixa, outra faixa não "vaza" para dentro.
+  assert.equal(activeAutomationSchedule(config, at(21, 59)), null);
+});
+
+test('normalize preserva on/off e completa faixas inválidas', () => {
+  const [slot] = normalizeAutomationSchedule([{ from: 'xx', until: 'yy' }]);
+  assert.equal(slot.enabled, true);
+  assert.equal(slot.from, '08:00');
+  assert.equal(slot.until, '23:00');
+  const [off] = normalizeAutomationSchedule([{ enabled: false, from: '12:00', until: '13:00' }]);
+  assert.equal(off.enabled, false);
 });
