@@ -13,23 +13,17 @@ import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Separator } from '@/components/ui/Separator';
 import { Checkbox } from '@/components/ui/Checkbox';
 
-const AUTOMATION_CATEGORIES = [
-  { id: 'eletrônicos', label: 'Eletrônicos' },
-  { id: 'moda feminina', label: 'Moda feminina' },
-  { id: 'casa e banho', label: 'Casa e banho' },
-  { id: 'infantil', label: 'Infantil' },
-  { id: 'beleza', label: 'Beleza' },
-  { id: 'acessórios', label: 'Acessórios' },
-  { id: 'celular', label: 'Celulares' },
-];
-
 const PRIORITIZED_AUTOMATION_CATEGORIES = [
-  { id: 'casa-cozinha', label: 'Casa e cozinha (50%)' },
-  { id: 'beleza-autocuidado', label: 'Beleza e autocuidado (20%)' },
-  { id: 'organizacao', label: 'Organização (15%)' },
-  { id: 'moda-feminina', label: 'Moda feminina barata (10%)' },
-  { id: 'utilidades', label: 'Utilidades do dia a dia (5%)' },
-  { id: 'maternidade-infantil', label: 'Maternidade / infantil' },
+  { id: 'casa e cozinha', label: 'Casa e cozinha (50%)' },
+  { id: 'beleza', label: 'Beleza e autocuidado (20%)' },
+  { id: 'organizadores', label: 'Organização (15%)' },
+  { id: 'moda feminina barata', label: 'Moda feminina barata (10%)' },
+  { id: 'utilidades domésticas', label: 'Utilidades do dia a dia (5%)' },
+  { id: 'maternidade e infantil', label: 'Maternidade e infantil' },
+  { id: 'cama mesa e banho', label: 'Cama, mesa e banho' },
+  { id: 'banheiro', label: 'Banheiro' },
+  { id: 'acessórios femininos', label: 'Acessórios femininos' },
+  { id: 'eletrônicos baratos', label: 'Eletrônicos baratos' },
 ];
 
 interface FilaPageProps {
@@ -58,7 +52,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'fila' | 'grupos' | 'automacao'>('fila');
-  const [automation, setAutomation] = useState<any>({ enabled: false, groups: [], interval: { value: 30, unit: 'seconds' } });
+  const [automation, setAutomation] = useState<any>({ enabled: false, groups: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, activeFrom: '08:00', activeUntil: '23:00' });
   const [savingAutomation, setSavingAutomation] = useState(false);
 
   useEffect(() => {
@@ -86,7 +80,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   const saveAutomation = async () => {
     setSavingAutomation(true);
     try {
-      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '', activeUntil: automation.activeUntil || '' }) });
+      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', scheduleSlots: automation.scheduleSlots }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setAutomation(body.config);
@@ -97,7 +91,13 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   };
 
   const selectedCount = queueItems.filter(item => item.selected).length;
-  const selectedAll = queueItems.length > 0 && selectedCount === queueItems.length;
+  const isCompleteOffer = (item: QueueItem) => Boolean(item.product.name?.trim())
+    && Number.isFinite(Number(item.product.currentPrice))
+    && Number(item.product.currentPrice) > 0
+    && /^https?:\/\/\S+$/i.test(String(item.product.affiliateUrl || ''));
+  const readyItems = queueItems.filter(isCompleteOffer);
+  const incompleteItems = queueItems.filter(item => !isCompleteOffer(item));
+  const selectedAll = readyItems.length > 0 && selectedCount === readyItems.length;
 
   const handleToggleSelectAll = () => {
     onSelectAll(!selectedAll);
@@ -118,7 +118,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-black text-foreground">Ofertas</h2>
-              <p className="text-xs text-muted-foreground">{queueItems.length} ofertas prontas. Revise e ajuste antes de mandar.</p>
+              <p className="text-xs text-muted-foreground">{readyItems.length} ofertas completas para revisar e disparar.</p>
             </div>
           </div>
         </div>
@@ -150,66 +150,82 @@ export const FilaPage: React.FC<FilaPageProps> = ({
             </div>
           </div>
 
-          {queueItems.length === 0 ? (
+          {incompleteItems.length > 0 && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-amber-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold">{incompleteItems.length} registros antigos incompletos foram bloqueados</p>
+                <p className="mt-0.5 text-[10px] leading-4 text-amber-100/70">Eles não têm nome, preço ou link válidos e não serão enviados. Use “Limpar” para removê-los e deixe a automação criar novas ofertas completas.</p>
+              </div>
+            </div>
+          )}
+
+          {readyItems.length === 0 ? (
             <Card className="pressable-card">
               <CardContent className="p-6 text-center">
                 <Boxes className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                <p className="mt-2 text-sm text-muted-foreground">Fila vazia. Garimpe ofertas pra começar.</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">Nenhuma oferta completa na fila</p>
+                <p className="mt-1 text-xs text-muted-foreground">Garimpe uma oferta ou aguarde o próximo ciclo automático.</p>
                 <Button onClick={onAddToQueue} className="mt-4">Garimpar ofertas</Button>
               </CardContent>
             </Card>
           ) : (
-            <ScrollArea className="space-y-2 max-h-[60vh] scrollbar-thin">
-              {queueItems.map((item) => (
-                <Card key={item.id} className="pressable-card">
-                  <CardContent className="p-2">
-                    <div className="flex items-center gap-2">
+            <ScrollArea className="max-h-[64vh] pr-2 scrollbar-thin">
+              <div className="grid gap-3 xl:grid-cols-2">
+              {readyItems.map((item) => (
+                <Card key={item.id} className="pressable-card overflow-hidden border-white/[0.07] bg-card/80">
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-3">
                       <Checkbox
                         checked={item.selected}
                         onCheckedChange={() => onToggleSelection(item.id)}
-                        className="h-4 w-4"
+                        className="mt-1 h-5 w-5 shrink-0"
                       />
-                      <div className="relative h-10 w-10 shrink-0 rounded bg-muted overflow-hidden">
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted sm:h-24 sm:w-24">
                         {item.product.imageUrl ? <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-muted-foreground"><LinkIcon className="h-5 w-5" /></div>}
+                        {item.product.discountPercentage != null && item.product.discountPercentage > 0 && (
+                          <Badge className="absolute left-1.5 top-1.5 border-0 bg-primary px-1.5 py-0.5 text-[9px] text-white">-{Math.round(item.product.discountPercentage)}%</Badge>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{item.product.name}</p>
-                        <div className="flex items-center gap-1.5 text-[10px]">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="line-clamp-2 text-sm font-bold leading-5 text-foreground">{item.product.name}</p>
+                          <Button variant="ghost" size="icon-sm" onClick={() => onRemoveFromQueue(item.id)} className="-mr-1 -mt-1 shrink-0 text-muted-foreground hover:text-destructive" aria-label="Remover oferta">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <span className="text-base font-black text-success">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
+                          {item.product.originalPrice && <span className="text-[10px] line-through text-muted-foreground">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
                           <Badge variant={item.product.marketplace === 'mercado_livre' ? 'secondary' : 'default'}>
                             {item.product.marketplace === 'shopee' ? 'SH' : item.product.marketplace === 'mercado_livre' ? 'ML' : item.product.marketplace}
                           </Badge>
-                          <span className="text-success font-bold">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
-                          {item.product.originalPrice && (
-                            <span className="line-through text-muted-foreground">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>
-                          )}
-                          {!item.product.affiliateUrl && (
-                            <span className="rounded bg-[var(--warning)]/15 px-1.5 py-0.5 text-[9px] font-black text-[var(--warning)]">Sem link</span>
-                          )}
+                          {item.product.salesCount != null && <span>+{item.product.salesCount.toLocaleString('pt-BR')} vendidos</span>}
+                          {item.product.salesCountText && item.product.salesCount == null && <span>{item.product.salesCountText} vendidos</span>}
+                          {item.product.rating != null && <span>★ {item.product.rating.toFixed(1)}</span>}
                         </div>
-                      </div>
-                      <div className="flex-shrink-0 flex items-center gap-1.5">
-                        <div className="flex items-center gap-1 rounded bg-muted px-1.5 py-1 text-[9px]">
-                          <LinkIcon className="w-3 h-3 text-muted-foreground" />
-                          <span className="truncate max-w-[100px] text-muted-foreground font-mono">{item.product.affiliateUrl || item.product.productUrl}</span>
-                          <Button variant="ghost" size="icon-sm" onClick={() => copyAffiliateLink(item.product.affiliateUrl || item.product.productUrl)} aria-label="Copiar link de afiliado">
-                            <Copy className="w-3 h-3" />
+                        <div className="mt-2 flex min-w-0 items-center gap-1 rounded-lg bg-muted/70 p-1 pl-2 text-[9px]">
+                          <LinkIcon className="h-3 w-3 shrink-0 text-primary" />
+                          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{item.product.affiliateUrl}</span>
+                          <Button variant="ghost" size="icon-sm" onClick={() => copyAffiliateLink(item.product.affiliateUrl)} aria-label="Copiar link de afiliado">
+                            <Copy className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                        <Button variant="ghost" size="icon-sm" onClick={() => onRemoveFromQueue(item.id)} className="text-muted-foreground hover:text-destructive" aria-label="Remover oferta">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
+              </div>
             </ScrollArea>
           )}
 
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-primary/10 p-2">
-              <b className="block text-lg text-primary">{queueItems.length}</b>
-              <span className="text-[9px] text-primary">na fila</span>
+              <b className="block text-lg text-primary">{readyItems.length}</b>
+              <span className="text-[9px] text-primary">prontas</span>
             </div>
             <div className="rounded-lg bg-success/10 p-2">
               <b className="block text-lg text-success">0</b>

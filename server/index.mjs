@@ -2304,7 +2304,7 @@ const DEFAULT_AUTOMATION_MESSAGE = "💛 OLHA ESSE ACHADINHO!\n\n📦 *{TITULO}*
 
 async function handleGetDispatchAutomation(req, res) {
   const config = await DispatchAutomationStore.get(requestUserId(req));
-  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 5, unit: 'minutes' }, offerInterval: { value: 5, unit: 'minutes' }, batchSize: 10, aiEnabled: false, activeFrom: '', activeUntil: '' } });
+  sendJson(res, 200, { config: config || { enabled: false, groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -2327,8 +2327,9 @@ async function handleSaveDispatchAutomation(req, res) {
       rotatingCTAs: body.rotatingCTAs !== false,
       aiEnabled: body.aiEnabled === true,
       categories: Array.isArray(body.categoryIds) ? [...new Set(body.categoryIds.map(item => String(item).trim()).filter(item => item.length > 0 && item.length <= 80))].slice(0, 12) : [],
-      activeFrom: isValidAutomationTime(body.activeFrom) ? String(body.activeFrom) : '',
-      activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '',
+      activeFrom: isValidAutomationTime(body.activeFrom) ? String(body.activeFrom) : '08:00',
+      activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '23:00',
+      scheduleSlots: normalizeAutomationSchedule(body.scheduleSlots),
     });
     sendJson(res, 200, { config });
   } catch (err) {
@@ -2432,7 +2433,10 @@ async function runAutomaticOfferDiscovery() {
           'utilidades': 'utilidades domésticas',
           'maternidade-infantil': 'maternidade e infantil',
         };
-        const rawCategory = categories.length ? String(categories[categoryCursor % categories.length]).trim() : '';
+        const activeSlot = activeAutomationSchedule(config);
+        const scheduledCategories = activeSlot?.categories || [];
+        const categoryPool = scheduledCategories.length ? scheduledCategories : categories;
+        const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
         const selectedCategory = LEGACY_CATEGORY_KEYWORDS[rawCategory] || rawCategory;
         const categoryPlan = resolveAutomationCategory(selectedCategory, categoryCursor);
         const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
@@ -2493,9 +2497,9 @@ async function runAutomaticOfferDiscovery() {
 }
 
 function automationIsWithinSchedule(config, now = new Date()) {
-  const from = String(config?.activeFrom || '');
-  const until = String(config?.activeUntil || '');
-  if (!isValidAutomationTime(from) || !isValidAutomationTime(until) || from === until) return true;
+  const from = isValidAutomationTime(config?.activeFrom) ? String(config.activeFrom) : '08:00';
+  const until = isValidAutomationTime(config?.activeUntil) ? String(config.activeUntil) : '23:00';
+  if (from === until) return true;
   const current = now.getHours() * 60 + now.getMinutes();
   const parse = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
   const start = parse(from);
@@ -3487,6 +3491,41 @@ const AUTOMATION_CATEGORY_PLAN = [
 ];
 // Alterna uma categoria por ciclo para evitar lotes repetidos do mesmo nicho.
 const AUTOMATION_CATEGORY_SLOTS = AUTOMATION_CATEGORY_PLAN.map((_, index) => index);
+
+// Janelas padrão do garimpo. Podem ser substituídas por scheduleSlots na
+// configuração da automação sem alterar o contrato existente de categorias.
+const DEFAULT_AUTOMATION_SCHEDULE = [
+  { from: '08:00', until: '10:00', categories: ['casa-cozinha'] },
+  { from: '10:00', until: '12:00', categories: ['organizacao'] },
+  { from: '12:00', until: '14:00', categories: ['utilidades', 'casa-cozinha'] },
+  { from: '14:00', until: '16:00', categories: ['beleza-autocuidado'] },
+  { from: '16:00', until: '18:00', categories: ['moda-feminina'] },
+  { from: '18:00', until: '20:00', categories: ['casa-cozinha', 'utilidades'] },
+  { from: '20:00', until: '22:00', categories: [] },
+  { from: '22:00', until: '23:00', categories: ['eletronicos-baratos', 'beleza-autocuidado'] },
+];
+
+function normalizeAutomationSchedule(value) {
+  if (!Array.isArray(value) || !value.length) return DEFAULT_AUTOMATION_SCHEDULE;
+  return value.slice(0, 12).map(slot => ({
+    from: isValidAutomationTime(slot?.from) ? String(slot.from) : '08:00',
+    until: isValidAutomationTime(slot?.until) ? String(slot.until) : '23:00',
+    categories: Array.isArray(slot?.categories)
+      ? [...new Set(slot.categories.map(item => String(item).trim()).filter(Boolean))].slice(0, 8)
+      : [],
+  }));
+}
+
+function activeAutomationSchedule(config, now = new Date()) {
+  const schedule = normalizeAutomationSchedule(config?.scheduleSlots);
+  const current = now.getHours() * 60 + now.getMinutes();
+  const parse = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  return schedule.find(slot => {
+    const from = parse(slot.from);
+    const until = parse(slot.until);
+    return from < until ? current >= from && current < until : current >= from || current < until;
+  }) || null;
+}
 
 function resolveAutomationCategory(value, cursor) {
   const raw = String(value || '').trim().toLowerCase();
