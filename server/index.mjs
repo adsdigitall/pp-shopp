@@ -1155,6 +1155,10 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         await handleClearQueue(req, res);
         return;
       }
+      if (req.method === 'POST' && /^\/api\/queue\/[^/]+\/send-now$/.test(pathOnly)) {
+        await handleSendQueueItemNow(req, res, pathOnly);
+        return;
+      }
 
       // ========== DISPATCH (DISPAROS) ENDPOINTS ==========
       if (req.method === 'GET' && pathOnly === '/api/dispatch/automation') {
@@ -2343,6 +2347,35 @@ const SAFE_HUMAN_MESSAGES = [
 
 function getSafeHumanMessage(index = 0) {
   return SAFE_HUMAN_MESSAGES[Math.max(0, Number(index) || 0) % SAFE_HUMAN_MESSAGES.length];
+}
+
+async function handleSendQueueItemNow(req, res, pathOnly) {
+  try {
+    const userId = requestUserId(req);
+    const queueId = decodeURIComponent(pathOnly.replace('/api/queue/', '').replace('/send-now', ''));
+    const item = await PublicationHistoryStore.getByUser(userId, 500).then(items => items.find(entry => entry.id === queueId));
+    const body = await readJsonBody(req).catch(() => ({}));
+    if (!item) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Item da fila não encontrado.' } }); return; }
+    const offer = await hydrateDispatchOffer(userId, {
+      id: item.productId, productId: item.productId, marketplace: item.marketplace, marketplaceProductId: item.marketplaceProductId,
+      name: item.productName, currentPrice: item.price, originalPrice: item.originalPrice, discountPercentage: item.discountPercentage,
+      salesCount: item.salesCount, salesCountText: item.salesCountText, rating: item.rating, reviewsCount: item.reviewsCount,
+      category: item.category, affiliateUrl: item.affiliateUrl, productUrl: item.originalUrl, imageUrl: item.imageUrl,
+      highlightPoints: item.highlightPoints, shortDescription: item.shortDescription,
+    });
+    const config = await DispatchAutomationStore.get(userId).catch(() => null);
+    const requestedGroups = Array.isArray(body.groupIds) ? body.groupIds : [];
+    const groups = (requestedGroups.length ? requestedGroups : (config?.groups || []).map(group => group.id))
+      .map(group => typeof group === 'string' ? { id: group } : group).filter(group => group?.id);
+    if (!offer.name || !Number.isFinite(Number(offer.currentPrice)) || !offer.affiliateUrl) { sendJson(res, 400, { error: { code: 'INCOMPLETE_OFFER_DATA', message: 'Oferta sem nome, preço atual ou link de afiliado válido.' } }); return; }
+    if (!groups.length) { sendJson(res, 400, { error: { code: 'MISSING_DESTINATIONS', message: 'Nenhum grupo selecionado.' } }); return; }
+    const jobId = `dispatch-now-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const job = { id: jobId, userId, status: 'pending', step: 3, offers: [offer], message: { whatsapp: { customMessage: body.message || config?.template || DEFAULT_AUTOMATION_MESSAGE, showImage: true, rotatingCTAs: config?.rotatingCTAs !== false } }, destinations: { groups, interval: { value: 0, unit: 'seconds' }, sessionId: body.sessionId || config?.sessionId || WAHA_SESSION }, createdAt: new Date().toISOString(), startedAt: null, completedAt: null, stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: groups.length }, currentGroupIndex: 0, attempts: [], idempotencyKey: `manual-now:${offer.id}:${groups.map(group => group.id).join(',')}` };
+    dispatchJobs.set(jobId, job);
+    await DispatchStore.save(job);
+    if (PROCESS_DISPATCH_INLINE) void resumeDispatchQueue();
+    sendJson(res, 202, { jobId, status: job.status });
+  } catch { sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao enviar oferta agora.' } }); }
 }
 
 async function handleGetDispatchAutomation(req, res) {

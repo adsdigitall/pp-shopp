@@ -34,6 +34,7 @@ interface FilaPageProps {
   onClearQueue: () => void;
   onSelectAll: (selected: boolean) => void;
   onToggleSelection: (queueId: string) => void;
+  onSendNow?: (queueId: string) => Promise<void> | void;
   onOpenDispatch: () => void;
   onOpenGroups: () => void;
   showToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
@@ -68,6 +69,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   onClearQueue,
   onSelectAll,
   onToggleSelection,
+  onSendNow,
   onOpenDispatch,
   onOpenGroups,
   showToast,
@@ -102,7 +104,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
 
   const scheduleSlots = Array.isArray(automation.scheduleSlots) ? automation.scheduleSlots : [];
   const updateScheduleSlot = (index: number, patch: any) => setAutomation((prev: any) => ({ ...prev, scheduleSlots: (Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []).map((slot: any, i: number) => i === index ? { ...slot, ...patch } : slot) }));
-  const addScheduleSlot = () => setAutomation((prev: any) => ({ ...prev, scheduleSlots: [...(Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []), { id: `slot-${Date.now()}`, enabled: true, from: '08:00', until: '09:00', categories: [] }] }));
+  const addScheduleSlot = () => setAutomation((prev: any) => ({ ...prev, scheduleSlots: [...(Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []), { id: `slot-${Date.now()}`, enabled: true, from: '08:00', until: '09:00', categories: ['casa-cozinha'] }] }));
   const removeScheduleSlot = (index: number) => setAutomation((prev: any) => ({ ...prev, scheduleSlots: (Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []).filter((_: any, i: number) => i !== index) }));
   const moveScheduleSlot = (index: number, direction: -1 | 1) => setAutomation((prev: any) => { const next = [...(Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : [])]; const target = index + direction; if (target < 0 || target >= next.length) return prev; [next[index], next[target]] = [next[target], next[index]]; return { ...prev, scheduleSlots: next }; });
 
@@ -238,6 +240,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                       )}
                     </div>
                     <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:justify-end">
+                      {onSendNow && <Button variant="outline" size="sm" onClick={() => onSendNow(item.id)} className="h-8 px-2 text-[10px] font-bold text-[var(--primary)]">Enviar agora</Button>}
                       <Button variant="ghost" size="icon-sm" onClick={() => onRemoveFromQueue(item.id)} className="text-[var(--text-secondary)] hover:text-[var(--error)]" aria-label="Remover oferta">
                         <Trash2 className="h-4 w-4" />
                       </Button>
