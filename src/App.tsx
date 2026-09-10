@@ -389,11 +389,20 @@ export function App() {
   // Recarrega a lista completa de grupos do WhatsApp (sync ao vivo).
   // Extraído como callback para a aba Automação oferecer "Atualizar".
   const refreshGroups = useCallback(async () => {
-    const response = await fetch('/api/whatsapp/groups?session=default');
-    if (!response.ok) throw new Error('sync failed');
-    const body = await response.json().catch(() => null);
-    if (!Array.isArray(body?.groups) || body.groups.length === 0) return;
-    setGroups(body.groups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    try {
+      let response = await fetch('/api/whatsapp/groups?session=default', { signal: controller.signal });
+      let body = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(body?.groups) || body.groups.length === 0) {
+        response = await fetch('/api/groups', { cache: 'no-store' });
+        body = await response.json().catch(() => null);
+      }
+      if (!response.ok || !Array.isArray(body?.groups) || body.groups.length === 0) throw new Error('sync failed');
+      setGroups(body.groups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }, []);
 
   useEffect(() => {
