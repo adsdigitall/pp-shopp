@@ -2462,7 +2462,16 @@ async function runAutomaticOfferDiscovery() {
               return false;
             }
             const key = dispatchProductKey(item);
-            return item?.id && !queuedKeys.has(key) && !sentKeys.has(key) && !recentDiscoveryKeys.has(key);
+            const recentTitles = currentQueue
+              .filter(entry => entry?.source === 'automatic_discovery' || entry?.publishedAt)
+              .slice(0, 20)
+              .map(entry => entry.productName || entry.name || entry.title)
+              .filter(Boolean);
+            return item?.id
+              && !queuedKeys.has(key)
+              && !sentKeys.has(key)
+              && !recentDiscoveryKeys.has(key)
+              && !isSimilarToRecentTitle(item.title || item.name, recentTitles);
           })
           .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
           .slice(0, batchSize);
@@ -2783,7 +2792,7 @@ async function processDispatchJob(jobId) {
       if (await dispatchWasCancelled(job)) return;
       const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
       if (await alreadyDispatchedRecently(job.userId, offer, group.id, sessionName)) {
-        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: sessionName, status: 'deduplicated', sentAt: new Date().toISOString(), attempts: 0 });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, sessionId: sessionName, status: 'deduplicated', sentAt: new Date().toISOString(), attempts: 0 });
         job.stats.deduplicated = (job.stats.deduplicated || 0) + 1;
         deliveryIndex++;
         job.stats.pending = Math.max(0, totalDeliveries - deliveryIndex);
@@ -2812,10 +2821,10 @@ async function processDispatchJob(jobId) {
         }
         const imageUrl = resolveDispatchImageUrl(offer.imageUrl);
         const result = await sendToWhatsAppGroup(group.id, msg, imageUrl, sessionName);
-        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
         job.stats.sent++;
       } catch (e) {
-        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
+        job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
         job.stats.failed++;
       }
       deliveryIndex++;
@@ -3478,6 +3487,18 @@ function dispatchProductKey(offer) {
   const marketplace = String(offer?.marketplace || 'shopee').trim().toLowerCase();
   const productId = String(offer?.marketplaceProductId || offer?.productId || offer?.id || '').trim();
   return `${marketplace}:${productId}`;
+}
+
+function isSimilarToRecentTitle(title, recentTitles = []) {
+  const tokens = new Set(String(title || '').toLowerCase().split(/[^a-z0-9à-ÿ]+/i).filter(token => token.length >= 4));
+  if (tokens.size < 3) return false;
+  return recentTitles.some(previous => {
+    const previousTokens = new Set(String(previous || '').toLowerCase().split(/[^a-z0-9à-ÿ]+/i).filter(token => token.length >= 4));
+    if (previousTokens.size < 3) return false;
+    const intersection = [...tokens].filter(token => previousTokens.has(token)).length;
+    const union = new Set([...tokens, ...previousTokens]).size;
+    return union > 0 && intersection / union >= 0.65;
+  });
 }
 
 // Mix de categorias para o pÃºblico feminino, priorizando compras low-ticket.
