@@ -394,13 +394,16 @@ export function App() {
     }
   }, [showToast]);
 
-  // Recarrega a lista completa de grupos do WhatsApp (sync ao vivo).
-  // Extraído como callback para a aba Automação oferecer "Atualizar".
+  // Recarrega a lista completa de grupos do WhatsApp (todas as sessões).
+  // Extraído como callback para as telas oferecerem "Atualizar".
+  const groupsRefreshingRef = useRef(false);
   const refreshGroups = useCallback(async () => {
+    if (groupsRefreshingRef.current) return;
+    groupsRefreshingRef.current = true;
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
-      const liveResponse = await fetch('/api/whatsapp/groups?session=default', { signal: controller.signal }).catch(() => null);
+      const liveResponse = await fetch('/api/whatsapp/groups', { signal: controller.signal }).catch(() => null);
       const liveBody = await liveResponse?.json().catch(() => null);
       const savedResponse = await fetch('/api/groups', { cache: 'no-store' }).catch(() => null);
       const savedBody = await savedResponse?.json().catch(() => null);
@@ -411,6 +414,7 @@ export function App() {
       setGroups(mergedGroups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
     } finally {
       window.clearTimeout(timeout);
+      groupsRefreshingRef.current = false;
     }
   }, []);
 
@@ -857,6 +861,7 @@ export function App() {
           onSaveDestinations={handleSaveDestinations}
           onExecuteDispatch={handleExecuteDispatch}
           onShowToast={showToast}
+          onRefreshGroups={refreshGroups}
         />
 
         <div className={activeSection === 'garimpar' ? '' : 'hidden'}><GarimparPage

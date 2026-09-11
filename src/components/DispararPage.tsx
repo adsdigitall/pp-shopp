@@ -27,6 +27,7 @@ interface DispararPageProps {
   onSaveDestinations: (destinations: { groups: Group[]; schedule: 'now' | 'scheduled'; scheduledAt?: string; interval: { value: number; unit: 'seconds' | 'minutes' | 'hours' }; nightPause: boolean; weekendPause: boolean; expirePause: boolean }) => void;
   onExecuteDispatch: () => Promise<{ jobId: string; status: string } | null>;
   onShowToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
+  onRefreshGroups?: () => Promise<void>;
 }
 
 const defaultTemplates = DEFAULT_OFFER_TEMPLATES;
@@ -70,6 +71,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   onSaveDestinations,
   onExecuteDispatch,
   onShowToast,
+  onRefreshGroups,
 }) => {
   const [step, setStep] = useState<DispatchStep>(1);
   const [selectedOffers, setSelectedOffers] = useState<string[]>([]);
@@ -92,6 +94,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [searchGroups, setSearchGroups] = useState('');
   const [activeTab, setActiveTab] = useState<'new' | 'ongoing'>('new');
   const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
+  const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [pendingCancelJobId, setPendingCancelJobId] = useState<string | null>(null);
@@ -510,6 +513,25 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     onChange={e => setSearchGroups(e.target.value)}
                     className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                   />
+                  {onRefreshGroups && (
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        setRefreshingGroups(true);
+                        try {
+                          await onRefreshGroups();
+                        } finally {
+                          setRefreshingGroups(false);
+                        }
+                      }}
+                      variant="outline"
+                      title="Recarregar todos os grupos"
+                      className="rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                      disabled={refreshingGroups}
+                    >
+                      {refreshingGroups ? '↻...' : '↻'}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     onClick={() => setSelectedGroups(prev => prev.length === filteredGroups.length ? [] : filteredGroups.map(g => g.id))}
@@ -519,6 +541,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
                     {selectedGroups.length === filteredGroups.length ? 'desmarcar' : 'selecionar todos'}
                   </Button>
                 </div>
+                <p className="mb-2 text-[10px] font-semibold text-[var(--text-secondary)]">{filteredGroups.length} grupo(s) carregado(s){searchGroups ? ` · filtro "${searchGroups}"` : ''}</p>
                 <div className="max-h-[45vh] overflow-y-auto space-y-1">
                   {filteredGroups.map(group => (
                     <label key={group.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 hover:border-[var(--primary)] cursor-pointer">

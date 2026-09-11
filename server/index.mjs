@@ -117,6 +117,15 @@ async function wahaGetSession(sessionName = WAHA_SESSION) {
   }
 }
 
+async function wahaListSessions() {
+  try {
+    const sessions = await wahaRequest('/api/sessions');
+    return Array.isArray(sessions) ? sessions : [];
+  } catch {
+    return [];
+  }
+}
+
 async function wahaStartSession(sessionName = WAHA_SESSION) {
   const session = await wahaGetSession(sessionName);
   if (session?.status === 'WORKING') return session;
@@ -3480,13 +3489,29 @@ async function handleSyncGroups(req, res) {
   try {
     const userId = requestUserId(req);
     const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
-    const sessionId = parsed.searchParams.get('session') || WAHA_SESSION;
-    const fresh = await syncWhatsAppGroups(userId, sessionId);
+    const onlySession = parsed.searchParams.get('session');
+    // Sem ?session: varre TODAS as sessões ao vivo (antes só a default —
+    // grupos de outras sessões nunca apareciam na tela).
+    const sessionNames = onlySession
+      ? [onlySession]
+      : await wahaListSessions().then((sessions) => {
+        const names = sessions.map((s) => s?.name).filter(Boolean);
+        return names.length ? names : [WAHA_SESSION];
+      });
+    const settled = await Promise.all(
+      sessionNames.map((name) => syncWhatsAppGroups(userId, name)),
+    );
+    const fresh = settled.flat();
     // Sync vazio/falho nunca apaga a lista salva: WAHA instável já zerou
     // os grupos do usuário antes. Só substitui quando retorna dados.
     if (fresh.length) await WhatsAppGroupsStore.save(userId, fresh);
     const stored = await WhatsAppGroupsStore.get(userId).catch(() => []);
-    sendJson(res, 200, { groups: mergeGroupLists(stored, fresh), synced: true });
+    const merged = mergeGroupLists(stored, fresh);
+    sendJson(res, 200, {
+      groups: onlySession ? merged.filter((group) => group.sessionId === onlySession) : merged,
+      synced: true,
+      sessions: sessionNames,
+    });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao sincronizar grupos.' } });
   }
@@ -4196,8 +4221,39 @@ async function handleWhatsAppQR(req, res) {
 }
 
 async function handleWhatsAppSessions(req, res) {
-  const sessions = await WhatsAppSessionStore.list(requestUserId(req));
-  sendJson(res, 200, { sessions });
+  const stored = await WhatsAppSessionStore.list(requestUserId(req));
+  // Status real ao vivo (o registro salvo fica defasado: mostrava QR Code
+  // para sessão já conectada). Inclui sessões ao vivo sem registro.
+  const live = await wahaListSessions();
+  const liveByName = new Map(live.map((s) => [s?.name, s]));
+  const merged = stored.map((record) => {
+    const liveOne = liveByName.get(record.wahaSessionId);
+    if (!liveOne) return record;
+    return {
+      ...record,
+      status: liveOne.status,
+      phone: liveOne.me?.id ? String(liveOne.me.id).replace('@c.us', '') : record.phone,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+  for (const liveOne of live) {
+    if (!liveOne?.name) continue;
+    const known = stored.some((record) => record.wahaSessionId === liveOne.name);
+    if (!known) {
+      merged.push({
+        id: `waha:${liveOne.name}`,
+        userId: requestUserId(req),
+        name: liveOne.name,
+        wahaSessionId: liveOne.name,
+        phone: liveOne.me?.id ? String(liveOne.me.id).replace('@c.us', '') : null,
+        status: liveOne.status,
+        liveOnly: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+  sendJson(res, 200, { sessions: merged });
 }
 
 async function handleCreateWhatsAppSession(req, res) {
