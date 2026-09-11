@@ -17,10 +17,10 @@ test('automatic discovery dispatches approved offers in auto mode', async () => 
   assert.match(source, /for \(const config of configs\.filter\(item => item\?\.enabled\)\)/);
   assert.match(source, /const batchSize = 1;/);
   assert.match(source, /for \(const offer of offers\)/);
-  assert.match(source, /if \(!isBrazilianOffer\(item\)\) return false;/);
+  assert.match(source, /if \(!isBrazilianOffer\(item\)\) \{ blocked\.other \+= 1; return false; \}/);
   assert.match(source, /!recentDiscoveryKeys\.has\(key\)/);
   assert.match(source, /const stableQueueId = `queue-auto-/);
-  assert.match(source, /if \(!String\(item\?\.title \|\| ''\)\.trim\(\)\) return false;/);
+  assert.match(source, /if \(!String\(item\?\.title \|\| ''\)\.trim\(\)\) \{ blocked\.other \+= 1; return false; \}/);
 });
 
 test('manual queue additions do not enqueue dispatches', async () => {

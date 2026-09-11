@@ -2717,45 +2717,67 @@ async function runAutomaticOfferDiscovery() {
         const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
         const selectedCategory = LEGACY_CATEGORY_KEYWORDS[rawCategory] || rawCategory;
         const categoryPlan = resolveAutomationCategory(selectedCategory, categoryCursor);
-        const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
-        const { nodes } = await searchProductOffers({
-          keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : categoryPlan.keywords,
-          filter: 'trending', page: 1, limit: 50,
-            categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
-            config: await loadShopeeConfigForUser(config.userId || 'default_user'),
-        });
-        const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
-        const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
-        const sentKeys = await recentlySentProductKeys(config.userId);
-        const recentDiscoveryKeys = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys.map(String) : []);
-        // "Nova oferta a cada X" representa uma oferta por ciclo.
-        const batchSize = 1;
-        const offers = normalizeProductOffers(nodes, 'trending')
-          .filter(item => {
-            if (!isBrazilianOffer(item)) return false;
-            if (!String(item?.title || '').trim()) return false;
-            const evaluation = evaluateAutomationOffer(item);
-            if (!evaluation.approved) {
-              logLine(`[AUTOMATION] Oferta ${item?.id || 'sem-id'} rejeitada: ${evaluation.reasons.join(', ')}.`);
-              return false;
-            }
-            const key = dispatchProductKey(item);
-            const recentTitles = currentQueue
-              .filter(entry => entry?.source === 'automatic_discovery' || entry?.publishedAt)
-              .slice(0, 20)
-              .map(entry => entry.productName || entry.name || entry.title)
-              .filter(Boolean);
-            return item?.id
-              && !queuedKeys.has(key)
-              && !sentKeys.has(key)
-              && !recentDiscoveryKeys.has(key)
-              && !isSimilarToRecentTitle(item.title || item.name, recentTitles);
-          })
-          .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
-          .slice(0, batchSize);
+          const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
+          const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
+          // 2 páginas (100 produtos): o pool de trending recicla os mesmos itens;
+          // só a primeira página esgota em poucas horas.
+          const rawNodes = [];
+          for (const discoveryPage of [1, 2]) {
+            const { nodes: pageNodes } = await searchProductOffers({
+              keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : categoryPlan.keywords,
+              filter: 'trending', page: discoveryPage, limit: 50,
+              categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
+              config: discoveryConfig,
+            });
+            if (Array.isArray(pageNodes)) rawNodes.push(...pageNodes);
+            if (!Array.isArray(pageNodes) || pageNodes.length < 50) break;
+          }
+          const nodes = rawNodes;
+          const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
+          const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
+          const sentKeys = await recentlySentProductKeys(config.userId);
+          const recentDiscoveryKeys = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys.map(String) : []);
+          // "Nova oferta a cada X" representa uma oferta por ciclo.
+          const batchSize = 1;
+          const blocked = { repeats: 0, gate: {}, other: 0 };
+          const normalized = normalizeProductOffers(nodes, 'trending');
+          const offers = normalized
+            .filter(item => {
+              if (!isBrazilianOffer(item)) { blocked.other += 1; return false; }
+              if (!String(item?.title || '').trim()) { blocked.other += 1; return false; }
+              const evaluation = evaluateAutomationOffer(item);
+              if (!evaluation.approved) {
+                const reason = evaluation.reasons[0] || 'rejeitada';
+                blocked.gate[reason] = (blocked.gate[reason] || 0) + 1;
+                return false;
+              }
+              const key = dispatchProductKey(item);
+              const recentTitles = currentQueue
+                .filter(entry => entry?.source === 'automatic_discovery' || entry?.publishedAt)
+                .slice(0, 20)
+                .map(entry => entry.productName || entry.name || entry.title)
+                .filter(Boolean);
+              const fresh = item?.id
+                && !queuedKeys.has(key)
+                && !sentKeys.has(key)
+                && !recentDiscoveryKeys.has(key)
+                && !isSimilarToRecentTitle(item.title || item.name, recentTitles);
+              if (!fresh) { blocked.repeats += 1; return false; }
+              return true;
+            })
+            .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
+            .slice(0, batchSize);
+          const lastDiscovery = {
+            at: new Date().toISOString(),
+            category: categoryPlan.keywords || categoryPlan.id,
+            scanned: normalized.length,
+            kept: offers.length,
+            blocked,
+          };
         if (!offers.length) {
-          await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt, categoryCursor: categoryCursor + 1 });
-          logLine(`[AUTOMATION] Nenhuma oferta inédita disponível para ${config.userId}.`);
+          await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt, categoryCursor: categoryCursor + 1, lastDiscovery });
+          const gateTop = Object.entries(blocked.gate).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([reason, count]) => `${reason} (${count})`).join(', ');
+          logLine(`[AUTOMATION] Nenhuma oferta inédita para ${config.userId} (${lastDiscovery.category}): ${lastDiscovery.scanned} vistas, ${blocked.repeats} repetidas, gates: ${gateTop || '—'}.`);
           continue;
         }
         const queuedItems = [];
@@ -2766,6 +2788,7 @@ async function runAutomaticOfferDiscovery() {
         await DispatchAutomationStore.save(config.userId, {
           nextDiscoveryAt,
           categoryCursor: categoryCursor + 1,
+          lastDiscovery,
           recentOfferKeys: [...new Set([
             ...offers.map(dispatchProductKey),
             ...(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys : []),
