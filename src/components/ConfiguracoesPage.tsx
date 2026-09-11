@@ -174,6 +174,8 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       setMlApiKey('');
       if (key) setMlHasApiKey(true);
       setMlProvider(provider);
+      // Coerência imediata: a tag passa a valer na hora, sem reload.
+      setMlMirroredTag(tag);
       onShowToast(
         'ML salvo',
         provider === 'afilitools' ? 'Tag e chave configuradas. Teste um link abaixo.' : 'Tag salva. Os links sairão com ?matt_tool da sua tag.',
@@ -518,15 +520,14 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-bold text-[var(--text-primary)]">Mercado Livre</p>
-                    {mlStatus === 'loading' ? (
-                      <Badge variant="secondary">Verificando...</Badge>
-                    ) : mlStatus === 'connected' ? (
-                      <Badge variant="success">Conectado{mlAccount ? ` · ${mlAccount}` : ''}</Badge>
-                    ) : mlStatus === 'token_expired' ? (
-                      <Badge variant="warning">Token expirado</Badge>
-                    ) : (
-                      <Badge variant="destructive">Desconectado</Badge>
-                    )}
+                    {(() => {
+                      const effectiveTag = mlTag.trim() || mlMirroredTag;
+                      if (mlStatus === 'loading') return <Badge variant="secondary">Verificando...</Badge>;
+                      if (mlStatus === 'connected') return <Badge variant="success">Conectado{mlAccount ? ` · ${mlAccount}` : ''}</Badge>;
+                      if (effectiveTag) return <Badge variant="success">Conectado · tag</Badge>;
+                      if (mlStatus === 'token_expired') return <Badge variant="warning">Token expirado</Badge>;
+                      return <Badge variant="destructive">Desconectado</Badge>;
+                    })()}
                   </div>
                 </div>
                 {mlStatus === 'connected' ? (
@@ -538,8 +539,8 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-xs text-[var(--text-secondary)]">Entre com sua conta do Mercado Livre para buscar produtos e gerar links.</p>
-                    {mlError && (
+                    <p className="text-xs text-[var(--text-secondary)]">Entre com sua conta do Mercado Livre para buscar produtos e gerar links. Com só a tag abaixo, os links já saem com comissão.</p>
+                    {mlError && !(mlTag.trim() || mlMirroredTag) && (
                       <p className="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-3 py-2 text-xs font-semibold text-[var(--error)]">{mlError}</p>
                     )}
                     <Button variant="default" onClick={handleMlConnect} disabled={mlBusy} className="bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {mlBusy ? 'Aguardando autorização...' : mlStatus === 'token_expired' ? 'Reconectar conta' : 'Conectar conta'}</Button>
