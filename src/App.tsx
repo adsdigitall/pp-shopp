@@ -253,6 +253,9 @@ export function App() {
   const [extensionToken, setExtensionToken] = useState('');
   const [panelUrl, setPanelUrl] = useState('https://radarfertas.shop');
   const [whatsappConnected, setWhatsAppConnected] = useState(false);
+  // Guarda o status anterior para detectar a QUEDA da sessão (true -> false)
+  // sem disparar aviso na primeira carga (null -> false é silencioso).
+  const prevWhatsAppConnectedRef = useRef<boolean | null>(null);
 
   const [appSettings, setAppSettings] = useState<SettingsType>({
     channels: { whatsapp: { connected: false, phone: '', instanceId: '' }, telegram: { connected: false } },
@@ -411,15 +414,29 @@ export function App() {
   }, [refreshGroups]);
 
   useEffect(() => {
+    const notifyWhatsAppDrop = () => {
+      showToast('WhatsApp desconectado', 'A sessão caiu. Reconecte para retomar os disparos.', 'error');
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('WhatsApp desconectado', { body: 'A sessão caiu. Abra o app e reconecte para retomar os disparos.' });
+        }
+      } catch { /* notificação PWA opcional */ }
+    };
     const refreshWhatsAppStatus = () => {
       fetch('/api/whatsapp/status').then(response => response.ok ? response.json() : null).then(body => {
-        if (body) setWhatsAppConnected(body.status === 'connected' || body.status === 'working');
+        if (!body) return;
+        const connected = body.status === 'connected' || body.status === 'working';
+        const prev = prevWhatsAppConnectedRef.current;
+        prevWhatsAppConnectedRef.current = connected;
+        setWhatsAppConnected(connected);
+        if (prev === true && !connected) notifyWhatsAppDrop();
+        if (prev === false && connected) showToast('WhatsApp conectado', 'Sessão ativa. Disparos retomados.', 'success');
       }).catch(() => undefined);
     };
     refreshWhatsAppStatus();
     const intervalId = window.setInterval(refreshWhatsAppStatus, 10_000);
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [showToast]);
 
   const loadProducts = useCallback(async (silent = false, rotatePage = false) => {
     if (!silent) setLoading(true);

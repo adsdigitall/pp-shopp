@@ -57,6 +57,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'canais' | 'plataformas' | 'templates' | 'cupons' | 'seguranca' | 'conta'>('canais');
   const [showPassword, setShowPassword] = useState(false);
+  const [validating, setValidating] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [newCoupon, setNewCoupon] = useState<{ platform: 'shopee' | 'mercado_livre' | 'amazon' | 'magalu'; code: string; description: string }>({ platform: 'shopee', code: '', description: '' });
 
@@ -87,6 +88,45 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     }
   };
 
+  // Valida TODAS as integrações de uma vez: Shopee (chamada real à API,
+  // que só responde 200 com credenciais válidas) + WhatsApp (sessão WAHA).
+  const handleValidateAll = async () => {
+    if (validating) return;
+    setValidating(true);
+    const parts: string[] = [];
+    let okCount = 0;
+    try {
+      const prodRes = await fetch('/api/products?limit=1');
+      if (prodRes.ok) {
+        okCount++;
+        parts.push('Shopee: conectado');
+      } else {
+        parts.push(`Shopee: falha (${prodRes.status})`);
+      }
+    } catch {
+      parts.push('Shopee: servidor sem resposta');
+    }
+    try {
+      const waRes = await fetch('/api/whatsapp/status');
+      const waBody = waRes.ok ? await waRes.json().catch(() => null) : null;
+      const waOk = !!waBody && (waBody.status === 'connected' || waBody.status === 'working');
+      if (waOk) {
+        okCount++;
+        parts.push('WhatsApp: conectado');
+      } else {
+        parts.push('WhatsApp: desconectado');
+      }
+    } catch {
+      parts.push('WhatsApp: servidor sem resposta');
+    }
+    setValidating(false);
+    onShowToast(
+      okCount === 2 ? 'Tudo conectado' : 'Validação concluída',
+      parts.join(' · '),
+      okCount === 2 ? 'success' : 'error',
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'canais':
@@ -101,7 +141,11 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                   </div>
                   <div>
                     <p className="font-bold text-[var(--text-primary)]">WhatsApp</p>
-                    <Badge variant="success">Conectado</Badge>
+                    {whatsappConnected ? (
+                      <Badge variant="success">Conectado</Badge>
+                    ) : (
+                      <Badge variant="destructive">Desconectado</Badge>
+                    )}
                   </div>
                 </div>
                 {whatsappConnected && (
@@ -142,7 +186,11 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-bold text-[var(--text-primary)]">Shopee</p>
-                    <Badge variant="success">Conectado</Badge>
+                    {settings.platforms.shopee.appId && settings.platforms.shopee.secret ? (
+                      <Badge variant="success">Conectado</Badge>
+                    ) : (
+                      <Badge variant="warning">Pendente</Badge>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -172,7 +220,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 </div>
                 <div className="mt-3 flex gap-2">
                   <Button variant="default" className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
-                  <Button variant="outline" className="flex-1 border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20 flex items-center justify-center gap-2"><Wifi className="w-3 h-3" /> Validar conexão</Button>
+                  <Button variant="outline" onClick={handleValidateAll} disabled={validating} className="flex-1 border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20 flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {validating ? 'Validando...' : 'Validar conexão'}</Button>
                 </div>
               </div>
 

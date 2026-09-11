@@ -166,6 +166,26 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
       });
   }
 
+  // Remove um número DESCONECTADO (apaga a sessão no servidor via
+  // DELETE /api/whatsapp/sessions/:id, que usa o id do registro).
+  async function handleDeleteSession(item: any) {
+    if (item.status === 'WORKING') return;
+    if (typeof window !== 'undefined' && !window.confirm(`Remover "${item.name || item.wahaSessionId}"? O número desconectado será excluído.`)) return;
+    try {
+      const response = await fetch(`/api/whatsapp/sessions/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Falha ao remover');
+      setSessions(prev => prev.filter(entry => entry.id !== item.id));
+      if (selectedSessionId === item.wahaSessionId) {
+        setSelectedSessionId('default');
+        setSession(null);
+        setGroups([]);
+      }
+      showToast('Número removido', undefined, 'success');
+    } catch {
+      showToast('Erro ao remover', 'Tente novamente', 'error');
+    }
+  }
+
   function handleRefreshQR() {
     fetch('/api/whatsapp/qr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: selectedSessionId }) })
       .then(res => res.json())
@@ -289,7 +309,24 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
           </div>
           <Button type="button" onClick={() => setShowNewConnection(value => !value)} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--primary-hover)]">+ Adicionar WhatsApp</Button>
         </div>
-        {sessions.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{sessions.map(item => <Button type="button" key={item.id} onClick={() => setSelectedSessionId(item.wahaSessionId)} className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${selectedSessionId === item.wahaSessionId ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)] bg-[var(--surface-elevated)]'}`}><span><span className="block text-sm font-bold text-[var(--text-primary)]">{item.name}</span><span className="block text-xs text-[var(--text-secondary)]">{item.phone || item.wahaSessionId}</span></span><span className="text-xs font-bold text-[var(--text-secondary)]">{item.status === 'WORKING' ? 'Conectado' : 'Não conectado'}</span></Button>)}</div>}
+        {sessions.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{sessions.map(item => {
+          const isWorking = item.status === 'WORKING';
+          const isSelected = selectedSessionId === item.wahaSessionId;
+          return (
+            <div key={item.id} className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-3 transition ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)] bg-[var(--surface-elevated)]'}`}>
+              <button type="button" onClick={() => setSelectedSessionId(item.wahaSessionId)} className="flex-1 text-left">
+                <span className="block text-sm font-bold text-[var(--text-primary)]">{item.name}</span>
+                <span className="block text-xs text-[var(--text-secondary)]">{item.phone || item.wahaSessionId}</span>
+                <span className="text-xs font-bold text-[var(--text-secondary)]">{isWorking ? 'Conectado' : 'Não conectado'}</span>
+              </button>
+              {!isWorking && (
+                <button type="button" onClick={() => handleDeleteSession(item)} title="Remover número" aria-label="Remover número" className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--error)]/10 hover:text-[var(--error)]">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}</div>}
         {showNewConnection && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Input value={newConnectionName} onChange={event => setNewConnectionName(event.target.value)} placeholder="Nome da conexão (ex.: Radar Principal)" className="min-h-11 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" /><Button type="button" onClick={handleCreateConnection} disabled={loading} className="rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-bold text-white disabled:opacity-50">Criar conexão</Button></div>}
       </div>
 
