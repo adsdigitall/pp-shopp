@@ -146,10 +146,8 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       setMlError('Informe a tag de afiliado.');
       return;
     }
-    if (!key && !mlHasApiKey) {
-      setMlError('Informe a API Key do AfiliTools.');
-      return;
-    }
+    // Só a tag já funciona (?matt_tool=TAG). A chave só é necessária pro AfiliTools.
+    const provider = (key || mlHasApiKey) ? 'afilitools' : 'manual';
     setMlProviderSaving(true);
     setMlError('');
     try {
@@ -162,7 +160,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       const res = await fetch('/api/mercadolivre/affiliate-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ affiliateTag: tag, affiliateProvider: 'afilitools', providerConfig, isEnabled: true }),
+        body: JSON.stringify({ affiliateTag: tag, affiliateProvider: provider, providerConfig, isEnabled: true }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.success) {
@@ -171,9 +169,13 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       // Mantém a etiqueta espelhada em dia (extensão e Por links leem dela).
       onSaveSettings({ platforms: { ...settings.platforms, mercadoLivre: { ...settings.platforms.mercadoLivre, affiliateTag: tag } } });
       setMlApiKey('');
-      setMlHasApiKey(true);
-      setMlProvider('afilitools');
-      onShowToast('AfiliTools salvo', 'Tag e chave configuradas. Teste um link abaixo.', 'success');
+      if (key) setMlHasApiKey(true);
+      setMlProvider(provider);
+      onShowToast(
+        'ML salvo',
+        provider === 'afilitools' ? 'Tag e chave configuradas. Teste um link abaixo.' : 'Tag salva. Os links sairão com ?matt_tool da sua tag.',
+        'success',
+      );
     } catch (err) {
       setMlError(err instanceof Error ? err.message : 'Não foi possível salvar. Tente novamente.');
     } finally {
@@ -544,8 +546,8 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                   <div>
                     <p className="text-xs font-bold text-[var(--text-primary)]">AfiliTools · links com comissão</p>
                     <p className="text-[11px] text-[var(--text-secondary)]">
-                      Provedor: <span className="font-bold">{mlProvider === 'afilitools' ? 'AfiliTools' : 'não configurado'}</span>
-                      {' · '}API Key: <span className="font-bold">{mlHasApiKey ? 'salva' : 'faltando'}</span>
+                      Provedor: <span className="font-bold">{mlProvider === 'afilitools' ? 'AfiliTools' : mlTag.trim() ? 'Tag direta (?matt_tool)' : 'não configurado'}</span>
+                      {' · '}API Key: <span className="font-bold">{mlHasApiKey ? 'salva' : 'não necessária p/ tag'}</span>
                     </p>
                   </div>
                   <div>
@@ -559,7 +561,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">API Key do AfiliTools</label>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">API Key do AfiliTools (opcional)</label>
                     <Input
                       type="password"
                       value={mlApiKey}

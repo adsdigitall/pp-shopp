@@ -19,7 +19,7 @@ import { renderWhatsAppMessage, sanitizeOfferCopy, validateOfferMessage } from '
 // Mercado Livre
 import { loadMercadoLivreConfig, MercadoLivreConfigError, buildMercadoLivreAuthUrl } from './services/marketplace/mercadoLivreConfig.mjs';
 import { MercadoLivreProvider, MLApiError } from './services/marketplace/MercadoLivreProvider.mjs';
-import { AffiliateLinkProviderFactory, AffiliateProviderType } from './services/marketplace/AffiliateLinkProvider.mjs';
+import { AffiliateLinkProviderFactory, AffiliateProviderType, mintMLTagUrl } from './services/marketplace/AffiliateLinkProvider.mjs';
 import {
   CredentialsStore,
   AffiliateConfigStore,
@@ -667,7 +667,12 @@ export function createApp() {
           if (marketplace === 'mercado_livre') {
             const affiliateConfig = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre');
             const tag = tags.ml || affiliateConfig?.affiliateTag || '';
-            if (!affiliateConfig || affiliateConfig.affiliateProvider === 'manual' || !tag) return null;
+            if (!tag) return null;
+            // Só com a tag (sem provedor): aplica ?matt_tool=TAG direto.
+            if (!affiliateConfig || affiliateConfig.affiliateProvider === 'manual') {
+              const minted = mintMLTagUrl(url, tag);
+              return minted ? { url: minted, provider: 'manual-tag' } : null;
+            }
             const provider = AffiliateLinkProviderFactory.createFromConfig(affiliateConfig);
             const result = await provider.generateAffiliateLink({ originalUrl: url, marketplace: 'mercado_livre', affiliateTag: tag, providerConfig: affiliateConfig.providerConfig });
             if (result && result.status === 'generated' && result.affiliateUrl) {
@@ -832,9 +837,11 @@ export function createApp() {
               if (minted) base.affiliateUrl = minted.url;
               else base.affiliateUrl = String(item.permalink || clean);
               if (!base.title) throw new Error('Não consegui ler os dados do anúncio.');
-              base.status = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre').then((c) => (c && c.affiliateProvider !== 'manual' ? 'ok' : 'sem_link')).catch(() => 'sem_link');
+              const mlAffiliate = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre').catch(() => null);
+              const mlTag = tags.ml || mlAffiliate?.affiliateTag || '';
+              base.status = ((mlAffiliate && mlAffiliate.affiliateProvider !== 'manual') || mlTag) ? 'ok' : 'sem_link';
               if (base.status === 'ok' && !base.affiliateUrl) base.status = 'sem_link';
-              if (base.status === 'sem_link') base.erro = 'Resolvido sem link de afiliado — configure o provedor de afiliado do ML.';
+              if (base.status === 'sem_link') base.erro = 'Resolvido sem link de afiliado — configure a tag do ML.';
             } else if (plat === 'amazon' || plat === 'magalu') {
               const tag = plat === 'amazon' ? tags.amazon : '';
               const slug = plat === 'magalu' ? tags.magalu : '';
@@ -1098,8 +1105,18 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         const tags = await getExtensionTags(userId).catch(() => ({ ml: '' }));
         const affiliateConfig = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre').catch(() => null);
         const tag = tags.ml || affiliateConfig?.affiliateTag || '';
-        if (!affiliateConfig || affiliateConfig.affiliateProvider === 'manual' || !tag) {
-          sendJson(res, 422, { error: { code: 'PROVIDER_NOT_CONFIGURED', message: 'Provedor de afiliado do ML não configurado. Salve a tag e a API Key primeiro.' } });
+        if (!tag) {
+          sendJson(res, 422, { error: { code: 'TAG_NOT_CONFIGURED', message: 'Tag do ML não configurada. Salve sua tag primeiro.' } });
+          return;
+        }
+        // Só com a tag (sem provedor): aplica ?matt_tool=TAG direto, sem API externa.
+        if (!affiliateConfig || affiliateConfig.affiliateProvider === 'manual') {
+          const minted = mintMLTagUrl(url, tag);
+          if (minted) {
+            sendJson(res, 200, { affiliateUrl: minted, provider: 'manual-tag' });
+            return;
+          }
+          sendJson(res, 422, { error: { code: 'MINT_FAILED', message: 'Não consegui aplicar a tag neste link. Confira a URL.' } });
           return;
         }
         try {

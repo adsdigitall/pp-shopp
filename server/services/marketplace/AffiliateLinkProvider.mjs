@@ -26,6 +26,25 @@ export const AffiliateLinkStatus = {
 };
 
 /**
+ * Aplica a tag de afiliado do ML direto na URL (?matt_tool=TAG).
+ * Sem OAuth, sem API key: só a tag. Não sobrescreve matt_tool já existente
+ * (não sequestra atribuição de outro link).
+ * @returns {string|null} URL cunhada ou null se inválida/sem tag
+ */
+export function mintMLTagUrl(url, tag) {
+  const t = String(tag || '').trim();
+  if (!t) return null;
+  try {
+    const u = new URL(String(url));
+    if (!/mercadolivre\.com/i.test(u.hostname)) return null;
+    if (!u.searchParams.has('matt_tool')) u.searchParams.set('matt_tool', t);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Interface base para provedores de link de afiliado
  */
 export class AffiliateLinkProvider {
@@ -78,14 +97,25 @@ export class ManualAffiliateProvider extends AffiliateLinkProvider {
   }
 
   async generateAffiliateLink({ originalUrl, affiliateTag }) {
-    // Retorna a URL original - usuário deve substituir manualmente
+    // Só com a tag já comissiona: aplica ?matt_tool=TAG direto na URL.
+    const minted = mintMLTagUrl(originalUrl, affiliateTag);
+    if (minted) {
+      return {
+        affiliateUrl: minted,
+        originalUrl,
+        status: AffiliateLinkStatus.GENERATED,
+        provider: 'manual-tag',
+        metadata: { method: 'matt_tool_tag' },
+      };
+    }
+    // Sem tag: retorna a URL original - usuário deve configurar a tag.
     return {
       affiliateUrl: originalUrl,
       originalUrl,
       status: AffiliateLinkStatus.MANUAL_REQUIRED,
       provider: AffiliateProviderType.MANUAL,
       metadata: {
-        message: 'Cole o link de afiliado gerado no painel do Mercado Livre',
+        message: 'Configure a tag de afiliado do Mercado Livre',
         affiliateTag,
       },
     };
