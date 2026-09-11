@@ -556,13 +556,13 @@ export function createApp() {
         return record;
       }
 
-      // GET /api/extension/token - mostra (ou cria) o token da extensão do usuário
-      if (req.method === 'GET' && pathOnly === '/api/extension/token') {
-        const userId = requestUserId(req);
-        const record = await getOrCreateExtensionToken(userId);
-        sendJson(res, 200, { token: record.token, name: record.name, createdAt: record.createdAt });
-        return;
-      }
+        // GET /api/extension/token - mostra (ou cria) o token da extensão do usuário
+        if (req.method === 'GET' && pathOnly === '/api/extension/token') {
+          const userId = requestUserId(req);
+          const record = await getOrCreateExtensionToken(userId);
+          sendJson(res, 200, { token: record.token, name: record.name, createdAt: record.createdAt, lastUsedAt: record.lastUsedAt || null });
+          return;
+        }
 
       // POST /api/extension/token/rotate - invalida o token atual e gera outro
       if (req.method === 'POST' && pathOnly === '/api/extension/token/rotate') {
