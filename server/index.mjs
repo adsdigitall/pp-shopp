@@ -1952,6 +1952,8 @@ async function handleMercadoLivreAffiliateConfig(req, res) {
         }),
         // Flag honesta (a chave em si nunca volta na resposta).
         hasApiKey: Boolean(config?.providerConfig?.apiKey),
+        // Tag espelhada via etiqueta (vale mesmo sem config salva).
+        mirroredTag: (await getExtensionTags(userId).catch(() => ({ ml: '' }))).ml || '',
         availableProviders: AffiliateLinkProviderFactory.getAvailableTypes(),
       });
   } catch (err) {

@@ -78,6 +78,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   const [mlTestUrl, setMlTestUrl] = useState('');
   const [mlProvider, setMlProvider] = useState('manual');
   const [mlHasApiKey, setMlHasApiKey] = useState(false);
+  const [mlMirroredTag, setMlMirroredTag] = useState('');
   const [mlProviderSaving, setMlProviderSaving] = useState(false);
   const [mlTesting, setMlTesting] = useState(false);
   const [mlTestResult, setMlTestResult] = useState<{ ok: boolean; link?: string; provider?: string; error?: string } | null>(null);
@@ -135,6 +136,8 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
         if (body.hasApiKey) setMlHasApiKey(true);
         const savedTag = typeof body.config?.affiliateTag === 'string' ? body.config.affiliateTag : '';
         if (savedTag) setMlTag(prev => prev || savedTag);
+        // Tag que já vale no servidor (etiqueta espelhada), mesmo sem config salva.
+        if (typeof body.mirroredTag === 'string' && body.mirroredTag) setMlMirroredTag(body.mirroredTag);
       })
       .catch(() => undefined);
   }, []);
@@ -559,6 +562,11 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
                       placeholder="sua-tag"
                     />
+                    {!mlTag.trim() && mlMirroredTag && (
+                      <button type="button" onClick={() => setMlTag(mlMirroredTag)} className="mt-1.5 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/10 px-2.5 py-1.5 text-[11px] font-bold text-[var(--success)]">
+                        Tag ativa no servidor: {mlMirroredTag} — tocar para usar
+                      </button>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">API Key do AfiliTools (opcional)</label>
