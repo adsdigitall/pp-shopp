@@ -92,7 +92,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   onRefreshGroups,
 }) => {
   const [activeTab, setActiveTab] = useState<'fila' | 'grupos' | 'automacao'>('fila');
-  const [automation, setAutomation] = useState<any>({ enabled: false, mode: 'manual', groups: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, activeFrom: '08:00', activeUntil: '23:00' });
+  const [automation, setAutomation] = useState<any>({ enabled: false, mode: 'manual', groups: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true });
   const [savingAutomation, setSavingAutomation] = useState(false);
 
   // Ao abrir a Automação, puxa a lista completa em silêncio: sem botão,
@@ -138,7 +138,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   const saveAutomation = async () => {
     setSavingAutomation(true);
     try {
-      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, mode: automation.mode === 'auto' ? 'auto' : 'manual', groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, humanMessageInterval: automation.humanMessageInterval, repeatCooldownHours: automation.repeatCooldownHours, championRepostAfterHours: automation.championRepostAfterHours, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', scheduleSlots: automation.scheduleSlots }) });
+      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, mode: automation.mode === 'auto' ? 'auto' : 'manual', groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, humanMessageInterval: automation.humanMessageInterval, repeatCooldownHours: automation.repeatCooldownHours, championRepostAfterHours: automation.championRepostAfterHours, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', activeDays: automation.activeDays, humanTone: automation.humanTone !== false, scheduleSlots: automation.scheduleSlots }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setAutomation(body.config);
@@ -339,6 +339,31 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                       <Input type="time" value={automation.activeUntil || ''} onChange={e => setAutomation((prev: any) => ({ ...prev, activeUntil: e.target.value }))} className="h-8 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)]" />
                     </div>
                     <p className="text-[9px] leading-3 text-[var(--text-secondary)] sm:col-span-2">Deixe os dois horários vazios para enviar o dia todo. Fora do horário, a oferta fica na fila manual.</p>
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs font-semibold text-[var(--text-secondary)]">Dias de envio</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((label, day) => {
+                          const active = (automation.activeDays ?? [0, 1, 2, 3, 4, 5, 6]).includes(day);
+                          return (
+                            <Button key={day} type="button" variant={active ? 'default' : 'outline'} size="sm" onClick={() => setAutomation((prev: any) => {
+                              const current: number[] = Array.isArray(prev.activeDays) ? prev.activeDays : [0, 1, 2, 3, 4, 5, 6];
+                              const next = current.includes(day) ? current.filter(d => d !== day) : [...current, day].sort();
+                              return { ...prev, activeDays: next.length ? next : current };
+                            })} className="h-8 w-9 px-0 text-xs font-black" aria-pressed={active} title={['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][day]}>
+                              {label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[9px] leading-3 text-[var(--text-secondary)]">Dias apagados não enviam nada — parece gente, não robô de todo dia.</p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3 sm:col-span-2">
+                      <div>
+                        <p className="text-xs font-semibold text-[var(--foreground)]">Tom humano feminino</p>
+                        <p className="text-[9px] leading-3 text-[var(--text-secondary)]">Mensagens variadas e naturais, como mulher falando com mulheres. Sem nome, sem assinatura.</p>
+                      </div>
+                      <Switch checked={automation.humanTone !== false} onCheckedChange={(checked) => setAutomation((prev: any) => ({ ...prev, humanTone: checked }))} aria-label="Ativar tom humano" />
+                    </div>
                     
                     <div className="space-y-1 sm:col-span-2">
                       <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">Nova oferta a cada

@@ -145,3 +145,70 @@ export function renderWhatsAppMessage(template, offer, options = {}) {
 }
 
 export { FALLBACK_TEMPLATE };
+
+/**
+ * Tom humano feminino (sem nome, sem assinatura): uma mulher falando com
+ * outras mulheres, como num grupo de achadinhos de verdade. Não é persona
+ * de ninguém — só tira o cheiro de robô/IA da mensagem.
+ *
+ * Segurança: só adiciona abertura (sempre com palavra-gancho válida) e,
+ * às vezes, um fecho genérico. Nunca remove nome, preço, urgência, CTA
+ * nem link — a validação continua passando.
+ */
+const HUMAN_OPENERS = [
+  (g) => `${g}, meninas! Olha esse achadinho 👀`,
+  () => 'Amei esse achadinho, precisei trazer pra vocês 💛',
+  () => 'Olha o preço disso aqui, gente ✨',
+  () => 'Essa promoção tá maravilhosa 💕',
+  () => 'Achadinho novo no grupo, meninas ✨',
+  () => 'Olha antes que acabe, meninas 👀',
+  (g) => `${g}! Começando com oferta boa de verdade ☀️`,
+  () => 'Apaixonada nesse preço 😍',
+  () => 'Essa oferta tá perfeita pra gente 💛',
+  (g) => `${g}! Dá uma olhada nessa oferta 👇`,
+];
+
+const HUMAN_CLOSERS = [
+  '\n\nQuem aproveitar me conta depois 💛',
+  '\n\nTô sempre de olho por aqui 👀',
+  '\n\nFiquem ligadas que já já tem mais ✨',
+];
+
+export const HUMAN_INTERSTITIALS = [
+  'Vou continuar garimpando por aqui, meninas 💛',
+  'Já já volto com mais achadinhos ✨',
+  'Tô de olho nos preços, já volto 👀',
+  'Amei garimpar isso hoje, já trago mais 💕',
+  'Segura aí que ainda tem coisa linda chegando ✨',
+  'Fiquem ligadas que os preços mudam rápido ⏰',
+  'Daqui a pouco passo aqui com mais novidades ☕',
+  'Continuo separando só o que vale a pena, meninas 💛',
+];
+
+export function humanGreeting(hour) {
+  const h = Number(hour);
+  if (Number.isFinite(h)) {
+    if (h < 12) return 'Bom dia';
+    if (h < 18) return 'Boa tarde';
+    return 'Boa noite';
+  }
+  return 'Oi';
+}
+
+/**
+ * @param {string} message mensagem já renderizada e válida
+ * @param {{ rotationIndex?: number, hour?: number }} [options]
+ * @returns {string} mensagem com abertura/fecho humanos
+ */
+export function humanizeMessage(message, options = {}) {
+  const text = String(message || '');
+  if (!text.trim()) return text;
+  const rotationIndex = Math.max(0, Number(options.rotationIndex) || 0);
+  const greeting = humanGreeting(options.hour);
+  const opener = HUMAN_OPENERS[rotationIndex % HUMAN_OPENERS.length](greeting);
+  let out = `${opener}\n\n${text.trim()}`;
+  if (rotationIndex % 3 === 0) {
+    out += HUMAN_CLOSERS[rotationIndex % HUMAN_CLOSERS.length];
+  }
+  return out;
+}

@@ -14,7 +14,7 @@ import { createSettingsReadHandler, createSettingsChannelsHandler, createSetting
 import { fetchRecentConversions } from './services/shopee/reports.mjs';
 import { getPublicKey, saveSubscription, notifySubscribers } from './services/push.mjs';
 import { normalizeWahaGroups } from './services/waha/groups.mjs';
-import { renderWhatsAppMessage, sanitizeOfferCopy, validateOfferMessage } from './services/waha/message.mjs';
+import { renderWhatsAppMessage, sanitizeOfferCopy, validateOfferMessage, humanizeMessage, HUMAN_INTERSTITIALS } from './services/waha/message.mjs';
 
 // Mercado Livre
 import { loadMercadoLivreConfig, MercadoLivreConfigError, buildMercadoLivreAuthUrl } from './services/marketplace/mercadoLivreConfig.mjs';
@@ -39,7 +39,7 @@ import { redactSensitive } from './lib/redactSensitive.mjs';
 import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
 import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from './services/shopee/effectiveConfig.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
-import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2482,8 +2482,9 @@ const SAFE_HUMAN_MESSAGES = [
   'Seguimos acompanhando os melhores preços do momento.',
 ];
 
-function getSafeHumanMessage(index = 0) {
-  return SAFE_HUMAN_MESSAGES[Math.max(0, Number(index) || 0) % SAFE_HUMAN_MESSAGES.length];
+function getSafeHumanMessage(index = 0, human = true) {
+  const pool = human && HUMAN_INTERSTITIALS.length ? HUMAN_INTERSTITIALS : SAFE_HUMAN_MESSAGES;
+  return pool[Math.max(0, Number(index) || 0) % pool.length];
 }
 
 async function handleSendQueueItemNow(req, res, pathOnly) {
@@ -2522,7 +2523,7 @@ async function handleGetDispatchAutomation(req, res) {
   const out = config && Array.isArray(config.categories)
     ? { ...config, categories: normalizeAutomationCategoryIds(config.categories) }
     : config;
-  sendJson(res, 200, { config: out || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
+    sendJson(res, 200, { config: out || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -2569,6 +2570,8 @@ async function handleSaveDispatchAutomation(req, res) {
       categories: normalizeAutomationCategoryIds(body.categoryIds ?? body.categories),
       activeFrom: isValidAutomationTime(body.activeFrom) ? String(body.activeFrom) : '08:00',
       activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '23:00',
+      activeDays: normalizeActiveDays(body.activeDays),
+      humanTone: body.humanTone !== false,
       scheduleSlots: normalizeAutomationSchedule(body.scheduleSlots),
     });
     sendJson(res, 200, { config });
@@ -2774,6 +2777,8 @@ async function runAutomaticOfferDiscovery() {
 }
 
 function automationIsWithinSchedule(config, now = new Date()) {
+  const days = normalizeActiveDays(config?.activeDays);
+  if (!days.includes(dispatchTimeParts(now).day)) return false;
   const from = isValidAutomationTime(config?.activeFrom) ? String(config.activeFrom) : '08:00';
   const until = isValidAutomationTime(config?.activeUntil) ? String(config.activeUntil) : '23:00';
   if (from === until) return true;
@@ -3129,10 +3134,22 @@ async function processDispatchJob(jobId) {
         const selectedMessage = message.whatsapp.templateMode === 'rotate' && templatePool.length
           ? templatePool[offerIndex % templatePool.length].message
           : message.whatsapp.customMessage;
-        const msg = sanitizeOfferCopy(renderWhatsAppMessage(selectedMessage, offerForMessage, {
+        const baseMsg = sanitizeOfferCopy(renderWhatsAppMessage(selectedMessage, offerForMessage, {
           rotatingCTAs: Boolean(message.whatsapp.rotatingCTAs),
           rotationIndex: deliveryIndex,
         }), offer);
+        // Tom humano feminino (só no piloto automático; manual mantém o texto exato).
+        // Se a versão humanizada quebrar a validação, usa a original.
+        let msg = baseMsg;
+        if (job.source === 'queue_automation' && destinations.humanTone !== false) {
+          const humanized = humanizeMessage(baseMsg, {
+            rotationIndex: deliveryIndex,
+            hour: dispatchTimeParts(new Date()).hour,
+          });
+          if (validateOfferMessage(humanized, offerForMessage).valid) {
+            msg = humanized;
+          }
+        }
         logLine(`[DISPATCH DIAGNOSTIC] ${offer.id || 'unknown'} fields=${Object.keys(offer).sort().join(',')}`);
         const copyValidation = validateOfferMessage(msg, offerForMessage);
         if (!copyValidation.valid) {
@@ -3153,7 +3170,7 @@ async function processDispatchJob(jobId) {
       
     }
     if (offerIndex + 1 >= nextHumanMessageAt && offerIndex < offers.length - 1) {
-      const humanMessage = getSafeHumanMessage(offerIndex);
+      const humanMessage = getSafeHumanMessage(offerIndex, job.source === 'queue_automation' && destinations.humanTone !== false);
       for (const group of groups) {
         try {
           const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;
@@ -3166,7 +3183,7 @@ async function processDispatchJob(jobId) {
       nextHumanMessageAt += humanMin + Math.floor(Math.random() * (humanMax - humanMin + 1));
     }
     if (destinations.humanMessageAfter === true && offerIndex === offers.length - 1) {
-      const humanMessage = getSafeHumanMessage(Number(job.createdAt?.replace(/\D/g, '').slice(-6)) || 0);
+      const humanMessage = getSafeHumanMessage(Number(job.createdAt?.replace(/\D/g, '').slice(-6)) || 0, job.source === 'queue_automation' && destinations.humanTone !== false);
       for (const group of groups) {
         try {
           const sessionName = destinations.sessionId || group.sessionId || WAHA_SESSION;

@@ -9,6 +9,13 @@
 
 import { dispatchMinutesOfDay } from '../../lib/timezone.mjs';
 
+/** Dias ativos da automação (0 = domingo ... 6 = sábado). Ausente = todos. */
+export function normalizeActiveDays(value) {
+  if (!Array.isArray(value)) return [0, 1, 2, 3, 4, 5, 6];
+  const days = [...new Set(value.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+  return days.length ? days : [0, 1, 2, 3, 4, 5, 6];
+}
+
 function normalizeIdList(value, { max }) {
   if (!Array.isArray(value)) return [];
   return [...new Set(
