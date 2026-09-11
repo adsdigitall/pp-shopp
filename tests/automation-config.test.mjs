@@ -116,8 +116,9 @@ test('dispatch intervals prefer wizard, then body, then automation config', () =
   });
 });
 
-// Prova que a lógica das faixas funciona: datas locais fixas, sem depender de TZ.
-const at = (h, m = 0) => new Date(2026, 8, 10, h, m, 0);
+// Prova que a lógica das faixas funciona: datas fixas ANCORADAS em Brasília
+// (at(13) = 13:00 BRT, independente da TZ da máquina que roda o teste).
+const at = (h, m = 0) => new Date(Date.UTC(2026, 8, 10, h + 3, m, 0));
 
 test('faixa cobre o instante e default vale sem config', () => {
   const slot = automationSlotAt(null, at(13));

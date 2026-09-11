@@ -7,6 +7,8 @@
  * "sumir" ao voltar para a tela — bug já ocorrido com `groups: []` fixo.
  */
 
+import { dispatchMinutesOfDay } from '../../lib/timezone.mjs';
+
 function normalizeIdList(value, { max }) {
   if (!Array.isArray(value)) return [];
   return [...new Set(
@@ -150,7 +152,8 @@ export function normalizeAutomationSchedule(value) {
 /** Faixa que cobre o instante, ignorando o interruptor (para decidir pausa). */
 export function automationSlotAt(config, now = new Date()) {
   const schedule = normalizeAutomationSchedule(config?.scheduleSlots);
-  const current = now.getHours() * 60 + now.getMinutes();
+  // Janelas valem no horário de Brasília (DISPATCH_TIMEZONE).
+  const current = dispatchMinutesOfDay(now);
   const parse = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
   return schedule.find(slot => {
     const from = parse(slot.from);

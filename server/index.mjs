@@ -36,6 +36,7 @@ import {
 import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
+import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 
@@ -2640,7 +2641,7 @@ function automationIsWithinSchedule(config, now = new Date()) {
   const from = isValidAutomationTime(config?.activeFrom) ? String(config.activeFrom) : '08:00';
   const until = isValidAutomationTime(config?.activeUntil) ? String(config.activeUntil) : '23:00';
   if (from === until) return true;
-  const current = now.getHours() * 60 + now.getMinutes();
+  const current = dispatchMinutesOfDay(now);
   const parse = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
   const start = parse(from);
   const end = parse(until);
@@ -3080,10 +3081,10 @@ function getIntervalMs(interval) {
   }
 }
 
-function shouldPause(destinations) {
-  const now = new Date();
-  const hour = now.getHours();
-  const day = now.getDay(); // 0 = Domingo, 6 = Sábado
+  function shouldPause(destinations) {
+    // Pausas valem no horário de Brasília (DISPATCH_TIMEZONE),
+    // não no relógio UTC do servidor.
+    const { hour, day } = dispatchTimeParts(new Date());
   
   if (destinations.nightPause && (hour >= 23 || hour < 6)) return true;
   if (destinations.weekendPause && (day === 0 || day === 6)) return true;
