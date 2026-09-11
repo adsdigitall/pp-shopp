@@ -194,7 +194,7 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/dispatch/history', { cache: 'no-store' })
+    fetch('/api/dispatch/history?summary=1', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
         if (cancelled) return;

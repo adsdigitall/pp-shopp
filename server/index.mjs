@@ -3231,7 +3231,9 @@ async function handleGetDispatch(req, res, pathOnly) {
       sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Disparo não encontrado.' } });
       return;
     }
-    sendJson(res, 200, job);
+    const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+    const summary = parsed.searchParams.get('summary') === '1';
+    sendJson(res, 200, summary ? summarizeDispatchJob(job) : job);
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar disparo.' } });
   }
@@ -3269,11 +3271,24 @@ async function handleCancelDispatch(req, res, pathOnly) {
   }
 }
 
+/**
+ * Versão leve do job para polling da UI (o job completo com ofertas,
+ * tentativas e mensagem passa de 1 MB no histórico e trava o app a cada poll).
+ * Mantém tudo que as telas exibem: status, stats, grupos, datas e contagem.
+ */
+function summarizeDispatchJob(job) {
+  if (!job || typeof job !== 'object') return job;
+  const { offers, attempts, message, ...rest } = job;
+  return { ...rest, offersCount: Array.isArray(offers) ? offers.length : 0 };
+}
+
 async function handleDispatchHistory(req, res) {
   try {
     const userId = 'default_user';
+    const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
+    const summary = parsed.searchParams.get('summary') === '1';
     const history = await DispatchStore.list(userId, 50);
-    sendJson(res, 200, { history });
+    sendJson(res, 200, { history: summary ? history.map(summarizeDispatchJob) : history });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar histórico.' } });
   }

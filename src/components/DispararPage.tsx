@@ -96,7 +96,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [pendingCancelJobId, setPendingCancelJobId] = useState<string | null>(null);
 
-  const refreshHistory = useCallback(() => fetch('/api/dispatch/history', { cache: 'no-store' })
+  const refreshHistory = useCallback(() => fetch('/api/dispatch/history?summary=1', { cache: 'no-store' })
     .then(response => response.ok ? response.json() : null)
     .then(body => {
       const history = Array.isArray(body?.history) ? body.history : [];
@@ -118,7 +118,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   useEffect(() => {
     if (activeTab !== 'ongoing') return;
     void refreshHistory();
-    const timer = window.setInterval(() => void refreshHistory(), 3000);
+    const timer = window.setInterval(() => void refreshHistory(), 8000);
     return () => window.clearInterval(timer);
   }, [activeTab, refreshHistory]);
 
@@ -223,12 +223,12 @@ export const DispararPage: React.FC<DispararPageProps> = ({
 
   useEffect(() => {
     if (!dispatchJob?.id || ['completed', 'failed', 'cancelled'].includes(dispatchJob.status)) return;
-    const refresh = () => fetch(`/api/dispatch/${encodeURIComponent(dispatchJob.id)}`)
+    const refresh = () => fetch(`/api/dispatch/${encodeURIComponent(dispatchJob.id)}?summary=1`)
       .then(response => response.ok ? response.json() : null)
       .then(job => { if (job) setDispatchJob(job); })
       .catch(() => undefined);
     refresh();
-    const timer = window.setInterval(refresh, 3000);
+    const timer = window.setInterval(refresh, 5000);
     return () => window.clearInterval(timer);
   }, [dispatchJob?.id, dispatchJob?.status]);
 
@@ -309,11 +309,12 @@ export const DispararPage: React.FC<DispararPageProps> = ({
           <header><h2 className="text-xl font-black text-[var(--text-primary)]">Disparos em andamento</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado.</p></header>
         <div className="space-y-2.5">
           {visibleActiveJobs.map((job: any) => {
-            const total = Math.max(1, (job.offers?.length || 0) * (job.destinations?.groups?.length || 0));
+            const offersCount = job.offersCount ?? job.offers?.length ?? 0;
+            const total = Math.max(1, offersCount * (job.destinations?.groups?.length || 0));
             const done = (job.stats?.sent || 0) + (job.stats?.failed || 0);
             const percent = Math.min(100, Math.round(done / total * 100));
             return <Card key={job.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-              <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3>{job.jobIds?.length > 1 && <p className="mt-1 text-[9px] text-[var(--text-secondary)]">Piloto automático: {job.jobIds.length} entradas agrupadas nesta linha.</p>}</div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
+              <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offersCount ?? job.offers?.length ?? 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3>{job.jobIds?.length > 1 && <p className="mt-1 text-[9px] text-[var(--text-secondary)]">Piloto automático: {job.jobIds.length} entradas agrupadas nesta linha.</p>}</div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--primary)] transition-[width]" style={{ width: `${percent}%` }} /></div>
               <div className="mt-2 flex justify-between text-[10px] text-[var(--text-secondary)]"><span>{job.stats?.sent || 0} enviados · {job.stats?.failed || 0} falhas</span><span>{percent}% · intervalo {job.destinations?.interval?.value || 30} {job.destinations?.interval?.unit === 'minutes' ? 'min' : job.destinations?.interval?.unit === 'hours' ? 'h' : 's'}</span></div>
               <Tooltip>
@@ -326,7 +327,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
           })}
           {!activeJobs.length && <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[11px] text-[var(--text-secondary)]">Nenhum disparo em andamento.</div>}
         </div>
-        <div><h3 className="mb-2 text-[13px] font-bold text-[var(--text-primary)]">Histórico recente</h3><div className="space-y-2">{recentJobs.slice(0, 10).map(job => <Card key={job.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">{job.offers?.length || 0} oferta(s) · {job.destinations?.groups?.length || 0} grupo(s)</p><p className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.stats?.sent || 0} enviados</p></div><Badge variant={job.status === 'completed' ? 'success' : 'destructive'} className={`text-[10px] font-bold ${job.status === 'completed' ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--error)]/10 text-[var(--error)]'}`}>{job.status === 'completed' ? 'Concluído' : 'Falhou'}</Badge></Card>)}</div></div>
+        <div><h3 className="mb-2 text-[13px] font-bold text-[var(--text-primary)]">Histórico recente</h3><div className="space-y-2">{recentJobs.slice(0, 10).map(job => <Card key={job.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">{job.offersCount ?? job.offers?.length ?? 0} oferta(s) · {job.destinations?.groups?.length || 0} grupo(s)</p><p className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.stats?.sent || 0} enviados</p></div><Badge variant={job.status === 'completed' ? 'success' : 'destructive'} className={`text-[10px] font-bold ${job.status === 'completed' ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--error)]/10 text-[var(--error)]'}`}>{job.status === 'completed' ? 'Concluído' : 'Falhou'}</Badge></Card>)}</div></div>
       </div>
     </section>
   );
