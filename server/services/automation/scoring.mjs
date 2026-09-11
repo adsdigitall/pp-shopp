@@ -5,7 +5,7 @@
  */
 
 const DEFAULT_AUTOMATION_FILTERS = Object.freeze({
-  minSales: 50,
+  minSales: 10,
   minRating: 4.5,
   minReviews: 0,
   preferredMinPrice: 15,
