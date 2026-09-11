@@ -1080,6 +1080,46 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         await handleGetMercadoLivreAffiliateConfig(req, res);
         return;
       }
+      // POST /api/mercadolivre/test-link - cunha um link real para validar tag + API key
+      if (req.method === 'POST' && pathOnly === '/api/mercadolivre/test-link') {
+        let body;
+        try {
+          body = await readJsonBody(req);
+        } catch {
+          sendJson(res, 400, { error: { code: 'INVALID_JSON', message: 'Corpo inválido. Tente novamente.' } });
+          return;
+        }
+        const url = String(body?.url || '').trim();
+        if (!/^https?:\/\/([^/]+\.)?mercadolivre\.com(\.br)?\//i.test(url)) {
+          sendJson(res, 400, { error: { code: 'INVALID_URL', message: 'Cole um link de anúncio do Mercado Livre (mercadolivre.com.br).' } });
+          return;
+        }
+        const userId = requestUserId(req);
+        const tags = await getExtensionTags(userId).catch(() => ({ ml: '' }));
+        const affiliateConfig = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre').catch(() => null);
+        const tag = tags.ml || affiliateConfig?.affiliateTag || '';
+        if (!affiliateConfig || affiliateConfig.affiliateProvider === 'manual' || !tag) {
+          sendJson(res, 422, { error: { code: 'PROVIDER_NOT_CONFIGURED', message: 'Provedor de afiliado do ML não configurado. Salve a tag e a API Key primeiro.' } });
+          return;
+        }
+        try {
+          const provider = AffiliateLinkProviderFactory.createFromConfig(affiliateConfig);
+          const result = await provider.generateAffiliateLink({
+            originalUrl: url,
+            marketplace: 'mercado_livre',
+            affiliateTag: tag,
+            providerConfig: affiliateConfig.providerConfig,
+          });
+          if (result && result.status === 'generated' && result.affiliateUrl && result.affiliateUrl !== url) {
+            sendJson(res, 200, { affiliateUrl: result.affiliateUrl, provider: result.provider || affiliateConfig.affiliateProvider });
+            return;
+          }
+          throw new Error(result?.metadata?.error || 'O provedor não retornou link de afiliado.');
+        } catch (err) {
+          sendJson(res, 422, { error: { code: 'MINT_FAILED', message: `Falha ao gerar link: ${String(err?.message || 'erro desconhecido').slice(0, 180)}` } });
+          return;
+        }
+      }
 
       // POST /api/mercadolivre/auto-search - Configura busca automática
       if (req.method === 'POST' && pathOnly === '/api/mercadolivre/auto-search') {
@@ -1881,20 +1921,22 @@ async function handleMercadoLivreAffiliateConfig(req, res) {
   }
 }
 
-async function handleGetMercadoLivreAffiliateConfig(req, res) {
-  try {
-    const userId = 'default_user';
-    const config = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre');
-    
-    sendJson(res, 200, { 
-      config: redactSensitive(config || {
-        affiliateTag: '',
-        affiliateProvider: AffiliateProviderType.MANUAL,
-        providerConfig: {},
-        isEnabled: true,
-      }),
-      availableProviders: AffiliateLinkProviderFactory.getAvailableTypes(),
-    });
+  async function handleGetMercadoLivreAffiliateConfig(req, res) {
+    try {
+      const userId = 'default_user';
+      const config = await AffiliateConfigStore.getByUserAndMarketplace(userId, 'mercado_livre');
+      
+      sendJson(res, 200, { 
+        config: redactSensitive(config || {
+          affiliateTag: '',
+          affiliateProvider: AffiliateProviderType.MANUAL,
+          providerConfig: {},
+          isEnabled: true,
+        }),
+        // Flag honesta (a chave em si nunca volta na resposta).
+        hasApiKey: Boolean(config?.providerConfig?.apiKey),
+        availableProviders: AffiliateLinkProviderFactory.getAvailableTypes(),
+      });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar configuração.' } });
   }

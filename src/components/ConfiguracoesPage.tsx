@@ -72,6 +72,15 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   const [mlAccount, setMlAccount] = useState('');
   const [mlBusy, setMlBusy] = useState(false);
   const [mlError, setMlError] = useState('');
+  // AfiliTools: tag + API key geram links com comissão de verdade.
+  const [mlTag, setMlTag] = useState(settings.platforms.mercadoLivre.affiliateTag || '');
+  const [mlApiKey, setMlApiKey] = useState('');
+  const [mlTestUrl, setMlTestUrl] = useState('');
+  const [mlProvider, setMlProvider] = useState('manual');
+  const [mlHasApiKey, setMlHasApiKey] = useState(false);
+  const [mlProviderSaving, setMlProviderSaving] = useState(false);
+  const [mlTesting, setMlTesting] = useState(false);
+  const [mlTestResult, setMlTestResult] = useState<{ ok: boolean; link?: string; provider?: string; error?: string } | null>(null);
 
   // Após reload, busca o status real no backend.
   useEffect(() => {
@@ -117,7 +126,87 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
 
   useEffect(() => {
     void refreshMlStatus();
+    // Provedor de afiliado salvo (AfiliTools): tag + se já tem chave.
+    fetch('/api/mercadolivre/affiliate-config', { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(body => {
+        if (!body) return;
+        if (typeof body.config?.affiliateProvider === 'string') setMlProvider(body.config.affiliateProvider);
+        if (body.hasApiKey) setMlHasApiKey(true);
+        const savedTag = typeof body.config?.affiliateTag === 'string' ? body.config.affiliateTag : '';
+        if (savedTag) setMlTag(prev => prev || savedTag);
+      })
+      .catch(() => undefined);
   }, []);
+
+  const handleMlProviderSave = async () => {
+    const tag = mlTag.trim();
+    const key = mlApiKey.trim();
+    if (!tag) {
+      setMlError('Informe a tag de afiliado.');
+      return;
+    }
+    if (!key && !mlHasApiKey) {
+      setMlError('Informe a API Key do AfiliTools.');
+      return;
+    }
+    setMlProviderSaving(true);
+    setMlError('');
+    try {
+      // Preserva a chave já salva se o campo veio vazio.
+      const current = await fetch('/api/mercadolivre/affiliate-config', { cache: 'no-store' })
+        .then(res => (res.ok ? res.json() : null))
+        .catch(() => null);
+      const providerConfig = { ...(current?.config?.providerConfig || {}) };
+      if (key) providerConfig.apiKey = key;
+      const res = await fetch('/api/mercadolivre/affiliate-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliateTag: tag, affiliateProvider: 'afilitools', providerConfig, isEnabled: true }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error?.message || 'Não foi possível salvar.');
+      }
+      // Mantém a etiqueta espelhada em dia (extensão e Por links leem dela).
+      onSaveSettings({ platforms: { ...settings.platforms, mercadoLivre: { ...settings.platforms.mercadoLivre, affiliateTag: tag } } });
+      setMlApiKey('');
+      setMlHasApiKey(true);
+      setMlProvider('afilitools');
+      onShowToast('AfiliTools salvo', 'Tag e chave configuradas. Teste um link abaixo.', 'success');
+    } catch (err) {
+      setMlError(err instanceof Error ? err.message : 'Não foi possível salvar. Tente novamente.');
+    } finally {
+      setMlProviderSaving(false);
+    }
+  };
+
+  const handleMlTestLink = async () => {
+    const url = mlTestUrl.trim();
+    if (!url) {
+      setMlError('Cole um link de anúncio do ML para testar.');
+      return;
+    }
+    setMlTesting(true);
+    setMlTestResult(null);
+    setMlError('');
+    try {
+      const res = await fetch('/api/mercadolivre/test-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.error?.message || 'Falha no teste.');
+      }
+      setMlTestResult({ ok: true, link: String(body?.affiliateUrl || ''), provider: String(body?.provider || 'afilitools') });
+    } catch (err) {
+      setMlTestResult({ ok: false, error: err instanceof Error ? err.message : 'Falha no teste.' });
+    } finally {
+      setMlTesting(false);
+    }
+  };
 
   const handleMlConnect = async () => {
     if (mlBusy) return;
@@ -451,15 +540,57 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                     <Button variant="default" onClick={handleMlConnect} disabled={mlBusy} className="bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {mlBusy ? 'Aguardando autorização...' : mlStatus === 'token_expired' ? 'Reconectar conta' : 'Conectar conta'}</Button>
                   </div>
                 )}
-                <div className="mt-4 border-t border-[var(--border)] pt-3">
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tag de afiliado</label>
-                  <Input
-                    type="text"
-                    value={settings.platforms.mercadoLivre.affiliateTag}
-                    onChange={e => onSaveSettings({ platforms: { ...settings.platforms, mercadoLivre: { ...settings.platforms.mercadoLivre, affiliateTag: e.target.value } } })}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-                    placeholder="sua-tag"
-                  />
+                <div className="mt-4 border-t border-[var(--border)] pt-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-bold text-[var(--text-primary)]">AfiliTools · links com comissão</p>
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      Provedor: <span className="font-bold">{mlProvider === 'afilitools' ? 'AfiliTools' : 'não configurado'}</span>
+                      {' · '}API Key: <span className="font-bold">{mlHasApiKey ? 'salva' : 'faltando'}</span>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tag de afiliado</label>
+                    <Input
+                      type="text"
+                      value={mlTag}
+                      onChange={e => { setMlTag(e.target.value); setMlError(''); }}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                      placeholder="sua-tag"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">API Key do AfiliTools</label>
+                    <Input
+                      type="password"
+                      value={mlApiKey}
+                      onChange={e => { setMlApiKey(e.target.value); setMlError(''); }}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                      placeholder={mlHasApiKey ? '•••••••• (salva — preencha só para trocar)' : 'Cole sua API Key'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Testar link (opcional)</label>
+                    <Input
+                      type="text"
+                      value={mlTestUrl}
+                      onChange={e => setMlTestUrl(e.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                      placeholder="Cole um anúncio do ML"
+                    />
+                  </div>
+                  {mlTestResult?.ok && mlTestResult.link && (
+                    <div className="rounded-xl border border-[var(--success)]/30 bg-[var(--success)]/10 px-3 py-2">
+                      <p className="text-xs font-bold text-[var(--success)]">Funcionando! Link com comissão gerado:</p>
+                      <a href={mlTestResult.link} target="_blank" rel="noreferrer" className="block truncate text-[11px] font-semibold text-[var(--primary)] underline">{mlTestResult.link}</a>
+                    </div>
+                  )}
+                  {mlTestResult && !mlTestResult.ok && (
+                    <p className="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-3 py-2 text-xs font-semibold text-[var(--error)]">{mlTestResult.error}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button variant="default" onClick={handleMlProviderSave} disabled={mlProviderSaving} className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2 disabled:opacity-50"><Save className="w-3 h-3" /> {mlProviderSaving ? 'Salvando...' : 'Salvar'}</Button>
+                    <Button variant="outline" onClick={handleMlTestLink} disabled={mlTesting} className="flex-1 flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {mlTesting ? 'Testando...' : 'Testar link'}</Button>
+                  </div>
                 </div>
               </div>
 
