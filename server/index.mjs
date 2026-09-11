@@ -40,6 +40,7 @@ import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
 import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from './services/shopee/effectiveConfig.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
+import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2523,7 +2524,10 @@ async function handleGetDispatchAutomation(req, res) {
   const out = config && Array.isArray(config.categories)
     ? { ...config, categories: normalizeAutomationCategoryIds(config.categories) }
     : config;
-    sendJson(res, 200, { config: out || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
+  const withRhythm = out
+    ? { ...out, dailyRhythm: normalizeDailyRhythm(out.dailyRhythm), rhythmEnabled: out.rhythmEnabled !== false }
+    : null;
+  sendJson(res, 200, { config: withRhythm || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, rhythmEnabled: true, dailyRhythm: normalizeDailyRhythm(undefined), scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -2572,6 +2576,8 @@ async function handleSaveDispatchAutomation(req, res) {
       activeUntil: isValidAutomationTime(body.activeUntil) ? String(body.activeUntil) : '23:00',
       activeDays: normalizeActiveDays(body.activeDays),
       humanTone: body.humanTone !== false,
+      rhythmEnabled: body.rhythmEnabled !== false,
+      dailyRhythm: normalizeDailyRhythm(body.dailyRhythm),
       scheduleSlots: normalizeAutomationSchedule(body.scheduleSlots),
     });
     sendJson(res, 200, { config });
@@ -2773,6 +2779,67 @@ async function runAutomaticOfferDiscovery() {
     }
   } finally {
     automaticDiscoveryRunning = false;
+  }
+}
+
+let dailyRhythmRunning = false;
+
+/**
+ * Ritmo diário humanizado: mensagens de relacionamento em horários fixos
+ * (BRT). Uma vez por slot por dia; atraso acima de 20 min pula o slot.
+ */
+async function runDailyRhythm(now = new Date()) {
+  if (dailyRhythmRunning) return;
+  dailyRhythmRunning = true;
+  try {
+    const configs = await DispatchAutomationStore.list();
+    const parts = dispatchTimeParts(now);
+    const nowMinutes = parts.hour * 60 + parts.minute;
+    const today = rhythmDayKey(now);
+    for (const config of configs.filter((item) => item?.enabled && item?.rhythmEnabled !== false)) {
+      try {
+        if (!normalizeActiveDays(config?.activeDays).includes(parts.day)) continue;
+        const slots = normalizeDailyRhythm(config.dailyRhythm);
+        const sentMap = config.rhythmSent && typeof config.rhythmSent === 'object' ? config.rhythmSent : {};
+        const sentToday = Array.isArray(sentMap[today]) ? sentMap[today] : [];
+        const due = slotsDueToday({ slots, nowMinutes, sentToday });
+        if (!due.length) continue;
+        const groups = Array.isArray(config.groups) ? config.groups.filter((group) => group?.id) : [];
+        if (!groups.length) continue;
+        for (const slot of due) {
+          const text = pickRhythmMessage(slot, today);
+          if (!text) continue;
+          let okCount = 0;
+          for (const group of groups) {
+            try {
+              const sessionName = config.sessionId || group.sessionId || WAHA_SESSION;
+              const session = await wahaGetSession(sessionName);
+              if (!session || session.status !== 'WORKING') {
+                logLine(`[RHYTHM] Sessão ${sessionName} fora — ${slot.id} adiado.`);
+                continue;
+              }
+              await sendToWhatsAppGroup(group.id, text, null, sessionName);
+              okCount += 1;
+            } catch (err) {
+              logLine(`[RHYTHM ERROR] ${slot.id} -> ${group.id}: ${err.message}`);
+            }
+          }
+          if (okCount > 0) {
+            sentToday.push(slot.id);
+            // Guarda só os últimos 3 dias para não crescer sem limite.
+            const keys = Object.keys(sentMap).concat([today]).sort().slice(-3);
+            const next = {};
+            for (const key of keys) next[key] = key === today ? [...sentToday] : sentMap[key];
+            await DispatchAutomationStore.save(config.userId, { rhythmSent: next });
+            logLine(`[RHYTHM] ${slot.id} enviado para ${okCount} grupo(s).`);
+          }
+        }
+      } catch (err) {
+        logLine(`[RHYTHM ERROR] automação ${config?.userId}: ${err.message}`);
+      }
+    }
+  } finally {
+    dailyRhythmRunning = false;
   }
 }
 
@@ -3142,7 +3209,7 @@ async function processDispatchJob(jobId) {
         // Se a versão humanizada quebrar a validação, usa a original.
         let msg = baseMsg;
         if (job.source === 'queue_automation' && destinations.humanTone !== false) {
-          const humanized = humanizeMessage(baseMsg, {
+          const humanized = humanizeMessage(baseMsg, offerForMessage, {
             rotationIndex: deliveryIndex,
             hour: dispatchTimeParts(new Date()).hour,
           });
@@ -4249,11 +4316,12 @@ if (isDirectRun) {
   // Inicializa data store
   dataStore.init().then(() => {
     logLine('Data store inicializado.');
-    if (process.env.DISPATCH_WORKER_ENABLED !== 'false') {
-      void resumeDispatchQueue();
-      void runAutomaticOfferDiscovery();
-      setInterval(() => { void resumeDispatchQueue(); void runAutomaticOfferDiscovery(); }, 15_000);
-    }
+      if (process.env.DISPATCH_WORKER_ENABLED !== 'false') {
+        void resumeDispatchQueue();
+        void runAutomaticOfferDiscovery();
+        void runDailyRhythm();
+        setInterval(() => { void resumeDispatchQueue(); void runAutomaticOfferDiscovery(); void runDailyRhythm(); }, 15_000);
+      }
   }).catch(err => {
     logLine(`AVISO: Erro ao inicializar data store: ${err.message}`);
   });
@@ -4277,4 +4345,4 @@ if (isDirectRun) {
   });
 }
 
-export { resumeDispatchQueue, runAutomaticOfferDiscovery };
+export { resumeDispatchQueue, runAutomaticOfferDiscovery, runDailyRhythm };

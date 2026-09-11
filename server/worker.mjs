@@ -18,7 +18,7 @@ process.on('uncaughtException', (error) => {
 // Carregamento dinâmico é intencional: index.mjs calcula o modo do worker
 // durante a avaliação do módulo. Um import estático era executado antes da
 // atribuição acima e fazia o processo externo se comportar como inline.
-const { resumeDispatchQueue, runAutomaticOfferDiscovery } = await import('./index.mjs');
+const { resumeDispatchQueue, runAutomaticOfferDiscovery, runDailyRhythm } = await import('./index.mjs');
 await dataStore.init();
 console.log('[worker] Dispatch queue worker started.');
 const writeHeartbeat = async () => {
@@ -31,6 +31,7 @@ const tick = () => {
   writeHeartbeat().catch((error) => console.log(`[worker] Heartbeat falhou: ${error?.message || error}`));
   resumeDispatchQueue().catch((error) => console.log(`[worker] Fila falhou: ${error?.message || error}`));
   runAutomaticOfferDiscovery().catch((error) => console.log(`[worker] Descoberta falhou: ${error?.message || error}`));
+  runDailyRhythm().catch((error) => console.log(`[worker] Ritmo diário falhou: ${error?.message || error}`));
 };
 await tick();
 setInterval(tick, 15_000);

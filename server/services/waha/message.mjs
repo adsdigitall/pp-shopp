@@ -174,6 +174,90 @@ const HUMAN_CLOSERS = [
   '\n\nFiquem ligadas que já já tem mais ✨',
 ];
 
+/** Abertura combinando com o produto (categoria, desconto, preço). */
+function normText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ' ');
+}
+
+const CATEGORY_OPENERS = [
+  {
+    id: 'cozinha',
+    words: ['cozinha', 'panela', 'pote', 'utensilio', 'talher', 'copo', 'prato', 'air fryer', 'cafeteira', 'liquidificador', 'fogao', 'forno', 'geladeira', 'louca', 'frigideira', 'churrasco'],
+    openers: [
+      () => 'Olha esse achadinho pra sua cozinha 👀',
+      () => 'Amei isso aqui pra cozinha, meninas 💛',
+      () => 'Sua cozinha vai amar essa oferta ✨',
+    ],
+  },
+  {
+    id: 'beleza',
+    words: ['beleza', 'maquiagem', 'skincare', 'perfume', 'cabelo', 'secador', 'chapinha', 'escova', 'batom', 'hidratante', 'unha', 'esmalte', 'cosmetico', 'creme', 'shampoo'],
+    openers: [
+      () => 'Olha esse achadinho de beleza 💄',
+      () => 'Pra ficar ainda mais linda, meninas ✨',
+      () => 'Achei essa belezura em oferta 💕',
+    ],
+  },
+  {
+    id: 'moda',
+    words: ['moda', 'vestido', 'blusa', 'bolsa', 'sapato', 'tenis', 'sandalia', 'biquini', 'lingerie', 'calca', 'short', 'saia', 'oculos', 'relogio', 'acessorio', 'bijuteria', 'roupa', 'look'],
+    openers: [
+      () => 'Look novo sem gastar muito, olha 👀',
+      () => 'Achei essa peça perfeita pra gente 💛',
+      () => 'Uma oferta de moda que vale cada centavo ✨',
+    ],
+  },
+  {
+    id: 'casa',
+    words: ['casa', 'organizador', 'organizacao', 'caixa', 'prateleira', 'decoracao', 'almofada', 'cortina', 'tapete', 'luminaria', 'limpeza', 'banheiro', 'quarto', 'sala', 'lar'],
+    openers: [
+      () => 'Olha esse achadinho pra organizar a casa 🏠',
+      () => 'Sua casa merece essa oferta ✨',
+      () => 'Achei isso aqui pra deixar tudo no lugar, meninas 💛',
+    ],
+  },
+  {
+    id: 'eletro',
+    words: ['fone', 'celular', 'smartphone', 'caixa de som', 'smart tv', 'notebook', 'tablet', 'carregador', 'ventilador', 'eletro', 'tech', 'bluetooth'],
+    openers: [
+      () => 'Olha essa oferta tech que eu achei 🔌',
+      () => 'Preço bom em eletrônico é aqui, meninas 👀',
+    ],
+  },
+  {
+    id: 'infantil',
+    words: ['infantil', 'crianca', 'bebe', 'maternidade', 'brinquedo', 'escolar', 'fralda', 'mamadeira', 'enxoval'],
+    openers: [
+      () => 'Mamães, olha esse achadinho 👶',
+      () => 'Pro cantinho das crianças, em oferta ✨',
+    ],
+  },
+];
+
+const HUMAN_OPENERS_DESCONTAO = [
+  () => 'O desconto disso aqui tá surreal, olha 👀',
+  () => 'Derreteu o preço nessa oferta, meninas ✨',
+];
+
+const HUMAN_OPENERS_PRECINHO = [
+  () => 'Precinhos que a gente ama, olha 💛',
+  () => 'Olha esse precinho de achadinho ✨',
+];
+
+function detectCategoryOpeners(offer) {
+  const hay = normText(
+    [offer?.category, offer?.name, offer?.title, offer?.productName].filter(Boolean).join(' '),
+  );
+  if (!hay.trim()) return null;
+  for (const entry of CATEGORY_OPENERS) {
+    if (entry.words.some((w) => hay.includes(w))) return entry.openers;
+  }
+  return null;
+}
+
 export const HUMAN_INTERSTITIALS = [
   'Vou continuar garimpando por aqui, meninas 💛',
   'Já já volto com mais achadinhos ✨',
@@ -197,15 +281,22 @@ export function humanGreeting(hour) {
 
 /**
  * @param {string} message mensagem já renderizada e válida
+ * @param {object} [offer] oferta (categoria/desconto/preço guiam a abertura)
  * @param {{ rotationIndex?: number, hour?: number }} [options]
  * @returns {string} mensagem com abertura/fecho humanos
  */
-export function humanizeMessage(message, options = {}) {
+export function humanizeMessage(message, offer = {}, options = {}) {
   const text = String(message || '');
   if (!text.trim()) return text;
   const rotationIndex = Math.max(0, Number(options.rotationIndex) || 0);
   const greeting = humanGreeting(options.hour);
-  const opener = HUMAN_OPENERS[rotationIndex % HUMAN_OPENERS.length](greeting);
+  const discount = Number(offer?.discountPercentage);
+  const price = Number(offer?.currentPrice);
+  const pool = detectCategoryOpeners(offer)
+    || (Number.isFinite(discount) && discount >= 50 ? HUMAN_OPENERS_DESCONTAO : null)
+    || (Number.isFinite(price) && price > 0 && price < 20 ? HUMAN_OPENERS_PRECINHO : null)
+    || HUMAN_OPENERS;
+  const opener = pool[rotationIndex % pool.length](greeting);
   let out = `${opener}\n\n${text.trim()}`;
   if (rotationIndex % 3 === 0) {
     out += HUMAN_CLOSERS[rotationIndex % HUMAN_CLOSERS.length];

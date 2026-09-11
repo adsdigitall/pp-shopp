@@ -77,6 +77,16 @@ const todayLine = () => {
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
+// Espelho dos horários padrão do backend (server/services/automation/rhythm.mjs).
+const RHYTHM_DEFAULTS = [
+  { id: 'bom-dia', label: 'Bom dia', time: '07:30', enabled: true },
+  { id: 'aquecimento', label: 'Aquecimento (10 min antes)', time: '07:50', enabled: true },
+  { id: 'almoco', label: 'Pausa do almoço', time: '12:00', enabled: true },
+  { id: 'voltei', label: 'Voltei do almoço', time: '13:00', enabled: true },
+  { id: 'tarde', label: 'Fim de tarde', time: '18:00', enabled: true },
+  { id: 'boa-noite', label: 'Boa noite', time: '22:50', enabled: true },
+];
+
 export const FilaPage: React.FC<FilaPageProps> = ({
   queueItems,
   groups,
@@ -92,7 +102,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   onRefreshGroups,
 }) => {
   const [activeTab, setActiveTab] = useState<'fila' | 'grupos' | 'automacao'>('fila');
-  const [automation, setAutomation] = useState<any>({ enabled: false, mode: 'manual', groups: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true });
+  const [automation, setAutomation] = useState<any>({ enabled: false, mode: 'manual', groups: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, rhythmEnabled: true, dailyRhythm: undefined });
   const [savingAutomation, setSavingAutomation] = useState(false);
 
   // Ao abrir a Automação, puxa a lista completa em silêncio: sem botão,
@@ -138,7 +148,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   const saveAutomation = async () => {
     setSavingAutomation(true);
     try {
-      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, mode: automation.mode === 'auto' ? 'auto' : 'manual', groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, humanMessageInterval: automation.humanMessageInterval, repeatCooldownHours: automation.repeatCooldownHours, championRepostAfterHours: automation.championRepostAfterHours, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', activeDays: automation.activeDays, humanTone: automation.humanTone !== false, scheduleSlots: automation.scheduleSlots }) });
+      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, mode: automation.mode === 'auto' ? 'auto' : 'manual', groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, humanMessageInterval: automation.humanMessageInterval, repeatCooldownHours: automation.repeatCooldownHours, championRepostAfterHours: automation.championRepostAfterHours, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', activeDays: automation.activeDays, humanTone: automation.humanTone !== false, rhythmEnabled: automation.rhythmEnabled !== false, dailyRhythm: (automation.dailyRhythm || []).map((s: any) => ({ id: s.id, time: s.time, enabled: s.enabled !== false })), scheduleSlots: automation.scheduleSlots }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setAutomation(body.config);
@@ -363,6 +373,32 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                         <p className="text-[9px] leading-3 text-[var(--text-secondary)]">Mensagens variadas e naturais, como mulher falando com mulheres. Sem nome, sem assinatura.</p>
                       </div>
                       <Switch checked={automation.humanTone !== false} onCheckedChange={(checked) => setAutomation((prev: any) => ({ ...prev, humanTone: checked }))} aria-label="Ativar tom humano" />
+                    </div>
+                    <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3 sm:col-span-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold text-[var(--foreground)]">Ritmo diário humanizado</p>
+                          <p className="text-[9px] leading-3 text-[var(--text-secondary)]">Bom dia, aquecimento, almoço, voltei, fim de tarde e boa noite — todo dia, no mesmo ritmo.</p>
+                        </div>
+                        <Switch checked={automation.rhythmEnabled !== false} onCheckedChange={(checked) => setAutomation((prev: any) => ({ ...prev, rhythmEnabled: checked }))} aria-label="Ativar ritmo diário" />
+                      </div>
+                      {(automation.rhythmEnabled !== false) && (
+                        <div className="space-y-1.5">
+                          {(Array.isArray(automation.dailyRhythm) && automation.dailyRhythm.length ? automation.dailyRhythm : RHYTHM_DEFAULTS).map((slot: any) => (
+                            <div key={slot.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5">
+                              <Switch checked={slot.enabled !== false} onCheckedChange={(checked) => setAutomation((prev: any) => {
+                                const base = Array.isArray(prev.dailyRhythm) && prev.dailyRhythm.length ? prev.dailyRhythm : RHYTHM_DEFAULTS;
+                                return { ...prev, dailyRhythm: base.map((s: any) => (s.id === slot.id ? { ...s, enabled: checked } : s)) };
+                              })} aria-label={`Ativar ${slot.label}`} />
+                              <Input type="time" value={slot.time || ''} onChange={e => setAutomation((prev: any) => {
+                                const base = Array.isArray(prev.dailyRhythm) && prev.dailyRhythm.length ? prev.dailyRhythm : RHYTHM_DEFAULTS;
+                                return { ...prev, dailyRhythm: base.map((s: any) => (s.id === slot.id ? { ...s, time: e.target.value } : s)) };
+                              })} className="h-7 w-24 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)] text-xs" />
+                              <span className="text-[11px] font-semibold text-[var(--text-primary)]">{slot.label || slot.id}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     
                     <div className="space-y-1 sm:col-span-2">
