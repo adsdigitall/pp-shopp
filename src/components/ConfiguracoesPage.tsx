@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Users, Globe, Tag, Shield, User, Bell, Lock, Key, CreditCard, LogOut, Save, Check, X, AlertCircle, Eye, EyeOff, Copy, Edit, Trash2, Plus, Wifi, Smartphone, Mail, Lock as LockIcon, Shield as ShieldIcon, FileText, Send } from 'lucide-react';
 import { Template, Coupon, Settings as SettingsType } from '../types/product';
 import { Button } from '@/components/ui/Button';
@@ -58,6 +58,82 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   const [activeTab, setActiveTab] = useState<'canais' | 'plataformas' | 'templates' | 'cupons' | 'seguranca' | 'conta'>('canais');
   const [showPassword, setShowPassword] = useState(false);
   const [validating, setValidating] = useState(false);
+  // Shopee via backend real (/api/integrations/shopee/*). O Secret NUNCA
+  // entra no settings/localStorage: vive só nestes estados locais.
+  const [shopeeStatus, setShopeeStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading');
+  const [shopeeMasked, setShopeeMasked] = useState('');
+  const [shopeeAppId, setShopeeAppId] = useState('');
+  const [shopeeSecret, setShopeeSecret] = useState('');
+  const [shopeeSaving, setShopeeSaving] = useState(false);
+  const [shopeeError, setShopeeError] = useState('');
+  const [shopeeEditing, setShopeeEditing] = useState(false);
+
+  // Após reload, busca o status real no backend.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/integrations/shopee/status', { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(body => {
+        if (cancelled || !body) return;
+        setShopeeStatus(body.connected ? 'connected' : 'disconnected');
+        setShopeeMasked(typeof body.appIdMasked === 'string' ? body.appIdMasked : '');
+      })
+      .catch(() => {
+        if (!cancelled) setShopeeStatus('disconnected');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleShopeeSave = async () => {
+    const appId = shopeeAppId.trim();
+    const secret = shopeeSecret.trim();
+    if (!appId || !secret) {
+      setShopeeError('Informe o App ID e o Secret da Shopee.');
+      return;
+    }
+    setShopeeSaving(true);
+    setShopeeError('');
+    try {
+      const res = await fetch('/api/integrations/shopee/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId, secret }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.error?.message || 'Não foi possível salvar. Tente novamente.');
+      }
+      setShopeeStatus('connected');
+      setShopeeMasked(typeof body?.appIdMasked === 'string' ? body.appIdMasked : '');
+      setShopeeSecret('');
+      setShopeeEditing(false);
+      onShowToast('Shopee conectada', 'Credenciais validadas e salvas.', 'success');
+    } catch (err) {
+      setShopeeError(err instanceof Error ? err.message : 'Não foi possível salvar. Tente novamente.');
+    } finally {
+      setShopeeSaving(false);
+    }
+  };
+
+  const handleShopeeDisconnect = async () => {
+    setShopeeSaving(true);
+    setShopeeError('');
+    try {
+      await fetch('/api/integrations/shopee/disconnect', { method: 'POST' });
+      setShopeeStatus('disconnected');
+      setShopeeMasked('');
+      setShopeeAppId('');
+      setShopeeSecret('');
+      setShopeeEditing(false);
+      onShowToast('Shopee desconectada', undefined, 'info');
+    } catch {
+      setShopeeError('Não foi possível desconectar. Tente novamente.');
+    } finally {
+      setShopeeSaving(false);
+    }
+  };
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [newCoupon, setNewCoupon] = useState<{ platform: 'shopee' | 'mercado_livre' | 'amazon' | 'magalu'; code: string; description: string }>({ platform: 'shopee', code: '', description: '' });
 
@@ -186,42 +262,76 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-bold text-[var(--text-primary)]">Shopee</p>
-                    {settings.platforms.shopee.appId && settings.platforms.shopee.secret ? (
+                    {shopeeStatus === 'loading' ? (
+                      <Badge variant="secondary">Verificando...</Badge>
+                    ) : shopeeStatus === 'connected' ? (
                       <Badge variant="success">Conectado</Badge>
                     ) : (
-                      <Badge variant="warning">Pendente</Badge>
+                      <Badge variant="destructive">Desconectado</Badge>
                     )}
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">AppId</label>
-                    <Input
-                      type="text"
-                      value={settings.platforms.shopee.appId}
-                      onChange={e => onSaveSettings({ platforms: { ...settings.platforms, shopee: { ...settings.platforms.shopee, appId: e.target.value } } })}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Secret</label>
-                    <div className="relative">
+                {shopeeStatus === 'connected' && !shopeeEditing ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">App ID</label>
                       <Input
-                        type={showPassword ? 'text' : 'password'}
-                        value={settings.platforms.shopee.secret}
-                        onChange={e => onSaveSettings({ platforms: { ...settings.platforms, shopee: { ...settings.platforms.shopee, secret: e.target.value } } })}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)] pr-10"
+                        type="text"
+                        readOnly
+                        value={shopeeMasked}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none opacity-80"
                       />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Secret</label>
+                      <Input
+                        type="password"
+                        readOnly
+                        value="••••••••••••••••"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none opacity-80"
+                      />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button variant="outline" onClick={() => { setShopeeEditing(true); setShopeeError(''); }} className="flex-1 flex items-center justify-center gap-2">Trocar conta</Button>
+                      <Button variant="destructive" onClick={handleShopeeDisconnect} disabled={shopeeSaving} className="flex-1 border-[var(--error)]/20 bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20 flex items-center justify-center gap-1.5 disabled:opacity-50"><Wifi className="w-3 h-3" /> {shopeeSaving ? 'Desconectando...' : 'Desconectar'}</Button>
                     </div>
                   </div>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Button variant="default" className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
-                  <Button variant="outline" onClick={handleValidateAll} disabled={validating} className="flex-1 border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20 flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {validating ? 'Validando...' : 'Validar conexão'}</Button>
-                </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">App ID</label>
+                      <Input
+                        type="text"
+                        value={shopeeAppId}
+                        onChange={e => { setShopeeAppId(e.target.value); setShopeeError(''); }}
+                        placeholder="Ex.: 18349490069"
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Secret</label>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          value={shopeeSecret}
+                          onChange={e => { setShopeeSecret(e.target.value); setShopeeError(''); }}
+                          placeholder="Cole o Secret da Shopee"
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)] pr-10"
+                        />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    {shopeeError && (
+                      <p className="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-3 py-2 text-xs font-semibold text-[var(--error)]">{shopeeError}</p>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      <Button variant="default" onClick={handleShopeeSave} disabled={shopeeSaving} className="flex-1 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2 disabled:opacity-50"><Save className="w-3 h-3" /> {shopeeSaving ? 'Salvando...' : 'Salvar'}</Button>
+                      <Button variant="outline" onClick={handleValidateAll} disabled={validating} className="flex-1 border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20 flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {validating ? 'Validando...' : 'Validar conexão'}</Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">

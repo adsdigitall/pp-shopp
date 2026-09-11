@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initEnv } from './lib/env.mjs';
-import { loadShopeeConfig, ShopeeConfigError } from './services/shopee/config.mjs';
+import { loadShopeeConfig, ShopeeConfigError, SHOPEE_GRAPHQL_ENDPOINT } from './services/shopee/config.mjs';
 import { ShopeeApiError } from './services/shopee/client.mjs';
 import { searchProductOffers } from './services/shopee/products.mjs';
 import { normalizeProductOffers, parseSalesCount } from './services/shopee/normalizer.mjs';
@@ -37,6 +37,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
+import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from './services/shopee/effectiveConfig.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 
@@ -400,9 +401,9 @@ async function handleOfferCopy(req, res) {
 async function handleSales(req, res) {
   const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
   const hoursRaw = Number.parseInt(parsed.searchParams.get('hours') || '24', 10);
-  const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 168) : 24;
-  const config = loadShopeeConfig();
-  const { nodes, pageInfo } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - hours * 3600 });
+    const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 168) : 24;
+    const config = await loadShopeeConfigForUser(requestUserId(req));
+    const { nodes, pageInfo } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - hours * 3600 });
   for (const sale of nodes) {
     const saleId = String(sale.conversionId || sale.checkoutId || '');
     if (!saleId || notifiedSaleIds.has(saleId)) continue;
@@ -412,9 +413,9 @@ async function handleSales(req, res) {
   sendJson(res, 200, { sales: nodes, meta: { source: 'shopee-affiliate-api', operation: 'conversionReport', hasNextPage: Boolean(pageInfo.hasNextPage) } });
 }
 
-async function pollSalesInBackground() {
-  try {
-    const config = loadShopeeConfig();
+  async function pollSalesInBackground() {
+    try {
+      const config = await loadShopeeConfigForUser('default_user');
     const { nodes } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - 168 * 3600 });
     for (const sale of nodes) {
       const saleId = String(sale.conversionId || sale.checkoutId || '');
@@ -434,7 +435,7 @@ export function createApp() {
     const pathOnly = (req.url || '/').split('?')[0];
 
     try {
-      const protectedPath = pathOnly.startsWith('/api/whatsapp') || pathOnly.startsWith('/api/groups') || pathOnly.startsWith('/api/dispatch') || pathOnly.startsWith('/api/offers/') || pathOnly.startsWith('/api/mirroring');
+      const protectedPath = pathOnly.startsWith('/api/whatsapp') || pathOnly.startsWith('/api/groups') || pathOnly.startsWith('/api/dispatch') || pathOnly.startsWith('/api/offers/') || pathOnly.startsWith('/api/mirroring') || pathOnly.startsWith('/api/integrations');
       if (protectedPath && !rateLimit(req)) {
         sendJson(res, 429, { error: { code: 'RATE_LIMITED', message: 'Muitas requisições. Tente novamente em instantes.' } });
         return;
@@ -443,13 +444,13 @@ export function createApp() {
         sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Token de API ausente ou inválido.' } });
         return;
       }
-      if (req.method === 'GET' && pathOnly === '/api/health') {
-        let configured = true;
-        try {
-          loadShopeeConfig();
-        } catch {
-          configured = false;
-        }
+        if (req.method === 'GET' && pathOnly === '/api/health') {
+          let configured = true;
+          try {
+            await loadShopeeConfigForUser(requestUserId(req));
+          } catch {
+            configured = false;
+          }
         sendJson(res, 200, { status: 'ok', shopeeConfigured: configured });
         return;
       }
@@ -882,9 +883,9 @@ export function createApp() {
               if (!ids) throw new Error('Não achei o ID do produto no link da Shopee.');
               const shopId = ids[1];
               const itemId = ids[2];
-              let config;
-              try {
-                config = loadShopeeConfig();
+                let config;
+                try {
+                  config = await loadShopeeConfigForUser(requestUserId(req));
               } catch {
                 throw new Error('Shopee não conectada no painel — vale a busca pelo título no Garimpar.');
               }
@@ -1327,6 +1328,80 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       // PUT /api/settings/account - Conta
       if (req.method === 'PUT' && pathOnly === '/api/settings/account') {
         await handleUpdateSettingsAccount(req, res);
+        return;
+      }
+
+      // ========== SHOPEE INTEGRATIONS (credenciais via UI, validadas de verdade) ==========
+      // GET /api/integrations/shopee/status - conectado? + App ID mascarado (nunca o Secret)
+      if (req.method === 'GET' && pathOnly === '/api/integrations/shopee/status') {
+        const status = await getShopeeIntegrationStatus(requestUserId(req));
+        sendJson(res, 200, status);
+        return;
+      }
+      // POST /api/integrations/shopee/connect - valida na Shopee de verdade e salva
+      if (req.method === 'POST' && pathOnly === '/api/integrations/shopee/connect') {
+        let body;
+        try {
+          body = await readJsonBody(req);
+        } catch {
+          sendJson(res, 400, { error: { code: 'INVALID_JSON', message: 'Corpo inválido. Tente novamente.' } });
+          return;
+        }
+        const appId = String(body?.appId || '').trim();
+        const secret = String(body?.secret || '').trim();
+        if (!appId || !secret) {
+          sendJson(res, 400, { error: { code: 'MISSING_CREDENTIALS', message: 'Informe o App ID e o Secret da Shopee.' } });
+          return;
+        }
+        const timeoutRaw = Number.parseInt(process.env.SHOPEE_TIMEOUT_MS || '', 10);
+        const candidate = {
+          appId,
+          secret,
+          apiUrl: (process.env.SHOPEE_API_URL || '').trim() || SHOPEE_GRAPHQL_ENDPOINT,
+          timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : 10000,
+        };
+        try {
+          await searchProductOffers({ keyword: '', filter: 'trending', page: 1, limit: 1, config: candidate });
+        } catch (err) {
+          if (err instanceof ShopeeApiError && (err.kind === 'AUTH' || err.kind === 'NO_ACCESS')) {
+            sendJson(res, 401, { error: { code: 'INVALID_CREDENTIALS', message: 'App ID ou Secret inválidos. Confira no painel da Shopee e tente de novo.' } });
+            return;
+          }
+          const msg = err instanceof ShopeeApiError && err.kind === 'RATE_LIMIT'
+            ? 'A Shopee está limitando as requisições. Aguarde uns segundos e tente de novo.'
+            : 'Não foi possível validar agora. Confira a conexão e tente novamente.';
+          sendJson(res, 502, { error: { code: 'VALIDATION_FAILED', message: msg } });
+          return;
+        }
+        const userId = requestUserId(req);
+        const now = new Date().toISOString();
+        await CredentialsStore.save(userId, 'shopee', { appId, secret, source: 'ui', lastValidatedAt: now });
+        sendJson(res, 200, { connected: true, source: 'stored', appIdMasked: maskAppId(appId), lastValidatedAt: now });
+        return;
+      }
+      // POST /api/integrations/shopee/disconnect - desativa e bloqueia fallback do .env
+      if (req.method === 'POST' && pathOnly === '/api/integrations/shopee/disconnect') {
+        const userId = requestUserId(req);
+        const now = new Date().toISOString();
+        try {
+          const existing = await dataStore.findOne('credentials', { userId, marketplace: 'shopee' });
+          if (existing) {
+            await CredentialsStore.deactivate(userId, 'shopee');
+          } else {
+            await dataStore.add('credentials', {
+              id: `cred_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              userId,
+              marketplace: 'shopee',
+              isActive: false,
+              disabled: true,
+              updatedAt: now,
+            });
+          }
+        } catch {
+          sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível desconectar. Tente novamente.' } });
+          return;
+        }
+        sendJson(res, 200, { connected: false });
         return;
       }
 
@@ -2008,9 +2083,9 @@ async function handleShopeeAnalytics(req, res) {
     const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
     const hours = Math.min(720, Math.max(1, parseInt(parsed.searchParams.get('hours') || '168', 10)));
     const sinceSeconds = Date.now() / 1000 - hours * 3600;
-    const userId = 'default_user';
-    
-    const config = loadShopeeConfig();
+      const userId = 'default_user';
+      
+      const config = await loadShopeeConfigForUser(userId);
     const { nodes: conversions } = await fetchRecentConversions({ config, sinceSeconds, limit: 100 });
     
     // Busca clicks do nosso tracking
@@ -2576,8 +2651,8 @@ async function runAutomaticOfferDiscovery() {
         const { nodes } = await searchProductOffers({
           keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : categoryPlan.keywords,
           filter: 'trending', page: 1, limit: 50,
-          categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
-          config: loadShopeeConfig(),
+            categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
+            config: await loadShopeeConfigForUser(config.userId || 'default_user'),
         });
         const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
         const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
@@ -3583,9 +3658,15 @@ const handleUpdateSettingsAccount = createSettingsAccountHandler({
 async function handleUpdatePlatforms(req, res) {
   try {
     const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const settings = userSettings.get(userId) || getDefaultSettings();
-    settings.platforms = { ...settings.platforms, ...body };
+      const body = await readJsonBody(req);
+      const settings = userSettings.get(userId) || getDefaultSettings();
+      settings.platforms = { ...settings.platforms, ...body };
+      // Credenciais Shopee são gerenciadas SÓ via /api/integrations/shopee/*.
+      // Nunca persistem no store de plataformas (nem em memória).
+      if (settings.platforms?.shopee && typeof settings.platforms.shopee === 'object') {
+        delete settings.platforms.shopee.secret;
+        delete settings.platforms.shopee.appId;
+      }
     userSettings.set(userId, settings);
     // Espelha as etiquetas no DataStore: a extensão e o Por links leem de lá
     // (a memória zera a cada restart/serverless).

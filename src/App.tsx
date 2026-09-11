@@ -734,14 +734,23 @@ export function App() {
   };
 
   const handleSaveSettings = (newSettings: Partial<SettingsType>) => {
-    setAppSettings(prev => ({ ...prev, ...newSettings }));
+    // Credenciais Shopee são gerenciadas SÓ via /api/integrations/shopee/*.
+    // Nunca entram no settings (estado, PUT ou qualquer storage).
+    const clean: Partial<SettingsType> = { ...newSettings };
+    if (clean.platforms?.shopee && (clean.platforms.shopee.appId || clean.platforms.shopee.secret)) {
+      clean.platforms = {
+        ...clean.platforms,
+        shopee: { ...clean.platforms.shopee, appId: '', secret: '' },
+      };
+    }
+    setAppSettings(prev => ({ ...prev, ...clean }));
     // Espelha as etiquetas (ML/Amazon/Magalu) no servidor: é de lá que a
     // extensão e o "Por links" leem pra gerar o link de afiliado.
-    if (newSettings.platforms) {
+    if (clean.platforms) {
       void fetch('/api/settings/platforms', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings.platforms),
+        body: JSON.stringify(clean.platforms),
       }).catch(() => undefined);
     }
     showToast('Configurações salvas', undefined, 'success');

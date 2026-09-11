@@ -1,4 +1,4 @@
-import { loadShopeeConfig } from '../services/shopee/config.mjs';
+import { loadShopeeConfigForUser } from '../services/shopee/effectiveConfig.mjs';
 import {
   searchProductOffers,
   mapFilterToShopeeArgs,
@@ -37,7 +37,7 @@ export function parseProductsQuery(url) {
 export async function handleProducts(req, res, { sendJson }) {
   const parsed = new URL(req.url || '/', `http://${req.headers.host}`);
   const { filter, keyword, categoryId, page, limit } = parseProductsQuery(parsed);
-  const config = loadShopeeConfig();
+  const config = await loadShopeeConfigForUser();
 
   const { nodes, pageInfo } = await searchProductOffers({
     keyword,
