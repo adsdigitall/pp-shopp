@@ -67,6 +67,11 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   const [shopeeSaving, setShopeeSaving] = useState(false);
   const [shopeeError, setShopeeError] = useState('');
   const [shopeeEditing, setShopeeEditing] = useState(false);
+  // Mercado Livre via OAuth real (/api/mercadolivre/*). Sem segredos no front.
+  const [mlStatus, setMlStatus] = useState<'loading' | 'connected' | 'token_expired' | 'disconnected'>('loading');
+  const [mlAccount, setMlAccount] = useState('');
+  const [mlBusy, setMlBusy] = useState(false);
+  const [mlError, setMlError] = useState('');
 
   // Após reload, busca o status real no backend.
   useEffect(() => {
@@ -85,6 +90,87 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       cancelled = true;
     };
   }, []);
+
+  // Status real do Mercado Livre após reload.
+  const refreshMlStatus = async () => {
+    try {
+      const res = await fetch('/api/mercadolivre/status', { cache: 'no-store' });
+      const body = res.ok ? await res.json().catch(() => null) : null;
+      if (!body) {
+        setMlStatus('disconnected');
+        return;
+      }
+      if (body.connected && body.status !== 'token_expired') {
+        setMlStatus('connected');
+        setMlAccount(typeof body.account?.nickname === 'string' ? body.account.nickname : '');
+      } else if (body.status === 'token_expired') {
+        setMlStatus('token_expired');
+        setMlAccount(typeof body.account?.nickname === 'string' ? body.account.nickname : '');
+      } else {
+        setMlStatus('disconnected');
+        setMlAccount('');
+      }
+    } catch {
+      setMlStatus('disconnected');
+    }
+  };
+
+  useEffect(() => {
+    void refreshMlStatus();
+  }, []);
+
+  const handleMlConnect = async () => {
+    if (mlBusy) return;
+    setMlBusy(true);
+    setMlError('');
+    try {
+      const res = await fetch('/api/mercadolivre/auth-url');
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.authUrl) {
+        throw new Error(
+          res.status === 503
+            ? 'Integração do Mercado Livre não configurada no servidor. Fale com o suporte.'
+            : 'Não foi possível iniciar a conexão. Tente novamente.',
+        );
+      }
+      const oauthWindow = window.open(body.authUrl, 'mercadolivre_oauth', 'width=600,height=700');
+      if (!oauthWindow) {
+        throw new Error('O navegador bloqueou a janela. Permita popups e tente de novo.');
+      }
+      // Quando a janela fecha, confere se autorizou de verdade.
+      const oauthTimeout = window.setTimeout(() => {
+        window.clearInterval(checkInterval);
+        setMlBusy(false);
+      }, 5 * 60 * 1000);
+      const checkInterval = window.setInterval(async () => {
+        if (!oauthWindow.closed) return;
+        window.clearInterval(checkInterval);
+        window.clearTimeout(oauthTimeout);
+        await refreshMlStatus();
+        setMlBusy(false);
+        onShowToast('Conta verificada', 'Confira o status acima.', 'info');
+      }, 1000);
+    } catch (err) {
+      setMlError(err instanceof Error ? err.message : 'Não foi possível conectar. Tente novamente.');
+      setMlBusy(false);
+    }
+  };
+
+  const handleMlDisconnect = async () => {
+    if (mlBusy) return;
+    setMlBusy(true);
+    setMlError('');
+    try {
+      await fetch('/api/mercadolivre/disconnect', { method: 'POST' });
+      setMlStatus('disconnected');
+      setMlAccount('');
+      onShowToast('Mercado Livre desconectado', undefined, 'info');
+    } catch {
+      setMlError('Não foi possível desconectar. Tente novamente.');
+    } finally {
+      setMlBusy(false);
+    }
+  };
 
   const handleShopeeSave = async () => {
     const appId = shopeeAppId.trim();
@@ -338,10 +424,34 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-bold text-[var(--text-primary)]">Mercado Livre</p>
-                    <Badge variant="warning">Pendente</Badge>
+                    {mlStatus === 'loading' ? (
+                      <Badge variant="secondary">Verificando...</Badge>
+                    ) : mlStatus === 'connected' ? (
+                      <Badge variant="success">Conectado{mlAccount ? ` · ${mlAccount}` : ''}</Badge>
+                    ) : mlStatus === 'token_expired' ? (
+                      <Badge variant="warning">Token expirado</Badge>
+                    ) : (
+                      <Badge variant="destructive">Desconectado</Badge>
+                    )}
                   </div>
                 </div>
-                <div>
+                {mlStatus === 'connected' ? (
+                  <div className="space-y-3">
+                    {mlAccount && (
+                      <p className="text-xs text-[var(--text-secondary)]">Conta vinculada: <span className="font-bold text-[var(--text-primary)]">{mlAccount}</span></p>
+                    )}
+                    <Button variant="destructive" onClick={handleMlDisconnect} disabled={mlBusy} className="border-[var(--error)]/20 bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20 flex items-center justify-center gap-1.5 disabled:opacity-50"><Wifi className="w-3 h-3" /> {mlBusy ? 'Desconectando...' : 'Desconectar'}</Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-[var(--text-secondary)]">Entre com sua conta do Mercado Livre para buscar produtos e gerar links.</p>
+                    {mlError && (
+                      <p className="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-3 py-2 text-xs font-semibold text-[var(--error)]">{mlError}</p>
+                    )}
+                    <Button variant="default" onClick={handleMlConnect} disabled={mlBusy} className="bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2 disabled:opacity-50"><Wifi className="w-3 h-3" /> {mlBusy ? 'Aguardando autorização...' : mlStatus === 'token_expired' ? 'Reconectar conta' : 'Conectar conta'}</Button>
+                  </div>
+                )}
+                <div className="mt-4 border-t border-[var(--border)] pt-3">
                   <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tag de afiliado</label>
                   <Input
                     type="text"
@@ -351,7 +461,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                     placeholder="sua-tag"
                   />
                 </div>
-                <Button variant="default" className="mt-3 bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center justify-center gap-2"><Save className="w-3 h-3" /> Salvar</Button>
               </div>
 
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
