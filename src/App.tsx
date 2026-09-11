@@ -194,7 +194,7 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/dispatch/history?summary=1', { cache: 'no-store' })
+    fetch('/api/dispatch/history', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
         if (cancelled) return;
@@ -880,8 +880,6 @@ export function App() {
           shopeeConfigured={shopeeConfigured}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenGroups={() => setActiveSection('grupos')}
-          onOpenExtension={() => { setActiveSection('extensao'); setMobileSidebarOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          onOpenConfiguracoes={() => { setActiveSection('configuracoes'); setMobileSidebarOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           onAddToQueue={handleAddToQueue}
           onGenerateOffer={handleGenerateOffer}
           onShare={handleShareProduct}

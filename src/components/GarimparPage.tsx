@@ -30,8 +30,6 @@ interface GarimparPageProps {
   shopeeConfigured: boolean;
   onOpenSettings: () => void;
   onOpenGroups: () => void;
-  onOpenExtension?: () => void;
-  onOpenConfiguracoes?: () => void;
   onAddToQueue: (product: Product) => void;
   onGenerateOffer: (product: Product) => void;
   onShare: (product: Product) => void;
@@ -44,7 +42,6 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
   activeFilter, onSelectFilter, activeCategory, onSelectCategory, searchQuery, onSearchChange, onSearchSubmit,
   products, loading, loadingMore, hasNextPage, onLoadMore, onRefresh, selectedPlatform, onSelectPlatform,
   garimparTab, onSelectGarimparTab, onAddToQueue, onGenerateOffer, onShare, onPreview, onCopyLink, showToast,
-  onOpenSettings, onOpenExtension, onOpenConfiguracoes,
 }) => {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [searching, setSearching] = useState(false);
@@ -72,49 +69,6 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
     { id: 'amazon', label: 'Amazon', icon: '📦', color: 'from-amber-500 to-amber-600' },
     { id: 'magalu', label: 'Magalu', icon: '💜', color: 'from-purple-500 to-purple-600' },
   ];
-
-  const statusDot = (ok: boolean | null) => (
-    <span className={`h-2 w-2 shrink-0 rounded-full ${ok === null ? 'bg-[var(--text-secondary)]' : ok ? 'bg-[var(--success)]' : 'bg-[var(--error)]'}`} />
-  );
-
-  const platformPills = (
-    <div className="garimpar-platforms flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-      {platforms.map((platform) => {
-        if (platform.id === 'magalu') {
-          return (
-            <Button key={platform.id} type="button" variant="outline" disabled className="h-11 shrink-0 gap-2 rounded-xl px-3 text-sm font-bold opacity-80">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400" />
-              <span className="hidden sm:inline">{platform.label}</span>
-              <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-black text-amber-500">EM BREVE</span>
-            </Button>
-          );
-        }
-        if (platform.id === 'amazon') {
-          return (
-            <Button key={platform.id} type="button" variant="outline" onClick={() => onOpenSettings()} className="h-11 shrink-0 gap-2 rounded-xl px-3 text-sm font-bold">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-orange-400" />
-              <span className="hidden sm:inline">{platform.label}</span>
-              <span className="text-[10px] font-semibold text-[var(--text-secondary)]">· conectar</span>
-            </Button>
-          );
-        }
-        const ok = platform.id === 'shopee' ? shopeeOk : mlOk;
-        return (
-          <Button
-            key={platform.id}
-            type="button"
-            variant={selectedPlatform === platform.id ? 'default' : 'outline'}
-            onClick={() => onSelectPlatform(platform.id)}
-            data-active={selectedPlatform === platform.id}
-            className="garimpar-platform h-11 shrink-0 gap-2 rounded-xl px-3 text-sm font-bold transition-all"
-          >
-            {statusDot(ok)}
-            <span className="hidden sm:inline">{platform.label}</span>
-          </Button>
-        );
-      })}
-    </div>
-  );
   
   const tabs: Array<{ id: GarimparTab; label: string }> = [
     { id: 'buscar', label: 'Buscar' }, { id: 'categorias', label: 'Categorias' }, { id: 'mais-buscados', label: 'Mais buscados' }, { id: 'lojas', label: 'Lojas' }, { id: 'links', label: 'Por links' },
@@ -134,52 +88,12 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
   }
 
   const [linksText, setLinksText] = useState('');
-  const [mlLinksText, setMlLinksText] = useState('');
   const [resolvendoLinks, setResolvendoLinks] = useState(false);
   const [linksResolvidos, setLinksResolvidos] = useState<LinkResolvido[]>([]);
-  // Status reais das plataformas (pills + painel ML).
-  const [shopeeOk, setShopeeOk] = useState<boolean | null>(null);
-  const [mlOk, setMlOk] = useState<boolean | null>(null);
-  const [mlProviderLabel, setMlProviderLabel] = useState('');
-  const [extSyncedAt, setExtSyncedAt] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/integrations/shopee/status', { cache: 'no-store' })
-      .then(res => (res.ok ? res.json() : null))
-      .then(body => { if (!cancelled && body) setShopeeOk(!!body.connected); })
-      .catch(() => undefined);
-    fetch('/api/mercadolivre/status', { cache: 'no-store' })
-      .then(res => (res.ok ? res.json() : null))
-      .then(body => { if (!cancelled && body) setMlOk(!!body.connected && body.status !== 'token_expired'); })
-      .catch(() => undefined);
-    fetch('/api/mercadolivre/affiliate-config', { cache: 'no-store' })
-      .then(res => (res.ok ? res.json() : null))
-      .then(body => { if (!cancelled && typeof body?.config?.affiliateProvider === 'string') setMlProviderLabel(body.config.affiliateProvider); })
-      .catch(() => undefined);
-    fetch('/api/extension/token', { cache: 'no-store' })
-      .then(res => (res.ok ? res.json() : null))
-      .then(body => { if (!cancelled && body?.lastUsedAt) setExtSyncedAt(String(body.lastUsedAt)); })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, []);
-
-  const tempoAtras = (iso: string | null) => {
-    if (!iso) return '';
-    const ms = Date.now() - new Date(iso).getTime();
-    if (!Number.isFinite(ms) || ms < 0) return '';
-    const min = Math.floor(ms / 60000);
-    if (min < 1) return 'agora mesmo';
-    if (min < 60) return `há ${min} min`;
-    const h = Math.floor(min / 60);
-    if (h < 24) return `há ${h} h`;
-    const d = Math.floor(h / 24);
-    return d === 1 ? 'há 1 dia' : `há ${d} dias`;
-  };
-
-  const resolverLinks = async (rawText: string) => {
-    const links = [...new Set(rawText.split(/\s+/).map((l) => l.trim()).filter((l) => /^https?:\/\//i.test(l)))].slice(0, 20);
-    if (!links.length) return false;
+  const puxarPorLinks = async () => {
+    const links = [...new Set(linksText.split(/\s+/).map((l) => l.trim()).filter((l) => /^https?:\/\//i.test(l)))].slice(0, 20);
+    if (!links.length) return;
     setResolvendoLinks(true);
     try {
       const response = await fetch('/api/garimpar/resolver', {
@@ -191,22 +105,11 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
       if (!response.ok) throw new Error(body?.error?.message || 'Falha ao puxar os links.');
       const resultados = Array.isArray(body?.resultados) ? body.resultados : [];
       setLinksResolvidos(resultados.map((r: any) => ({ ...r, selected: r.status === 'ok' || r.status === 'sem_link' })));
-      return true;
     } catch {
       setLinksResolvidos([]);
-      return false;
     } finally {
       setResolvendoLinks(false);
     }
-  };
-
-  const puxarPorLinks = async () => {
-    await resolverLinks(linksText);
-  };
-
-  const puxarPorLinksMl = async () => {
-    const ok = await resolverLinks(mlLinksText);
-    if (ok) setMlLinksText('');
   };
 
   const alternarLinkResolvido = (url: string) => {
@@ -270,101 +173,6 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
     if (disponiveis.length) showToast('Ofertas adicionadas à fila', `${disponiveis.length} produto(s) desta busca foram enviados para revisão.`, 'success');
   };
 
-  if (selectedPlatform === 'mercado_livre') {
-    const mlProviderName = mlProviderLabel === 'afilitools' ? 'AfiliTools' : mlProviderLabel === 'bot_do_afiliado' ? 'Bot do Afiliado' : mlProviderLabel === 'afilimax' ? 'Afilimax' : mlProviderLabel === 'manual' || !mlProviderLabel ? '' : mlProviderLabel;
-    return (
-      <section className="garimpar-page space-y-5 pb-8">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="garimpar-eyebrow">DESCOBERTA DE OFERTAS</p>
-            <h1 className="mt-1 text-3xl font-black leading-tight tracking-tight text-foreground sm:text-4xl">Garimpar</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p>
-          </div>
-        </div>
-
-        {platformPills}
-
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${mlOk ? 'bg-[var(--success)]' : 'bg-[var(--error)]'}`} />
-              <p className="text-sm font-bold text-[var(--text-primary)]">Mercado Livre</p>
-              {mlOk === null ? (
-                <span className="rounded-full bg-[var(--surface-elevated)] px-2 py-0.5 text-[10px] font-bold text-[var(--text-secondary)]">Verificando...</span>
-              ) : mlOk ? (
-                <span className="rounded-full bg-[var(--success)]/15 px-2 py-0.5 text-[10px] font-bold text-[var(--success)]">Conectado</span>
-              ) : (
-                <span className="rounded-full bg-[var(--error)]/15 px-2 py-0.5 text-[10px] font-bold text-[var(--error)]">Desconectado</span>
-              )}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => (onOpenConfiguracoes || onOpenSettings)()} className="gap-1.5 text-xs">✎ Editar</Button>
-          </div>
-          <p className={`mt-2 text-xs font-semibold ${extSyncedAt ? 'text-[var(--success)]' : 'text-[var(--text-secondary)]'}`}>
-            {extSyncedAt ? `Extensão sincronizada ${tempoAtras(extSyncedAt)}` : 'Extensão não sincronizada'}
-            {mlProviderName ? ` · Afiliado via ${mlProviderName}` : ''}
-          </p>
-        </div>
-
-        {!extSyncedAt && (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
-            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Extraia todos os links de uma página de uma vez com a extensão.</p>
-            {onOpenExtension && (
-              <Button type="button" variant="ghost" size="sm" onClick={onOpenExtension} className="shrink-0 gap-1 text-xs font-bold text-amber-600 dark:text-amber-400">Instalar →</Button>
-            )}
-          </div>
-        )}
-
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <p className="text-sm font-bold text-[var(--text-primary)]">Colar links de Mercado Livre</p>
-          <textarea
-            value={mlLinksText}
-            onChange={(e) => setMlLinksText(e.target.value)}
-            placeholder="Cole um link por linha"
-            rows={4}
-            className="mt-2 w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] outline-none focus:border-[var(--primary)]"
-          />
-          <Button onClick={puxarPorLinksMl} disabled={resolvendoLinks || !mlLinksText.trim()} className="mt-2 h-10 gap-2">
-            {resolvendoLinks ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            <span>{resolvendoLinks ? 'Gerando…' : 'Gerar links'}</span>
-          </Button>
-          {linksResolvidos.length > 0 && (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-[var(--text-secondary)]">Extraídos dos links</p>
-                <Button size="sm" disabled={!linksResolvidos.some((r) => r.selected && r.status !== 'erro')} onClick={adicionarLinksNaFila}>
-                  Adicionar à fila ({linksResolvidos.filter((r) => r.selected && r.status !== 'erro').length})
-                </Button>
-              </div>
-              {linksResolvidos.map((r) => (
-                <div key={r.url} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-2.5">
-                  <input type="checkbox" checked={!!r.selected} disabled={r.status === 'erro'} onChange={() => alternarLinkResolvido(r.url)} className="h-4 w-4 shrink-0 accent-[var(--primary)]" />
-                  {r.image ? (
-                    <img src={r.image} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                  ) : (
-                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[var(--surface)] text-[var(--text-secondary)]"><Tag className="h-5 w-5" /></div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-[var(--text-primary)]">{r.title || r.url}</p>
-                    {r.affiliateUrl ? (
-                      <p className="truncate text-[11px] font-semibold text-[var(--success)]">🔗 {r.affiliateUrl}</p>
-                    ) : (
-                      <p className="truncate text-[11px] text-[var(--text-secondary)]">{r.url}</p>
-                    )}
-                    <p className="mt-0.5 text-[11px]">
-                      <span className="font-black text-[var(--error)]">{r.price != null ? `R$ ${r.price.toFixed(2).replace('.', ',')}` : 'Preço não lido'}</span>
-                      {r.status === 'sem_link' && <span className="ml-2 text-[var(--text-secondary)]">Sem link afiliado</span>}
-                      {r.status === 'erro' && <span className="ml-2 text-[var(--error)]">{r.erro}</span>}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  }
-
   if (selectedPlatform !== 'shopee') {
     return (
       <Card className="pressable-card">
@@ -390,7 +198,21 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
         </div>
       </div>
 
-      {platformPills}
+      <div className="garimpar-platforms flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+        {platforms.map((platform) => (
+          <Button
+            key={platform.id}
+            type="button"
+            variant={selectedPlatform === platform.id ? 'default' : 'outline'}
+            onClick={() => onSelectPlatform(platform.id)}
+            data-active={selectedPlatform === platform.id}
+            className="garimpar-platform h-11 shrink-0 gap-2 rounded-xl px-3 text-sm font-bold transition-all"
+          >
+            <span className="text-base font-black">{platform.icon}</span>
+            <span className="hidden sm:inline">{platform.label}</span>
+          </Button>
+        ))}
+      </div>
 
       <div className="garimpar-tabs flex gap-1 overflow-x-auto border-b border-border pb-0 scrollbar-thin">
         {tabs.map((tab) => (
