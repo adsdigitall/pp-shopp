@@ -148,7 +148,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   const saveAutomation = async () => {
     setSavingAutomation(true);
     try {
-      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, mode: automation.mode === 'auto' ? 'auto' : 'manual', groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, humanMessageInterval: automation.humanMessageInterval, repeatCooldownHours: automation.repeatCooldownHours, championRepostAfterHours: automation.championRepostAfterHours, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', activeDays: automation.activeDays, humanTone: automation.humanTone !== false, rhythmEnabled: automation.rhythmEnabled !== false, dailyRhythm: (automation.dailyRhythm || []).map((s: any) => ({ id: s.id, time: s.time, enabled: s.enabled !== false })), scheduleSlots: automation.scheduleSlots }) });
+      const response = await fetch('/api/dispatch/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: automation.enabled, mode: automation.mode === 'auto' ? 'auto' : 'manual', groupIds: selectedAutomationIds, categoryIds: selectedAutomationCategoryIds, interval: automation.interval, offerInterval: automation.offerInterval || automation.interval, humanMessageInterval: automation.humanMessageInterval, repeatCooldownHours: automation.repeatCooldownHours, championRepostAfterHours: automation.championRepostAfterHours, batchSize: automation.batchSize || 10, aiEnabled: automation.aiEnabled === true, activeFrom: automation.activeFrom || '08:00', activeUntil: automation.activeUntil || '23:00', activeDays: automation.activeDays, humanTone: automation.humanTone !== false, rhythmEnabled: automation.rhythmEnabled !== false, dailyRhythm: (automation.dailyRhythm || []).map((s: any) => ({ id: s.id, time: s.time, enabled: s.enabled !== false })), scheduleSlots: automation.scheduleSlots }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível salvar.');
       setAutomation(body.config);
@@ -401,6 +401,12 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                       )}
                     </div>
                     
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">Ofertas por ciclo (tudo da categoria)
+                        <Input type="number" min="1" max="50" value={automation.batchSize || 10} onChange={e => setAutomation((prev: any) => ({ ...prev, batchSize: Math.min(50, Math.max(1, Number(e.target.value) || 1)) }))} className="h-7 w-14 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)]" />
+                        <span className="text-[9px] font-normal text-[var(--text-secondary)]">quantas entram por vez (1–50)</span>
+                      </label>
+                    </div>
                     <div className="space-y-1 sm:col-span-2">
                       <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">Nova oferta a cada
                         <Input type="number" min="1" value={automation.offerInterval?.value || automation.interval?.value || 30} onChange={e => setAutomation((prev: any) => ({ ...prev, offerInterval: { ...(prev.offerInterval || prev.interval || {}), value: Number(e.target.value) } }))} className="h-7 w-14 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)]" />

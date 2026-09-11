@@ -2737,8 +2737,8 @@ async function runAutomaticOfferDiscovery() {
           const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
           const sentKeys = await recentlySentProductKeys(config.userId);
           const recentDiscoveryKeys = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys.map(String) : []);
-          // "Nova oferta a cada X" representa uma oferta por ciclo.
-          const batchSize = 1;
+          // Quantas ofertas da categoria entram por ciclo (configurável na tela).
+          const batchSize = Math.min(50, Math.max(1, Math.round(Number(config.batchSize) || 10)));
           const blocked = { repeats: 0, gate: {}, other: 0 };
           const normalized = normalizeProductOffers(nodes, 'trending');
           const offers = normalized

@@ -15,7 +15,7 @@ test('automatic discovery dispatches approved offers in auto mode', async () => 
   assert.match(activePath, /DispatchStore\.save/);
   assert.match(activePath, /resumeDispatchQueue/);
   assert.match(source, /for \(const config of configs\.filter\(item => item\?\.enabled\)\)/);
-  assert.match(source, /const batchSize = 1;/);
+  assert.match(source, /const batchSize = Math\.min\(50, Math\.max\(1, Math\.round\(Number\(config\.batchSize\) \|\| 10\)\)\);/);
   assert.match(source, /for \(const offer of offers\)/);
   assert.match(source, /if \(!isBrazilianOffer\(item\)\) \{ blocked\.other \+= 1; return false; \}/);
   assert.match(source, /!recentDiscoveryKeys\.has\(key\)/);
