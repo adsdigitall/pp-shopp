@@ -156,6 +156,9 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
   function handleDisconnect() {
     fetch('/api/whatsapp/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: selectedSessionId }) })
       .then(() => {
+        try {
+          sessionStorage.setItem('wa-manual-disconnect', String(Date.now()));
+        } catch { /* storage indisponível */ }
         setSession(prev => prev ? { ...prev, status: 'disconnected', qrCode: undefined, phone: undefined } : null);
         setGroups([]);
         showToast('WhatsApp desconectado', undefined, 'info');

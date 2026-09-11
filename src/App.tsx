@@ -253,9 +253,14 @@ export function App() {
   const [extensionToken, setExtensionToken] = useState('');
   const [panelUrl, setPanelUrl] = useState('https://radarfertas.shop');
   const [whatsappConnected, setWhatsAppConnected] = useState(false);
-  // Guarda o status anterior para detectar a QUEDA da sessão (true -> false)
-  // sem disparar aviso na primeira carga (null -> false é silencioso).
-  const prevWhatsAppConnectedRef = useRef<boolean | null>(null);
+  // Estado CONFIRMADO da sessão + contagem de leituras divergentes seguidas.
+  // Exige 2 polls seguidos no novo estado antes de trocar (ignora oscilação
+  // momentânea da WAHA) e nunca avisa na primeira carga (null = silencioso).
+  const whatsappStableRef = useRef<boolean | null>(null);
+  const whatsappStrikesRef = useRef(0);
+  // Só mostra "conectado" se antes avisou que caiu. Evita popup repetido.
+  const whatsappDropNotifiedRef = useRef(false);
+  const lastWhatsAppToastRef = useRef(0);
 
   const [appSettings, setAppSettings] = useState<SettingsType>({
     channels: { whatsapp: { connected: false, phone: '', instanceId: '' }, telegram: { connected: false } },
@@ -415,6 +420,11 @@ export function App() {
 
   useEffect(() => {
     const notifyWhatsAppDrop = () => {
+      const now = Date.now();
+      // Cooldown: no máximo 1 aviso de queda a cada 60s, mesmo oscilando.
+      if (now - lastWhatsAppToastRef.current < 60_000) return;
+      lastWhatsAppToastRef.current = now;
+      whatsappDropNotifiedRef.current = true;
       showToast('WhatsApp desconectado', 'A sessão caiu. Reconecte para retomar os disparos.', 'error');
       try {
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -425,12 +435,37 @@ export function App() {
     const refreshWhatsAppStatus = () => {
       fetch('/api/whatsapp/status').then(response => response.ok ? response.json() : null).then(body => {
         if (!body) return;
+        // Ignora desconexão manual recém-feita pelo usuário (já avisada na hora).
+        let manual = false;
+        try {
+          manual = Date.now() - Number(sessionStorage.getItem('wa-manual-disconnect') || 0) < 120_000;
+        } catch { /* storage indisponível */ }
         const connected = body.status === 'connected' || body.status === 'working';
-        const prev = prevWhatsAppConnectedRef.current;
-        prevWhatsAppConnectedRef.current = connected;
+        const stable = whatsappStableRef.current;
+        if (stable === null) {
+          whatsappStableRef.current = connected;
+          setWhatsAppConnected(connected);
+          return;
+        }
+        if (connected === stable) {
+          whatsappStrikesRef.current = 0;
+          return;
+        }
+        // Exige 2 leituras seguidas no novo estado: filtra oscilação da WAHA.
+        whatsappStrikesRef.current += 1;
+        if (whatsappStrikesRef.current < 2) return;
+        whatsappStableRef.current = connected;
+        whatsappStrikesRef.current = 0;
         setWhatsAppConnected(connected);
-        if (prev === true && !connected) notifyWhatsAppDrop();
-        if (prev === false && connected) showToast('WhatsApp conectado', 'Sessão ativa. Disparos retomados.', 'success');
+        if (!connected && !manual) {
+          notifyWhatsAppDrop();
+        } else if (!connected) {
+          whatsappDropNotifiedRef.current = false;
+        } else if (whatsappDropNotifiedRef.current) {
+          // Só anuncia "conectado" se antes avisou que caiu. Sem spam.
+          whatsappDropNotifiedRef.current = false;
+          showToast('WhatsApp conectado', 'Sessão ativa. Disparos retomados.', 'success');
+        }
       }).catch(() => undefined);
     };
     refreshWhatsAppStatus();
@@ -718,7 +753,16 @@ export function App() {
 
   const handleSaveCoupon = (coupon: Coupon) => { setCoupons(prev => [...prev, coupon]); };
 
-  const handleDisconnectWhatsApp = () => { setWhatsAppConnected(false); showToast('WhatsApp desconectado', undefined, 'info'); };
+  const handleDisconnectWhatsApp = () => {
+    try {
+      sessionStorage.setItem('wa-manual-disconnect', String(Date.now()));
+    } catch { /* storage indisponível */ }
+    whatsappStableRef.current = false;
+    whatsappStrikesRef.current = 0;
+    whatsappDropNotifiedRef.current = false;
+    setWhatsAppConnected(false);
+    showToast('WhatsApp desconectado', undefined, 'info');
+  };
 
   const handleOpenWhatsApp = () => { setActiveSection('whatsapp'); setMobileSidebarOpen(false); };
 
