@@ -2728,18 +2728,28 @@ async function runAutomaticOfferDiscovery() {
         const categoryPlan = resolveAutomationCategory(selectedCategory, categoryCursor);
           const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
           const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
-          // 2 páginas (100 produtos): o pool de trending recicla os mesmos itens;
-          // só a primeira página esgota em poucas horas.
+          // Pool sempre fresco: 3 páginas (150 produtos) + ordenação rotativa.
+          // Só página 1 de "trending" com a mesma keyword devolve sempre os mesmos.
+          const DISCOVERY_FILTERS = ['trending', 'top_sales', 'high_commission'];
+          const discoveryFilter = DISCOVERY_FILTERS[categoryCursor % DISCOVERY_FILTERS.length];
           const rawNodes = [];
-          for (const discoveryPage of [1, 2]) {
+          const seenNodeIds = new Set();
+          for (const discoveryPage of [1, 2, 3]) {
             const { nodes: pageNodes } = await searchProductOffers({
               keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : categoryPlan.keywords,
-              filter: 'trending', page: discoveryPage, limit: 50,
+              filter: discoveryFilter, page: discoveryPage, limit: 50,
               categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
               config: discoveryConfig,
             });
-            if (Array.isArray(pageNodes)) rawNodes.push(...pageNodes);
-            if (!Array.isArray(pageNodes) || pageNodes.length < 50) break;
+            if (!Array.isArray(pageNodes) || !pageNodes.length) break;
+            for (const node of pageNodes) {
+              const nodeId = String(node?.itemId ?? '');
+              if (nodeId && !seenNodeIds.has(nodeId)) {
+                seenNodeIds.add(nodeId);
+                rawNodes.push(node);
+              }
+            }
+            if (pageNodes.length < 50) break;
           }
           const nodes = rawNodes;
           const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
@@ -2779,6 +2789,7 @@ async function runAutomaticOfferDiscovery() {
           const lastDiscovery = {
             at: new Date().toISOString(),
             category: categoryPlan.keywords || categoryPlan.id,
+            filter: discoveryFilter,
             scanned: normalized.length,
             kept: offers.length,
             blocked,
