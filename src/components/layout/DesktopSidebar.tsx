@@ -22,7 +22,9 @@ import {
   MessageSquare,
   ShoppingBag,
   Bell,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthGate";
 
 type SectionId = 
   | 'visao-geral' 
@@ -97,6 +99,10 @@ export function DesktopSidebar({
   className,
 }: DesktopSidebarProps) {
   const normalizeSection = (section: string) => section.replace(/^\/+/, '') as SectionId;
+
+  const { user, logout } = useAuth();
+  const accountName = user?.email ?? "Minha conta";
+  const accountInitials = accountName.slice(0, 2).toUpperCase();
 
   const handleClick = (section: SectionId) => {
     onNavigate(normalizeSection(section));
@@ -225,11 +231,11 @@ export function DesktopSidebar({
         </nav>
         <div className="mt-2 flex items-center gap-2.5 border-t border-[var(--border-subtle)] px-1 pt-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[image:var(--gradient-brand)] text-xs font-extrabold text-white">
-            CM
+            {accountInitials}
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-semibold text-[var(--text-title)]">
-              Carolina de assunção macedo
+            <div className="truncate text-[13px] font-semibold text-[var(--text-title)]" title={accountName}>
+              {accountName}
             </div>
             <div className="text-[11px] text-[var(--text-muted)]">
               Afiliado Pro
@@ -238,11 +244,21 @@ export function DesktopSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto text-[var(--text-secondary)] hover:text-[var(--text-title)]"
+            className="ml-auto shrink-0 text-[var(--text-secondary)] hover:text-[var(--text-title)]"
             onClick={onNotifications}
             aria-label="Notificações"
           >
             <Bell className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-[var(--text-secondary)] hover:text-[var(--red-400)]"
+            onClick={() => { void logout(); }}
+            aria-label="Sair"
+            title="Sair"
+          >
+            <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </aside>

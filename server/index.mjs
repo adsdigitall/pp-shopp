@@ -37,6 +37,7 @@ import { dataStore } from './services/storage/DataStore.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
+import { authMode, isPublicApiRoute, sessionFromRequest, allowLoginAttempt, verifyPasswordLogin, createSessionToken, sessionCookieHeader, clearSessionCookieHeader } from './lib/auth.mjs';
 import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from './services/shopee/effectiveConfig.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
@@ -272,6 +273,64 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
+async function handleAuthRoutes(req, res, pathOnly) {
+  if (!pathOnly.startsWith('/api/auth/')) return false;
+  const mode = authMode();
+
+  if (req.method === 'GET' && pathOnly === '/api/auth/session') {
+    if (!mode.enforced) {
+      sendJson(res, 200, { authenticated: true, authRequired: false, user: null });
+      return true;
+    }
+    const user = sessionFromRequest(req);
+    sendJson(res, 200, { authenticated: Boolean(user), authRequired: true, user });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathOnly === '/api/auth/login') {
+    if (!mode.available) {
+      sendJson(res, 503, { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Login indisponível no momento.' } });
+      return true;
+    }
+    if (!allowLoginAttempt(req)) {
+      sendJson(res, 429, { error: { code: 'RATE_LIMITED', message: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' } });
+      return true;
+    }
+    let body;
+    try { body = await readJsonBody(req); } catch {
+      sendJson(res, 400, { error: { code: 'INVALID_JSON', message: 'Requisição inválida.' } });
+      return true;
+    }
+    const email = String(body?.email || '').trim().toLowerCase();
+    const password = String(body?.password || '');
+    if (!email || !email.includes('@') || email.length > 254 || !password || password.length > 256) {
+      sendJson(res, 400, { error: { code: 'INVALID_CREDENTIALS', message: 'Informe e-mail e senha válidos.' } });
+      return true;
+    }
+    const result = await verifyPasswordLogin(email, password);
+    if (result.error) {
+      const status = result.error === 'INVALID_CREDENTIALS' ? 401 : result.error === 'RATE_LIMITED' ? 429 : 503;
+      const message = status === 401 ? 'E-mail ou senha incorretos.' : status === 429 ? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' : 'Não foi possível entrar agora. Tente novamente em instantes.';
+      logLine(`POST /api/auth/login ${status} ${result.error}`);
+      sendJson(res, status, { error: { code: result.error, message } });
+      return true;
+    }
+    res.setHeader('Set-Cookie', sessionCookieHeader(req, createSessionToken(result.user)));
+    logLine('POST /api/auth/login 200');
+    sendJson(res, 200, { authenticated: true, authRequired: true, user: result.user });
+    return true;
+  }
+
+  if (req.method === 'POST' && pathOnly === '/api/auth/logout') {
+    res.setHeader('Set-Cookie', clearSessionCookieHeader(req));
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Rota não encontrada.' } });
+  return true;
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
@@ -445,6 +504,12 @@ export function createApp() {
     const pathOnly = (req.url || '/').split('?')[0];
 
     try {
+      if (await handleAuthRoutes(req, res, pathOnly)) return;
+      const auth = authMode();
+      if (auth.enforced && !isPublicApiRoute(req.method, pathOnly) && !(RADAR_API_TOKEN && isAuthorized(req)) && !sessionFromRequest(req)) {
+        sendJson(res, 401, { error: { code: 'AUTH_REQUIRED', message: 'Faça login para continuar.' } });
+        return;
+      }
       const protectedPath = pathOnly.startsWith('/api/whatsapp') || pathOnly.startsWith('/api/groups') || pathOnly.startsWith('/api/dispatch') || pathOnly.startsWith('/api/offers/') || pathOnly.startsWith('/api/mirroring') || pathOnly.startsWith('/api/integrations');
       if (protectedPath && !rateLimit(req)) {
         sendJson(res, 429, { error: { code: 'RATE_LIMITED', message: 'Muitas requisições. Tente novamente em instantes.' } });
