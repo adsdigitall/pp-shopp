@@ -1,0 +1,66 @@
+:root{
+  /* ── Brand: laranja Radar ───────────────────────────── */
+  --brand-50:#fff3ee; --brand-100:#ffe0d3; --brand-200:#ffc0a6;
+  --brand-300:#ff9b76; --brand-400:#ff7651; --brand-500:#fd5723;
+  --brand-600:#ea4a18; --brand-700:#ca4c25; --brand-800:#8f3216; --brand-900:#4a1c0d;
+  --brand-glow:rgba(253,87,35,.16);
+
+  /* ── Gold: plano pago / vitrines ─────────────────────── */
+  --gold-300:#ffd77a; --gold-400:#f5c344; --gold-500:#f0b429; --gold-600:#d19b16;
+
+  /* ── Neutrals: near-black with a cool teal cast ──────── */
+  --ink-1000:#07090b; --ink-950:#0b0f11; --ink-900:#0c1418; --ink-850:#0e1519;
+  --ink-800:#121a1f; --ink-750:#141c22; --ink-700:#1a2329; --ink-600:#242f36;
+  --ink-500:#3a464e; --ink-400:#5b666e; --ink-300:#8b959c; --ink-200:#b6bec4;
+  --ink-100:#d9dee1; --ink-050:#eef1f3; --white:#ffffff;
+
+  /* ── Semantic hues ──────────────────────────────────── */
+  --green-500:#22c55e; --green-400:#4bda6e; --green-900:#0d2417;
+  --red-500:#ef4444;   --red-400:#f87171;   --red-900:#2a1113;
+  --blue-500:#3b82f6;  --blue-400:#60a5fa;  --blue-900:#111f3a;
+  --amber-500:#f59e0b; --amber-400:#fbbf24; --amber-900:#2a1e06;
+  --violet-500:#8b5cf6;
+
+  /* ── Partner brand colors (marketplaces / canais) ───── */
+  --mp-shopee:#ee4d2d; --mp-mercadolivre:#ffe600; --mp-amazon:#ff9900;
+  --mp-magalu:#0086ff; --mp-aliexpress:#e62e04;
+  --ch-whatsapp:#25d366; --ch-telegram:#229ed9; --ch-instagram:#e1306c;
+
+  /* ── Surfaces ───────────────────────────────────────── */
+  --surface-app:var(--ink-900);
+  --surface-sidebar:var(--ink-950);
+  --surface-card:var(--ink-850);
+  --surface-card-raised:var(--ink-800);
+  --surface-input:var(--ink-750);
+  --surface-hover:rgba(255,255,255,.04);
+  --surface-active:rgba(253,87,35,.10);
+  --surface-selected:rgba(253,87,35,.07);
+  --surface-scrim:rgba(7,9,11,.72);
+  --surface-brand-soft:rgba(253,87,35,.12);
+  --surface-green-soft:rgba(34,197,94,.12);
+  --surface-red-soft:rgba(239,68,68,.12);
+  --surface-blue-soft:rgba(59,130,246,.14);
+  --surface-amber-soft:rgba(245,158,11,.13);
+  --surface-gold-soft:rgba(240,180,41,.12);
+
+  /* ── Text ───────────────────────────────────────────── */
+  --text-title:#f2f5f6;
+  --text-body:var(--ink-100);
+  --text-secondary:var(--ink-300);
+  --text-muted:var(--ink-400);
+  --text-disabled:var(--ink-500);
+  --text-brand:var(--brand-400);
+  --text-positive:var(--green-400);
+  --text-negative:var(--red-400);
+  --text-on-brand:#ffffff;
+  --text-link:var(--brand-400);
+  --text-link-hover:var(--brand-300);
+
+  /* ── Borders ────────────────────────────────────────── */
+  --border-subtle:rgba(255,255,255,.06);
+  --border-default:rgba(255,255,255,.09);
+  --border-strong:rgba(255,255,255,.14);
+  --border-brand:rgba(253,87,35,.45);
+  --border-input:rgba(255,255,255,.10);
+  --border-focus:var(--brand-500);
+}

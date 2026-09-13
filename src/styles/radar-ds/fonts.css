@@ -1,0 +1,7 @@
+/* Fontes carregadas via <link> no index.html (import remoto dentro de @import quebra no build). */
+:root{
+  --font-sans:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-display:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --font-numeric:"Plus Jakarta Sans",sans-serif;
+}

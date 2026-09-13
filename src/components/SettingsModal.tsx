@@ -39,7 +39,7 @@ const MARKETPLACE_INFO = {
     icon: ShoppingBag,
     color: '#EE4D2D',
     bgColor: 'bg-orange-100',
-    textColor: 'text-[#EE4D2D]',
+    textColor: 'text-[var(--primary)]',
     borderColor: 'border-orange-200',
   },
   mercado_livre: {
@@ -317,7 +317,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={config.affiliateTag}
                 onChange={(e) => setAffiliateConfig(prev => ({ ...prev, [marketplace]: { ...prev[marketplace], affiliateTag: e.target.value } }))}
                 placeholder={marketplace === 'shopee' ? 'Ex: seu_id_afiliado' : 'Ex: matt:usuario:toolid ou tag_simples'}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#EE4D2D] outline-none font-medium"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium"
               />
               <p className="text-[11px] text-slate-500">
                 {marketplace === 'shopee' 
@@ -334,7 +334,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <select
                 value={config.affiliateProvider}
                 onChange={(e) => setAffiliateConfig(prev => ({ ...prev, [marketplace]: { ...prev[marketplace], affiliateProvider: e.target.value } }))}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#EE4D2D] outline-none font-medium text-slate-800"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium text-slate-800"
               >
                 {providers.map(p => (
                   <option key={p.value} value={p.value}>{p.label}</option>
@@ -384,14 +384,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="checkbox"
                 checked={config.isEnabled}
                 onChange={(e) => setAffiliateConfig(prev => ({ ...prev, [marketplace]: { ...prev[marketplace], isEnabled: e.target.checked } }))}
-                className="w-4 h-4 text-[#EE4D2D] rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
+                className="w-4 h-4 text-[var(--primary)] rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
               />
             </div>
 
             <button
               onClick={() => handleSaveAffiliateConfig(marketplace)}
               disabled={isSaving}
-              className="w-full py-2 px-3 bg-[#EE4D2D] hover:bg-[#D73211] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 disabled:opacity-50 cursor-pointer"
+              className="w-full py-2 px-3 bg-[var(--primary)] hover:bg-[var(--brand-600)] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 disabled:opacity-50 cursor-pointer"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               <span>{isSaving ? 'Salvando...' : 'Salvar configuração de afiliado'}</span>
@@ -448,7 +448,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={() => setActiveTab('general')}
             className={`flex-1 py-3 px-4 text-sm font-bold border-b-2 transition-colors ${
               activeTab === 'general' 
-                ? 'border-[#EE4D2D] text-[#EE4D2D]' 
+                ? 'border-[var(--primary)] text-[var(--primary)]' 
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -458,7 +458,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={() => setActiveTab('marketplaces')}
             className={`flex-1 py-3 px-4 text-sm font-bold border-b-2 transition-colors ${
               activeTab === 'marketplaces' 
-                ? 'border-[#EE4D2D] text-[#EE4D2D]' 
+                ? 'border-[var(--primary)] text-[var(--primary)]' 
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -485,7 +485,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={form.affiliateTag}
                     onChange={(e) => setForm({ ...form, affiliateTag: e.target.value })}
                     placeholder="Ex: seu_id_afiliado"
-                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#EE4D2D] focus:ring-2 focus:ring-orange-500/20 outline-none font-medium"
+                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] focus:ring-2 focus:ring-orange-500/20 outline-none font-medium"
                   />
                 </div>
                 <p className="text-[11px] text-slate-500">
@@ -501,7 +501,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <select
                   value={form.defaultFormat}
                   onChange={(e) => setForm({ ...form, defaultFormat: e.target.value as any })}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#EE4D2D] outline-none font-medium text-slate-800"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium text-slate-800"
                 >
                   <option value="standard">WhatsApp & Telegram (Completo com destaques)</option>
                   <option value="compact">Stories & Direct (Curto e direto)</option>
@@ -515,7 +515,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <select
                   value={form.theme}
                   onChange={(e) => setForm({ ...form, theme: e.target.value as 'light' | 'dark' })}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#EE4D2D] outline-none font-medium text-slate-800"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium text-slate-800"
                 >
                   <option value="light">Claro</option>
                   <option value="dark">Escuro</option>
@@ -537,7 +537,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="checkbox"
                     checked={form.showPrivateCommission}
                     onChange={(e) => setForm({ ...form, showPrivateCommission: e.target.checked })}
-                    className="w-4 h-4 text-[#EE4D2D] rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
+                    className="w-4 h-4 text-[var(--primary)] rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
                   />
                 </label>
               </div>
@@ -553,7 +553,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#EE4D2D] hover:bg-[#D73211] text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-orange-500/20 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--brand-600)] text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-orange-500/20 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>Salvar preferências</span>

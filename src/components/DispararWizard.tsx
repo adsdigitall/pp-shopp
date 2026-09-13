@@ -145,11 +145,11 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
               { num: 3, label: 'Destinos', icon: <Users className="w-4 h-4" /> },
             ].map((s, i) => (
               <div key={s.num} className={`flex items-center gap-2 ${i < 2 ? 'relative' : ''}`}>
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-black transition ${step >= s.num ? 'bg-[#EE4D2D] text-white' : 'bg-slate-200 text-slate-500'}`}>
+                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-black transition ${step >= s.num ? 'bg-[var(--primary)] text-white' : 'bg-slate-200 text-slate-500'}`}>
                   {step > s.num ? <Check className="w-4 h-4" /> : s.num}
                 </div>
-                <span className={`hidden sm:block text-xs font-bold ${step === s.num ? 'text-[#EE4D2D]' : 'text-slate-500'}`}>{s.label}</span>
-                {i < 2 && <div className={`hidden sm:block h-0.5 flex-1 max-w-16 transition ${step > s.num ? 'bg-[#EE4D2D]' : 'bg-slate-200'}`} />}
+                <span className={`hidden sm:block text-xs font-bold ${step === s.num ? 'text-[var(--primary)]' : 'text-slate-500'}`}>{s.label}</span>
+                {i < 2 && <div className={`hidden sm:block h-0.5 flex-1 max-w-16 transition ${step > s.num ? 'bg-[var(--primary)]' : 'bg-slate-200'}`} />}
               </div>
             ))}
           </div>
@@ -172,7 +172,7 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
                       type="checkbox"
                       checked={selectedOffers.includes(item.id)}
                       onChange={(e) => e.target.checked ? setSelectedOffers([...selectedOffers, item.id]) : setSelectedOffers(selectedOffers.filter(id => id !== item.id))}
-                      className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]"
+                      className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -198,7 +198,7 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
 
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={whatsappEnabled} onChange={e => setWhatsappEnabled(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                  <input type="checkbox" checked={whatsappEnabled} onChange={e => setWhatsappEnabled(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]" />
                   <div className="flex items-center gap-2">
                     <span className="grid h-8 w-8 place-items-center rounded-xl bg-green-100"><Send className="w-5 h-5 text-green-700" /></span>
                     <span className="font-bold text-slate-900">WhatsApp</span>
@@ -212,11 +212,11 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
                     <label className="block text-xs font-bold text-slate-600 mb-2">Modelo</label>
                     <div className="mb-3 grid gap-2 sm:grid-cols-2">
                       <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'fixed' ? 'border-orange-400 bg-orange-50' : 'border-slate-200'}`}>
-                        <input type="radio" name="template-mode" checked={templateMode === 'fixed'} onChange={() => setTemplateMode('fixed')} className="mt-0.5 text-[#EE4D2D]" />
+                        <input type="radio" name="template-mode" checked={templateMode === 'fixed'} onChange={() => setTemplateMode('fixed')} className="mt-0.5 text-[var(--primary)]" />
                         <span><strong className="block text-xs text-slate-800">Modelo fixo</strong><small className="text-[10px] text-slate-500">Usa o escolhido em todas as ofertas.</small></span>
                       </label>
                       <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'rotate' ? 'border-orange-400 bg-orange-50' : 'border-slate-200'}`}>
-                        <input type="radio" name="template-mode" checked={templateMode === 'rotate'} onChange={() => setTemplateMode('rotate')} className="mt-0.5 text-[#EE4D2D]" />
+                        <input type="radio" name="template-mode" checked={templateMode === 'rotate'} onChange={() => setTemplateMode('rotate')} className="mt-0.5 text-[var(--primary)]" />
                         <span><strong className="block text-xs text-slate-800">Alternar modelos</strong><small className="text-[10px] text-slate-500">Troca o template a cada oferta.</small></span>
                       </label>
                     </div>
@@ -260,11 +260,11 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
                     <h4 className="text-xs font-bold text-slate-600 mb-2">Opções</h4>
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                        <input type="checkbox" checked={showImage} onChange={e => setShowImage(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]" />
                         <span className="text-xs font-medium text-slate-700">Mostrar imagem</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                        <input type="checkbox" checked={rotatingCTAs} onChange={e => setRotatingCTAs(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]" />
                         <span className="text-xs font-medium text-slate-700">CTAs fortes e rotativas</span>
                         <span className="text-[10px] text-slate-400 ml-auto">Adicione frases no seu modelo em Configurações pra ativar.</span>
                       </label>
@@ -322,7 +322,7 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
                           type="checkbox"
                           checked={selectedGroups.includes(group.id)}
                           onChange={e => toggleGroup(group.id)}
-                          className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]"
+                          className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]"
                         />
                         <div>
                           <p className="text-xs font-bold text-slate-900">{group.name}</p>
@@ -342,8 +342,8 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
               <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
                 <h4 className="text-xs font-bold text-slate-600">Quando</h4>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setSchedule('now')} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold ${schedule === 'now' ? 'border-[#EE4D2D] bg-[#EE4D2D] text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Agora</button>
-                  <button type="button" onClick={() => setSchedule('scheduled')} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold ${schedule === 'scheduled' ? 'border-[#EE4D2D] bg-[#EE4D2D] text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Agendar</button>
+                  <button type="button" onClick={() => setSchedule('now')} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold ${schedule === 'now' ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Agora</button>
+                  <button type="button" onClick={() => setSchedule('scheduled')} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold ${schedule === 'scheduled' ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Agendar</button>
                 </div>
                 {schedule === 'scheduled' && (
                   <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400" />
@@ -374,21 +374,21 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={nightPause} onChange={e => setNightPause(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                    <input type="checkbox" checked={nightPause} onChange={e => setNightPause(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]" />
                     <div className="flex-1">
                       <span className="text-xs font-bold text-slate-900">Não enviar das 23h às 6h</span>
                       <p className="text-[10px] text-slate-500">Evita disparos de madrugada, mesmo agendando ou continuando um envio até lá.</p>
                     </div>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={weekendPause} onChange={e => setWeekendPause(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                    <input type="checkbox" checked={weekendPause} onChange={e => setWeekendPause(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]" />
                     <div className="flex-1">
                       <span className="text-xs font-bold text-slate-900">Não enviar Sábados e Domingos</span>
                       <p className="text-[10px] text-slate-500">Pausa os envios no fim de semana e retoma na segunda, mesmo com disparo em andamento.</p>
                     </div>
                   </label>
                   <label className="flex items_center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={expirePause} onChange={e => setExpirePause(e.target.checked)} className="w-4 h-4 text-[#EE4D2D] border-slate-300 rounded focus:ring-[#EE4D2D]" />
+                    <input type="checkbox" checked={expirePause} onChange={e => setExpirePause(e.target.checked)} className="w-4 h-4 text-[var(--primary)] border-slate-300 rounded focus:ring-[var(--primary)]" />
                     <div className="flex-1">
                       <span className="text-xs font-bold text-slate-900">Não enviar ofertas expiradas</span>
                       <p className="text-[10px] text-slate-500">Deals do dia deixam de ser enviados depois do horário de validade, evitando mandar link que já saiu de promoção.</p>
@@ -415,7 +415,7 @@ export const DispararWizard: React.FC<DispararWizardProps> = ({
             type="button"
             onClick={step === 3 ? handleExecute : handleNext}
             disabled={step === 3 && selectedGroups.length === 0}
-            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-black ${step === 3 ? 'bg-[#EE4D2D] text-white hover:bg-orange-600' : 'bg-[#EE4D2D] text-white hover:bg-orange-600'}`}
+            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-black ${step === 3 ? 'bg-[var(--primary)] text-white hover:bg-orange-600' : 'bg-[var(--primary)] text-white hover:bg-orange-600'}`}
           >
             {step === 3 ? (
               <>

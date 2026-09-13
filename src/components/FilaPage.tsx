@@ -66,7 +66,7 @@ const marketplaceLabel = (m?: string) =>
   : (m || '—');
 
 const marketplaceDot = (m?: string) =>
-  m === 'shopee' ? 'bg-[#ee4d2d]'
+  m === 'shopee' ? 'bg-[var(--primary)]'
   : m === 'mercado_livre' ? 'bg-[#ffe600]'
   : m === 'amazon' ? 'bg-[#ff9900]'
   : m === 'magalu' ? 'bg-[#0086ff]'

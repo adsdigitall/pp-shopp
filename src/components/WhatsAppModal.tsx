@@ -61,7 +61,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               </div>
               <button
                 onClick={onConnect}
-                className="rounded-xl bg-[#EE4D2D] px-6 py-2.5 text-xs font-black text-white hover:bg-orange-600 flex items-center justify-center gap-2 mx-auto"
+                className="rounded-xl bg-[var(--primary)] px-6 py-2.5 text-xs font-black text-white hover:bg-orange-600 flex items-center justify-center gap-2 mx-auto"
               >
                 <Smartphone className="w-4 h-4" /> Conectar WhatsApp
               </button>

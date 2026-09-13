@@ -26,3 +26,8 @@ dist-ssr
 *.sw?
 .vercel
 .env*
+
+# Gerados pelo DataStore local (dev sem Supabase)
+data/api_tokens.json
+data/dispatch_automations.json
+data/extension_tags.json

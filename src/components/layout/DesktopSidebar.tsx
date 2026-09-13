@@ -141,101 +141,104 @@ export function DesktopSidebar({
     );
   };
 
+  const itemClass = (isActive: boolean) =>
+    cn(
+      "group relative flex h-[42px] w-full items-center gap-3 rounded-xl border px-3 text-left text-sm transition-colors duration-150",
+      isActive
+        ? "border-[var(--border-brand)] bg-[var(--surface-active)] font-semibold text-[var(--brand-400)]"
+        : "border-transparent font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-title)]",
+    );
+  const iconClass = (isActive: boolean) =>
+    cn("h-[18px] w-[18px] shrink-0", isActive ? "text-[var(--brand-500)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-title)]");
+
   return (
     <>
       {mobileOpen && (
-        <button type="button" aria-label="Fechar navegação" onClick={onToggleMobile} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden" />
+        <button type="button" aria-label="Fechar navegação" onClick={onToggleMobile} className="fixed inset-0 z-40 bg-[var(--surface-scrim)] backdrop-blur-sm md:hidden" />
       )}
       <button
         type="button"
         onClick={onToggleMobile}
         aria-label="Abrir navegação"
-        className="fixed left-2 top-14 z-40 grid h-9 w-9 place-items-center rounded-lg bg-sidebar text-sidebar-foreground shadow-lg border border-sidebar-border md:hidden"
+        className="fixed left-2 top-14 z-40 grid h-9 w-9 place-items-center rounded-xl border border-[var(--border-default)] bg-[var(--surface-card-raised)] text-[var(--text-title)] shadow-lg md:hidden"
       >
         ☰
       </button>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-sidebar-border bg-sidebar px-2 py-3 text-sidebar-foreground",
+          "fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 py-3 text-[var(--text-body)]",
           mobileOpen ? "flex" : "hidden",
           "md:flex",
           className
         )}
       >
-        <div className="flex items-center gap-2 px-1 pb-3">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-white shadow-sm">
-            <ShoppingBag className="h-5 w-5" />
-          </div>
+        <div className="flex items-center gap-2.5 px-2 pb-3 pt-1">
+          <img src="/brand/logo-mark-alpha.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
           <div className="min-w-0">
-            <div className="truncate text-sm font-black">
-              <span className="text-primary">Radar</span>{' '}
-              <span className="text-sidebar-foreground">de Oferta</span>
+            <div className="truncate text-base font-extrabold leading-tight text-[var(--text-title)]">
+              <span className="text-[var(--brand-500)]">Radar</span> de Oferta
             </div>
-            <div className="truncate text-[8px] font-medium text-sidebar-foreground/60">Painel de afiliados</div>
+            <div className="truncate text-[11px] text-[var(--text-muted)]">Automação para Afiliados</div>
           </div>
         </div>
-        <div className="border-t border-sidebar-border" />
-        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-2">
+        <div className="border-t border-[var(--border-subtle)]" />
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2">
           {navigation.map((group, groupIndex) => (
-            <div key={group.key} className={groupIndex > 0 ? "pt-4 border-t border-sidebar-border" : ""}>
-              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+            <div key={group.key} className={groupIndex > 0 ? "pt-2" : ""}>
+              <p className="px-2 pb-1.5 pt-2 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
                 {group.label}
               </p>
-              <div className="space-y-0.5">
-                {group.items.map((item) => (
-                  <button
-                    key={item.href}
-                    type="button"
-                    onClick={() => handleClick(normalizeSection(item.href))}
-                    className={cn(
-                      "group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition-all duration-200",
-                      activeSection === normalizeSection(item.href)
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-primary"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                    )}
-                  >
-                    <item.icon className={cn("h-4 w-4 shrink-0", activeSection === normalizeSection(item.href) ? "text-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground")} />
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                ))}
+              <div className="space-y-[3px]">
+                {group.items.map((item) => {
+                  const isActive = activeSection === normalizeSection(item.href);
+                  return (
+                    <button
+                      key={item.href}
+                      type="button"
+                      onClick={() => handleClick(normalizeSection(item.href))}
+                      className={itemClass(isActive)}
+                    >
+                      <item.icon className={iconClass(isActive)} />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}
-          <div className="mt-auto space-y-0.5 border-t border-sidebar-border pt-2">
-            {bottomItems.map((item) => (
-              <button
-                key={item.href}
-                type="button"
-                onClick={() => handleClick(normalizeSection(item.href))}
-                className={cn(
-                  "group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition-all duration-200",
-                  activeSection === normalizeSection(item.href)
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-primary"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                )}
-              >
-                <item.icon className={cn("h-4 w-4 shrink-0", activeSection === normalizeSection(item.href) ? "text-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground")} />
-                {item.label}
-              </button>
-            ))}
+          <div className="mt-auto space-y-[3px] border-t border-[var(--border-subtle)] pt-2">
+            {bottomItems.map((item) => {
+              const isActive = activeSection === normalizeSection(item.href);
+              return (
+                <button
+                  key={item.href}
+                  type="button"
+                  onClick={() => handleClick(normalizeSection(item.href))}
+                  className={itemClass(isActive)}
+                >
+                  <item.icon className={iconClass(isActive)} />
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </nav>
-        <div className="mt-2 flex items-center gap-2 border-t border-sidebar-border px-1 pt-3">
-          <div className="grid h-7 w-7 place-items-center rounded-full bg-primary text-[10px] font-black text-white">
+        <div className="mt-2 flex items-center gap-2.5 border-t border-[var(--border-subtle)] px-1 pt-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[image:var(--gradient-brand)] text-xs font-extrabold text-white">
             CM
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[11px] font-bold text-sidebar-foreground">
+            <div className="truncate text-[13px] font-semibold text-[var(--text-title)]">
               Carolina de assunção macedo
             </div>
-            <div className="text-[8px] font-semibold text-primary">
-              PRO · Afiliado Viral
+            <div className="text-[11px] text-[var(--text-muted)]">
+              Afiliado Pro
             </div>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto text-sidebar-foreground/60 hover:text-sidebar-foreground"
+            className="ml-auto text-[var(--text-secondary)] hover:text-[var(--text-title)]"
             onClick={onNotifications}
             aria-label="Notificações"
           >

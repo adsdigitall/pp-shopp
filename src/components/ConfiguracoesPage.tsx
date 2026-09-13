@@ -840,7 +840,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
           <div className="space-y-4">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <div className="flex items-center gap-3 mb-4">
-                <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-[#ff6b45] to-[#EE4D2D] text-lg text-white">
+                <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-[var(--brand-400)] to-[var(--primary)] text-lg text-white">
                   CM
                 </div>
                 <div>

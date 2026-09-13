@@ -191,7 +191,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
         {/* Top Header */}
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#FF5722] to-[#FF7A00] flex items-center justify-center text-white shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[var(--brand-400)] to-[var(--brand-500)] flex items-center justify-center text-white shadow-2xs">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
@@ -254,7 +254,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
                   {/* Badges on image */}
                   {imageStyle !== 'original' && offer.discountBadge && (
                     <div className="absolute top-2.5 left-2.5">
-                      <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-[#EE4D2D] text-white shadow-md shadow-orange-600/40">
+                      <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-[var(--primary)] text-white shadow-md shadow-orange-600/40">
                         {offer.discountBadge}
                       </span>
                     </div>
@@ -296,7 +296,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
               disabled={isRegeneratingCopy}
               className="py-2.5 px-3 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-xs font-bold rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-[#EE4D2D] ${isRegeneratingCopy ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-[var(--primary)] ${isRegeneratingCopy ? 'animate-spin' : ''}`} />
               <span>{isRegeneratingCopy ? 'Gerando...' : 'Regenerar copy'}</span>
             </button>
 
@@ -306,7 +306,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
               disabled={isRegeneratingImage}
               className="py-2.5 px-3 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-xs font-bold rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
             >
-              <ImageIcon className={`w-3.5 h-3.5 text-[#EE4D2D] ${isRegeneratingImage ? 'animate-spin' : ''}`} />
+              <ImageIcon className={`w-3.5 h-3.5 text-[var(--primary)] ${isRegeneratingImage ? 'animate-spin' : ''}`} />
               <span>{isRegeneratingImage ? 'Trocando...' : 'Regenerar imagem'}</span>
             </button>
           </div>
@@ -344,7 +344,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
               href={offer.affiliateLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 text-slate-400 hover:text-[#EE4D2D]"
+              className="p-1.5 text-slate-400 hover:text-[var(--primary)]"
               title="Testar link"
             >
               <ExternalLink className="w-4 h-4" />
@@ -375,7 +375,7 @@ export const OfferPreviewModal: React.FC<OfferPreviewModalProps> = ({
           <button
             type="button"
             onClick={handleShare}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#EE4D2D] hover:from-[#EE4D2D] hover:to-[#D73211] active:scale-[0.98] text-white font-black text-xs sm:text-sm shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-[var(--brand-400)] to-[var(--primary)] hover:from-[var(--primary)] hover:to-[var(--brand-600)] active:scale-[0.98] text-white font-black text-xs sm:text-sm shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             <Share2 className="w-4 h-4" />
             <span>Compartilhar</span>

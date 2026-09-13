@@ -7,14 +7,14 @@ export const HowItWorks: React.FC<{ onStepClick?: (step: number) => void }> = ({
       num: 1,
       title: 'Escolha',
       desc: 'Escolha um produto.',
-      icon: <ShoppingCart className="w-5 h-5 text-[#EE4D2D]" />,
+      icon: <ShoppingCart className="w-5 h-5 text-[var(--primary)]" />,
       bg: 'bg-orange-50',
     },
     {
       num: 2,
       title: 'Revisa',
       desc: 'Revise os detalhes.',
-      icon: <ClipboardList className="w-5 h-5 text-[#EE4D2D]" />,
+      icon: <ClipboardList className="w-5 h-5 text-[var(--primary)]" />,
       bg: 'bg-orange-50',
     },
     {
@@ -49,7 +49,7 @@ export const HowItWorks: React.FC<{ onStepClick?: (step: number) => void }> = ({
           <button type="button" key={step.num} onClick={() => onStepClick?.(step.num)} className="flex flex-col items-center text-center relative group cursor-pointer">
             
             {/* Step Number Badge */}
-            <div className="w-5 h-5 rounded-full bg-[#EE4D2D] text-white text-[11px] font-bold flex items-center justify-center mb-2 shadow-xs ring-2 ring-white">
+            <div className="w-5 h-5 rounded-full bg-[var(--primary)] text-white text-[11px] font-bold flex items-center justify-center mb-2 shadow-xs ring-2 ring-white">
               {step.num}
             </div>
 

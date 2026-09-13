@@ -61,7 +61,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
   const dateLine = dateRaw.charAt(0).toUpperCase() + dateRaw.slice(1);
 
   const stats = [
-    { label: 'Disparos hoje', value: dispatchCount, icon: Send, tint: 'bg-[rgba(255,94,20,.12)] text-[#ff8a3d]' },
+    { label: 'Disparos hoje', value: dispatchCount, icon: Send, tint: 'bg-[var(--surface-brand-soft)] text-[var(--brand-400)]' },
     { label: 'Grupos ativos', value: groupsCount, icon: Users, tint: 'bg-[rgba(56,189,248,.12)] text-sky-400' },
     { label: 'Cliques no link', value: clicksCount, icon: Link2, tint: 'bg-[rgba(167,139,250,.12)] text-violet-400' },
     { label: 'Ofertas na fila', value: queuedCount, icon: Layers3, tint: 'bg-[rgba(251,191,36,.12)] text-amber-400' },
@@ -106,7 +106,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
       <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
         <div
           className="overflow-hidden rounded-[1.125rem] border border-white/15"
-          style={{ background: 'linear-gradient(120deg,#ff7a1a 0%,#f93a0b 55%,#c81e1e 100%)' }}
+          style={{ background: 'linear-gradient(120deg,var(--brand-400) 0%,var(--brand-500) 55%,var(--brand-700) 100%)' }}
         >
           <div className="flex flex-col gap-5 p-5 sm:p-6 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0 max-w-md">
@@ -122,7 +122,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
               <button
                 type="button"
                 onClick={onNavigateToGarimpar}
-                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-[#d93d1f] shadow-lg transition hover:brightness-95 active:scale-[.98]"
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-[var(--brand-600)] shadow-lg transition hover:brightness-95 active:scale-[.98]"
               >
                 Garimpar agora
                 <ArrowRight className="h-4 w-4" />
@@ -257,7 +257,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
             onClick={action}
             className="panel flex min-h-[86px] items-center gap-2.5 p-3 text-left transition hover:border-[rgba(255,94,20,.35)]"
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[rgba(255,94,20,.12)] text-[#ff8a3d]">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--surface-brand-soft)] text-[var(--brand-400)]">
               <Icon className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
@@ -306,7 +306,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${
                   dispatchDone
                     ? 'bg-[rgba(34,197,94,.12)] text-[var(--success)]'
-                    : 'bg-[rgba(255,94,20,.12)] text-[var(--primary)]'
+                    : 'bg-[var(--surface-brand-soft)] text-[var(--primary)]'
                 }`}
               >
                 <Send className="h-4 w-4" />
