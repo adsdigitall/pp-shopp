@@ -42,6 +42,7 @@ import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from '
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
+import { AUTOMATION_DISCOVERY_FILTER, automationSearchTerms } from './services/automation/categories.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2769,15 +2770,6 @@ async function runAutomaticOfferDiscovery() {
       try {
         const categories = Array.isArray(config.categories) ? config.categories : [];
         const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
-        // Migra ids legados (slugs com hífen) pras palavras-chave atuais.
-        const LEGACY_CATEGORY_KEYWORDS = {
-          'casa-cozinha': 'casa e cozinha',
-          'beleza-autocuidado': 'beleza',
-          'organizacao': 'organizadores',
-          'moda-feminina': 'moda feminina barata',
-          'utilidades': 'utilidades domésticas',
-          'maternidade-infantil': 'maternidade e infantil',
-        };
         // Faixa desligada no horário atual pausa a descoberta (antes caía no
         // fallback de categorias gerais e o interruptor não surtia efeito).
         const activeSlot = automationSlotAt(config);
@@ -2789,20 +2781,33 @@ async function runAutomaticOfferDiscovery() {
         const scheduledCategories = activeSlot?.categories || [];
         const categoryPool = scheduledCategories.length ? scheduledCategories : categories;
         const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
-        const selectedCategory = LEGACY_CATEGORY_KEYWORDS[rawCategory] || rawCategory;
-        const categoryPlan = resolveAutomationCategory(selectedCategory, categoryCursor);
-          const numericCategoryId = Number.parseInt(categoryPlan.id, 10);
-          const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
-          // Pool sempre fresco: 3 páginas (150 produtos) + ordenação rotativa.
-          // Só página 1 de "trending" com a mesma keyword devolve sempre os mesmos.
-          const DISCOVERY_FILTERS = ['trending', 'top_sales', 'high_commission'];
-          const discoveryFilter = DISCOVERY_FILTERS[categoryCursor % DISCOVERY_FILTERS.length];
+        const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
+        const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
+        const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
+        const sentKeys = await recentlySentProductKeys(config.userId);
+        const recentDiscoveryKeys = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys.map(String) : []);
+        const recentTitles = currentQueue
+          .filter(entry => entry?.source === 'automatic_discovery' || entry?.publishedAt)
+          .slice(0, 20)
+          .map(entry => entry.productName || entry.name || entry.title)
+          .filter(Boolean);
+        // Quantas ofertas da categoria entram por ciclo (configurável na tela).
+        const batchSize = Math.min(50, Math.max(1, Math.round(Number(config.batchSize) || 10)));
+        const blocked = { repeats: 0, gate: {}, other: 0 };
+        let scanned = 0;
+        let offers = [];
+        let searchedTerm = rawCategory;
+        // Busca curta por ciclo; se nada passar no gate, tenta a próxima busca da
+        // categoria no mesmo ciclo em vez de ficar 1 intervalo inteiro sem disparo.
+        for (const term of automationSearchTerms(rawCategory, categoryCursor).slice(0, 3)) {
+          searchedTerm = term;
+          const numericCategoryId = /^\d+$/.test(term) ? Number.parseInt(term, 10) : NaN;
           const rawNodes = [];
           const seenNodeIds = new Set();
           for (const discoveryPage of [1, 2, 3]) {
             const { nodes: pageNodes } = await searchProductOffers({
-              keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : categoryPlan.keywords,
-              filter: discoveryFilter, page: discoveryPage, limit: 50,
+              keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : term,
+              filter: AUTOMATION_DISCOVERY_FILTER, page: discoveryPage, limit: 50,
               categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
               config: discoveryConfig,
             });
@@ -2816,16 +2821,9 @@ async function runAutomaticOfferDiscovery() {
             }
             if (pageNodes.length < 50) break;
           }
-          const nodes = rawNodes;
-          const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
-          const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
-          const sentKeys = await recentlySentProductKeys(config.userId);
-          const recentDiscoveryKeys = new Set(Array.isArray(config.recentOfferKeys) ? config.recentOfferKeys.map(String) : []);
-          // Quantas ofertas da categoria entram por ciclo (configurável na tela).
-          const batchSize = Math.min(50, Math.max(1, Math.round(Number(config.batchSize) || 10)));
-          const blocked = { repeats: 0, gate: {}, other: 0 };
-          const normalized = normalizeProductOffers(nodes, 'trending');
-          const offers = normalized
+          const normalized = normalizeProductOffers(rawNodes, 'trending');
+          scanned += normalized.length;
+          offers = normalized
             .filter(item => {
               if (!isBrazilianOffer(item)) { blocked.other += 1; return false; }
               if (!String(item?.title || '').trim()) { blocked.other += 1; return false; }
@@ -2836,11 +2834,6 @@ async function runAutomaticOfferDiscovery() {
                 return false;
               }
               const key = dispatchProductKey(item);
-              const recentTitles = currentQueue
-                .filter(entry => entry?.source === 'automatic_discovery' || entry?.publishedAt)
-                .slice(0, 20)
-                .map(entry => entry.productName || entry.name || entry.title)
-                .filter(Boolean);
               const fresh = item?.id
                 && !queuedKeys.has(key)
                 && !sentKeys.has(key)
@@ -2851,14 +2844,16 @@ async function runAutomaticOfferDiscovery() {
             })
             .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
             .slice(0, batchSize);
-          const lastDiscovery = {
-            at: new Date().toISOString(),
-            category: categoryPlan.keywords || categoryPlan.id,
-            filter: discoveryFilter,
-            scanned: normalized.length,
-            kept: offers.length,
-            blocked,
-          };
+          if (offers.length) break;
+        }
+        const lastDiscovery = {
+          at: new Date().toISOString(),
+          category: searchedTerm || rawCategory,
+          filter: AUTOMATION_DISCOVERY_FILTER,
+          scanned,
+          kept: offers.length,
+          blocked,
+        };
         if (!offers.length) {
           await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt, categoryCursor: categoryCursor + 1, lastDiscovery });
           const gateTop = Object.entries(blocked.gate).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([reason, count]) => `${reason} (${count})`).join(', ');
@@ -4077,36 +4072,6 @@ function isSimilarToRecentTitle(title, recentTitles = []) {
     const union = new Set([...tokens, ...previousTokens]).size;
     return union > 0 && intersection / union >= 0.65;
   });
-}
-
-// Mix de categorias para o pÃºblico feminino, priorizando compras low-ticket.
-const AUTOMATION_CATEGORY_PLAN = [
-  { id: 'casa-cozinha', keywords: 'casa cozinha organizador pote escorredor utensílio garrafa copo forma panela suporte prateleira' },
-  { id: 'beleza-autocuidado', keywords: 'beleza autocuidado escova secador chapinha maquiagem espelho skincare necessaire unha cabelo' },
-  { id: 'organizacao', keywords: 'organização colmeia gaveta armário sapateira caixa cabide geladeira' },
-  { id: 'moda-feminina', keywords: 'moda feminina bolsa carteira chinelo pijama legging top vestido acessórios' },
-  { id: 'utilidades', keywords: 'utilidades mini ventilador luminária extensão carregador suporte celular carro garrafa' },
-  { id: 'maternidade-infantil', keywords: 'maternidade infantil organizador copo brinquedo material escolar rotina' },
-  { id: 'cama-mesa-banho', keywords: 'cama mesa banho toalha lençol tapete pano cozinha' },
-  { id: 'banheiro', keywords: 'banheiro organizador suporte escova sabonete tapete' },
-  { id: 'acessorios-femininos', keywords: 'acessórios femininos brinco colar presilha bolsa carteira' },
-  { id: 'eletronicos-baratos', keywords: 'eletrônicos baratos carregador fone suporte celular luminária' },
-  { id: 'compra-por-impulso', keywords: 'achadinhos baratos oferta relâmpago desconto utilidade presente até 50 reais' },
-  { id: 'melhores-ofertas', keywords: 'melhores ofertas promoção desconto cupom mais vendidos' },
-  { id: 'ofertas-fortes', keywords: 'oferta relâmpago desconto alto promoção imperdível mais vendidos' },
-];
-// Alterna uma categoria por ciclo para evitar lotes repetidos do mesmo nicho.
-const AUTOMATION_CATEGORY_SLOTS = AUTOMATION_CATEGORY_PLAN.map((_, index) => index);
-
-// Janelas padrão e normalização de faixas vivem em services/automation/config.mjs
-// (testáveis e com fonte única junto das demais regras da automação).
-
-function resolveAutomationCategory(value, cursor) {
-  const raw = String(value || '').trim().toLowerCase();
-  const selected = AUTOMATION_CATEGORY_PLAN.find(item => item.id === raw);
-  if (selected) return selected;
-  if (!raw) return AUTOMATION_CATEGORY_PLAN[AUTOMATION_CATEGORY_SLOTS[Math.max(0, cursor) % AUTOMATION_CATEGORY_SLOTS.length]];
-  return { id: raw, keywords: raw };
 }
 
 // A garimpagem automática deve permanecer restrita ao catálogo brasileiro.
