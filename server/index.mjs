@@ -3242,6 +3242,9 @@ async function processDispatchJob(jobId) {
 
   for (let offerIndex = 0; offerIndex < offers.length; offerIndex++) {
     const offer = offers[offerIndex];
+    // Retomada após restart revisita ofertas já enviadas (deduplicadas): sem envio
+    // real não há intervalo nem mensagem de relacionamento a repetir.
+    let deliveredThisOffer = false;
     for (let i = 0; i < groups.length; i++) {
     if (await dispatchWasCancelled(job)) return;
     if (job.source === 'queue_automation') {
@@ -3329,9 +3332,11 @@ async function processDispatchJob(jobId) {
         const result = await sendToWhatsAppGroup(group.id, msg, imageUrl, sessionName);
         job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, clickId: trackedClickId, sessionId: sessionName, messageId: result?.id || result?.key?.id || null, status: 'sent', sentAt: new Date().toISOString(), attempts: 1 });
         job.stats.sent++;
+        deliveredThisOffer = true;
       } catch (e) {
         job.attempts.push({ offerId: offer.id, productKey: dispatchProductKey(offer), marketplace: offer.marketplace || 'shopee', category: offer.category || '', offerScore: offer.offerScore ?? scoreAutomationOffer(offer), groupId: group.id, sessionId: destinations.sessionId || group.sessionId || WAHA_SESSION, messageId: null, status: 'failed', sentAt: new Date().toISOString(), attempts: 1, error: e.message });
         job.stats.failed++;
+        deliveredThisOffer = true;
       }
       deliveryIndex++;
       job.stats.pending = Math.max(0, totalDeliveries - deliveryIndex);
@@ -3339,7 +3344,7 @@ async function processDispatchJob(jobId) {
       await DispatchStore.save(job);
       
     }
-    if (offerIndex + 1 >= nextHumanMessageAt && offerIndex < offers.length - 1) {
+    if (deliveredThisOffer && offerIndex + 1 >= nextHumanMessageAt && offerIndex < offers.length - 1) {
       const humanMessage = getSafeHumanMessage(offerIndex, job.source === 'queue_automation' && destinations.humanTone !== false);
       for (const group of groups) {
         try {
@@ -3352,7 +3357,7 @@ async function processDispatchJob(jobId) {
       }
       nextHumanMessageAt += humanMin + Math.floor(Math.random() * (humanMax - humanMin + 1));
     }
-    if (destinations.humanMessageAfter === true && offerIndex === offers.length - 1) {
+    if (deliveredThisOffer && destinations.humanMessageAfter === true && offerIndex === offers.length - 1) {
       const humanMessage = getSafeHumanMessage(Number(job.createdAt?.replace(/\D/g, '').slice(-6)) || 0, job.source === 'queue_automation' && destinations.humanTone !== false);
       for (const group of groups) {
         try {
@@ -3366,7 +3371,7 @@ async function processDispatchJob(jobId) {
     }
     // Aguarda somente depois de enviar a oferta para todos os grupos.
     // O intervalo não pode separar os grupos da mesma oferta.
-    if (offerIndex < offers.length - 1 && await sleepUntilNextDispatch(job, intervalMs)) return;
+    if (deliveredThisOffer && offerIndex < offers.length - 1 && await sleepUntilNextDispatch(job, intervalMs)) return;
   }
 
   job.status = 'completed';

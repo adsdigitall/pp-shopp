@@ -23,6 +23,21 @@ test('dispatch interval is applied after all groups receive the offer', async ()
   const loopEnd = source.indexOf('\n  job.status = \'completed\';', loopStart);
   const loop = source.slice(loopStart, loopEnd);
   assert.ok(loopStart >= 0 && loopEnd > loopStart);
-  assert.match(loop, /if \(offerIndex < offers.length - 1 && await sleepUntilNextDispatch\(job, intervalMs\)\)/);
+  assert.match(loop, /if \(deliveredThisOffer && offerIndex < offers.length - 1 && await sleepUntilNextDispatch\(job, intervalMs\)\)/);
   assert.doesNotMatch(loop.slice(0, loop.lastIndexOf('    }')), /if \(deliveryIndex < totalDeliveries && await sleepUntilNextDispatch/);
+});
+
+test('retomada após restart não espera intervalo nem repete relacionamento em oferta só deduplicada', async () => {
+  const source = await readFile(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  const loopStart = source.indexOf('for (let offerIndex = 0; offerIndex < offers.length; offerIndex++)');
+  const loopEnd = source.indexOf('\n  job.status = \'completed\';', loopStart);
+  const loop = source.slice(loopStart, loopEnd);
+  const dedupStart = loop.indexOf("status: 'deduplicated'");
+  const dedupBranch = loop.slice(dedupStart, loop.indexOf('continue;', dedupStart));
+  assert.match(loop, /let deliveredThisOffer = false;/);
+  assert.doesNotMatch(dedupBranch, /deliveredThisOffer = true/);
+  assert.match(loop, /job\.stats\.sent\+\+;\s*deliveredThisOffer = true;/);
+  assert.match(loop, /job\.stats\.failed\+\+;\s*deliveredThisOffer = true;/);
+  assert.match(loop, /if \(deliveredThisOffer && offerIndex \+ 1 >= nextHumanMessageAt/);
+  assert.match(loop, /if \(deliveredThisOffer && destinations\.humanMessageAfter === true/);
 });

@@ -252,8 +252,12 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   };
 
   const handleCancelDispatch = async (jobIds: string | string[]) => {
-    if (!window.confirm('Cancelar este disparo? Os envios já concluídos serão mantidos, mas nenhum item pendente será enviado.')) return;
     const ids = Array.isArray(jobIds) ? jobIds : [jobIds];
+    // O card automático agrupa vários jobs: o aviso precisa dizer quantos param.
+    const confirmText = ids.length > 1
+      ? `Cancelar os ${ids.length} disparos automáticos da fila? Os envios já concluídos serão mantidos, mas nenhuma dessas ofertas será enviada. A automação continua ligada e volta a garimpar no próximo ciclo.`
+      : 'Cancelar este disparo? Os envios já concluídos serão mantidos, mas nenhum item pendente será enviado.';
+    if (!window.confirm(confirmText)) return;
     const requestId = ids.join('|');
     setCancellingJobId(requestId);
     try {
