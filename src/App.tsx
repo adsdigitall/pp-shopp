@@ -188,9 +188,10 @@ export function App() {
   // Fechamento funcional: histórico real para Visão Geral (sem mock).
   // Fonte: GET /api/dispatch/history. Se indisponível, mantém [] neutro.
   const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
-  // Cliques reais para Visão Geral (sem inventar valor).
-  // Fonte: GET /api/analytics/overview -> totalClicks. Fallback neutro: 0.
-  const [overviewClicks, setOverviewClicks] = useState(0);
+  // Vendas reais da Shopee nos últimos 7 dias (relatório de conversões).
+  // Links dos grupos saem sem rastreamento do Radar, então não há clique a mostrar.
+  // null = ainda não carregou ou falhou: a tela mostra "—", nunca um 0 inventado.
+  const [weeklySales, setWeeklySales] = useState<{ count: number; commission: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,13 +200,6 @@ export function App() {
       .then((body) => {
         if (cancelled) return;
         if (Array.isArray(body?.history)) setDispatchHistory(body.history);
-      })
-      .catch(() => undefined);
-    fetch('/api/analytics/overview?hours=168', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        if (cancelled) return;
-        if (Number.isFinite(Number(body?.totalClicks))) setOverviewClicks(Number(body.totalClicks));
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -343,6 +337,11 @@ export function App() {
         if (!response.ok) return;
         const body = await response.json();
         const sales = Array.isArray(body.sales) ? body.sales : [];
+        const validSales = sales.filter((sale: any) => String(sale.conversionStatus || '').toUpperCase() !== 'CANCELLED');
+        setWeeklySales({
+          count: validSales.length,
+          commission: validSales.reduce((sum: number, sale: any) => sum + (Number(sale.netCommission ?? sale.totalCommission) || 0), 0),
+        });
         for (const sale of sales) {
           const id = String(sale.conversionId || sale.checkoutId || '');
           if (!id || seenSalesRef.current.has(id)) continue;
@@ -839,7 +838,7 @@ export function App() {
           queuedCount={queueItems.length}
           dispatchCount={dispatchHistory.filter((job: any) => job.createdAt && new Date(job.createdAt).toDateString() === new Date().toDateString()).length}
           groupsCount={groups.length}
-          clicksCount={overviewClicks}
+          weeklySales={weeklySales}
           whatsappConnected={whatsappConnected}
           shopeeConfigured={shopeeConfigured}
           latestDispatch={dispatchHistory[0]}

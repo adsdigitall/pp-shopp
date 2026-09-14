@@ -5,7 +5,6 @@ import {
   CalendarDays,
   Clock3,
   Layers3,
-  Link2,
   Send,
   Settings,
   Store,
@@ -32,7 +31,7 @@ interface VisaoGeralProps {
   queuedCount: number;
   dispatchCount: number;
   groupsCount: number;
-  clicksCount: number;
+  weeklySales: { count: number; commission: number } | null;
   whatsappConnected: boolean;
   shopeeConfigured: boolean;
   latestDispatch?: { status?: string; createdAt?: string };
@@ -47,7 +46,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
   queuedCount,
   dispatchCount,
   groupsCount,
-  clicksCount,
+  weeklySales,
   whatsappConnected,
   shopeeConfigured,
   latestDispatch,
@@ -63,7 +62,14 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
   const stats = [
     { label: 'Disparos hoje', value: dispatchCount, icon: Send, tint: 'bg-[var(--surface-brand-soft)] text-[var(--brand-400)]' },
     { label: 'Grupos ativos', value: groupsCount, icon: Users, tint: 'bg-[rgba(56,189,248,.12)] text-sky-400' },
-    { label: 'Cliques no link', value: clicksCount, icon: Link2, tint: 'bg-[rgba(167,139,250,.12)] text-violet-400' },
+    {
+      label: 'Vendas (7 dias)',
+      value: weeklySales?.count ?? 0,
+      display: weeklySales ? String(weeklySales.count) : '—',
+      hint: weeklySales ? `Comissão ${weeklySales.commission.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : 'Consultando a Shopee',
+      icon: Store,
+      tint: 'bg-[rgba(167,139,250,.12)] text-violet-400',
+    },
     { label: 'Ofertas na fila', value: queuedCount, icon: Layers3, tint: 'bg-[rgba(251,191,36,.12)] text-amber-400' },
   ];
 
@@ -178,7 +184,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
               { value: groupsCount, label: 'grupos ativos' },
-              { value: clicksCount, label: 'cliques no link' },
+              { value: weeklySales ? weeklySales.count : '—', label: 'vendas (7 dias)' },
               { value: queuedCount, label: 'ofertas na fila' },
             ].map((s) => (
               <div key={s.label} className="min-w-0">
@@ -270,14 +276,15 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
 
       {/* 4. Stat cards */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, tint }) => (
+        {stats.map(({ label, value, display, hint, icon: Icon, tint }) => (
           <div key={label} className="panel flex items-center justify-between gap-2 p-4">
             <div className="min-w-0">
               <span className={`grid h-9 w-9 place-items-center rounded-lg ${tint}`}>
                 <Icon className="h-4 w-4" />
               </span>
               <p className="mt-2.5 truncate text-[11px] font-semibold text-[var(--text-secondary)]">{label}</p>
-              <p className="text-2xl font-black leading-tight text-[var(--foreground)]">{value}</p>
+              <p className="text-2xl font-black leading-tight text-[var(--foreground)]">{display ?? value}</p>
+              {hint && <p className="mt-0.5 truncate text-[11px] text-[var(--text-secondary)]">{hint}</p>}
             </div>
             <div className="hidden shrink-0 sm:block" aria-hidden="true">
               {HAS_REAL_TREND ? <Sparkline values={[0, value]} width={84} height={34} /> : null}
@@ -349,7 +356,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
             </span>
             <p className="mt-2.5 text-sm font-bold text-[var(--foreground)]">Sem dados de desempenho ainda</p>
             <p className="mt-1 max-w-xs text-xs text-[var(--text-secondary)]">
-              Os números da semana aparecem aqui assim que houver disparos e cliques registrados.
+              Os números da semana aparecem aqui assim que houver disparos e vendas registrados.
             </p>
           </div>
           <h3 className="mt-4 text-xs font-black uppercase tracking-wider text-[var(--text-secondary)]">
