@@ -111,3 +111,12 @@ test('dados quebrados não derrubam o painel', () => {
   assert.equal(data.kpis.sales.value, 0);
   assert.deepEqual(data.activity, []);
 });
+
+test('atividade recente reserva as vendas mais recentes mesmo com muitos envios depois', () => {
+  const offers = Array.from({ length: 10 }, (_, i) => ({ id: `o${i}`, title: `Oferta ${i}` }));
+  const attempts = offers.map((offer, i) => sent(offer.id, 'g10', (i + 1) * 60_000));
+  const data = buildDashboard({ period: '7d', now: NOW, conversions: [sale(3 * HOUR, { item: 'Vestido' })], jobs: [job('j1', offers, attempts)] });
+  assert.equal(data.activity.length, 6);
+  assert.equal(data.activity.filter((a) => a.type === 'sale').length, 1);
+  assert.equal(data.activity.at(-1).type, 'sale');
+});

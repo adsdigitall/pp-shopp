@@ -79,6 +79,15 @@ function conversionItems(conversion) {
     .filter(Boolean);
 }
 
+// Envio acontece a cada poucos minutos e empurraria as vendas para fora da lista:
+// reserva lugar para as 2 vendas mais recentes e completa com envios.
+function recentActivity(events, limit = 6) {
+  const newestFirst = [...events].sort((a, b) => b.at.localeCompare(a.at));
+  const sales = newestFirst.filter((event) => event.type === 'sale').slice(0, 2);
+  const others = newestFirst.filter((event) => event.type !== 'sale').slice(0, limit - sales.length);
+  return [...sales, ...others].sort((a, b) => b.at.localeCompare(a.at));
+}
+
 export function buildDashboard({ conversions = [], jobs = [], period = '7d', now = Date.now(), timeZone = 'America/Sao_Paulo' } = {}) {
   const safePeriod = PERIODS[period] ? period : '7d';
   const { labels, locate } = buildWindows(safePeriod, now, timeZone);
@@ -188,7 +197,7 @@ export function buildDashboard({ conversions = [], jobs = [], period = '7d', now
       },
     },
     series: series.map(({ key, label, commission, sales, sends }) => ({ key, label, commission: round2(commission), sales, sends })),
-    activity: activity.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6),
+    activity: recentActivity(activity),
     topProducts: topSold.length ? { kind: 'sold', items: topSold } : { kind: 'sent', items: rank(sentProducts) },
   };
 }

@@ -53,7 +53,8 @@ export function PerformanceChart({ data }: { data: Point[] }) {
 
   const chart = useMemo(() => {
     const maxCommission = niceMax(Math.max(...data.map((p) => p.commission), 0));
-    const maxSales = niceMax(Math.max(...data.map((p) => p.sales), 0));
+    // Vendas são inteiras: múltiplo de 4 deixa os 4 intervalos do eixo sem fração.
+    const maxSales = Math.max(4, Math.ceil(Math.max(...data.map((p) => p.sales), 0) / 4) * 4);
     const innerW = W - PAD.left - PAD.right;
     const innerH = H - PAD.top - PAD.bottom;
     const bottom = PAD.top + innerH;
