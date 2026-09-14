@@ -42,7 +42,7 @@ import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from '
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
-import { AUTOMATION_DISCOVERY_FILTER, automationSearchTerms } from './services/automation/categories.mjs';
+import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
@@ -2675,7 +2675,7 @@ async function handleSaveDispatchAutomation(req, res) {
   }
 }
 
-async function enqueueAutomaticOfferForReview(userId, offer) {
+async function enqueueAutomaticOfferForReview(userId, offer, { gate = {} } = {}) {
   const config = await DispatchAutomationStore.get(userId);
   if (!config?.enabled) return null;
   const productTitle = String(offer?.name || offer?.productName || offer?.title || '').trim();
@@ -2734,7 +2734,8 @@ async function enqueueAutomaticOfferForReview(userId, offer) {
     return item;
   }
 
-  const decision = evaluateAutomationOffer(offer);
+  // Mesmo gate da descoberta: sem isso um essencial de R$ 9 aprovado lá era barrado aqui.
+  const decision = evaluateAutomationOffer(offer, gate);
   if (!decision.approved) {
     logLine(`[AUTOMATION] Oferta ${offer.id} bloqueada antes do disparo: ${decision.reasons.join(', ')}.`);
     return item;
@@ -2799,6 +2800,7 @@ async function runAutomaticOfferDiscovery() {
         const scheduledCategories = activeSlot?.categories || [];
         const categoryPool = scheduledCategories.length ? scheduledCategories : categories;
         const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
+        const categoryRules = automationCategoryRules(rawCategory);
         const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
         const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
         const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
@@ -2845,7 +2847,11 @@ async function runAutomaticOfferDiscovery() {
             .filter(item => {
               if (!isBrazilianOffer(item)) { blocked.other += 1; return false; }
               if (!String(item?.title || '').trim()) { blocked.other += 1; return false; }
-              const evaluation = evaluateAutomationOffer(item);
+              if (categoryRules.requireTitleMatch && !offerMatchesSearchTerm(item.title || item.name, term)) {
+                blocked.gate['Fora do tema da busca'] = (blocked.gate['Fora do tema da busca'] || 0) + 1;
+                return false;
+              }
+              const evaluation = evaluateAutomationOffer(item, categoryRules.gate);
               if (!evaluation.approved) {
                 const reason = evaluation.reasons[0] || 'rejeitada';
                 blocked.gate[reason] = (blocked.gate[reason] || 0) + 1;
@@ -2860,7 +2866,12 @@ async function runAutomaticOfferDiscovery() {
               if (!fresh) { blocked.repeats += 1; return false; }
               return true;
             })
-            .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
+            // Categorias de preço baixo priorizam desconto maior (até +15 pontos).
+            .sort((a, b) => {
+              const rank = (offer) => scoreAutomationOffer(offer)
+                + (categoryRules.preferDiscount ? Math.min(60, Math.max(0, Number(offer?.discountPercentage) || 0)) / 4 : 0);
+              return rank(b) - rank(a);
+            })
             .slice(0, Math.min(batchSize, queueRoom));
           if (offers.length) break;
         }
@@ -2880,7 +2891,7 @@ async function runAutomaticOfferDiscovery() {
         }
         const queuedItems = [];
         for (const offer of offers) {
-          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer);
+          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer, { gate: categoryRules.gate });
           if (queuedItem) queuedItems.push(queuedItem);
         }
         await DispatchAutomationStore.save(config.userId, {

@@ -11,7 +11,7 @@ test('automatic discovery dispatches approved offers in auto mode', async () => 
   assert.ok(start >= 0 && sendStart >= 0 && end >= 0);
   assert.match(activePath, /PublicationHistoryStore\.save/);
   assert.match(activePath, /config\.mode !== 'auto'/);
-  assert.match(activePath, /evaluateAutomationOffer\(offer\)/);
+  assert.match(activePath, /evaluateAutomationOffer\(offer, gate\)/);
   assert.match(activePath, /DispatchStore\.save/);
   assert.match(activePath, /resumeDispatchQueue/);
   assert.match(source, /for \(const config of configs\.filter\(item => item\?\.enabled\)\)/);

@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 // os rótulos exibidos continuam humanos. Não mudar os ids sem alinhar com
 // canonicalAutomationCategoryId no backend, senão o salvo não dá match.
 const PRIORITIZED_AUTOMATION_CATEGORIES = [
+  { id: 'essenciais-dia-a-dia', label: 'Essenciais do dia a dia (casa, limpeza, higiene, café)' },
   { id: 'casa-cozinha', label: 'Casa e cozinha (50%)' },
   { id: 'beleza-autocuidado', label: 'Beleza e autocuidado (20%)' },
   { id: 'organizacao', label: 'Organização (15%)' },

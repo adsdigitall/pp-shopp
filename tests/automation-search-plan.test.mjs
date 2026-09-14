@@ -44,3 +44,60 @@ test('sem categoria cai no plano geral, rotacionando por categoria', () => {
 test('descoberta ordena por mais vendidos (trending traz produtos com 0 vendas)', () => {
   assert.equal(AUTOMATION_DISCOVERY_FILTER, 'top_sales');
 });
+
+test('essenciais do dia a dia: buscas validadas, regras próprias e só produto com o nome buscado', async () => {
+  const { automationCategoryRules, offerMatchesSearchTerm } = await import('../server/services/automation/categories.mjs');
+  const plan = AUTOMATION_CATEGORY_PLAN.find(c => c.id === 'essenciais-dia-a-dia');
+  assert.ok(plan, 'categoria essenciais-dia-a-dia existe');
+  for (const term of ['café', 'amaciante', 'shampoo', 'papel higiênico']) assert.ok(plan.terms.includes(term), term);
+  assert.ok(!plan.terms.includes('arroz') && !plan.terms.includes('óleo de soja'), 'mercearia não vende na Shopee');
+
+  const rules = automationCategoryRules('essenciais-dia-a-dia');
+  assert.deepEqual(rules.gate, { preferredMinPrice: 8, preferredMaxPrice: 120, minSales: 500 });
+  assert.equal(rules.requireTitleMatch, true);
+  assert.equal(rules.preferDiscount, true);
+  assert.deepEqual(automationCategoryRules('moda-feminina'), { gate: {}, requireTitleMatch: false, preferDiscount: false });
+
+  assert.equal(offerMatchesSearchTerm('Potes Herméticos Marmita de Vidro 640ml', 'pote hermético'), true);
+  assert.equal(offerMatchesSearchTerm('Papel Higiênico Neve Folha Dupla 12 rolos', 'papel higiênico'), true);
+  assert.equal(offerMatchesSearchTerm('Hidratante Creme Facial Pele de Porcelana', 'arroz'), false);
+  assert.equal(offerMatchesSearchTerm('Kit 50 Formas Descartáveis para Air Fryer', 'ventilador'), false);
+  assert.equal(offerMatchesSearchTerm('Sabão em Pó Omo Lavagem Perfeita 1,6kg', 'sabão em pó'), true);
+  assert.equal(offerMatchesSearchTerm('', 'café'), false);
+});
+
+test('apelidos da tela viram o id da categoria de essenciais', async () => {
+  const { canonicalAutomationCategoryId } = await import('../server/services/automation/config.mjs');
+  assert.equal(canonicalAutomationCategoryId('Essenciais do dia a dia'), 'essenciais-dia-a-dia');
+  assert.equal(canonicalAutomationCategoryId('essenciais'), 'essenciais-dia-a-dia');
+});
+
+test('filtro de tema: termo precisa estar no começo do nome (acessório que só cita o produto fica fora)', async () => {
+  const { offerMatchesSearchTerm } = await import('../server/services/automation/categories.mjs');
+  assert.equal(offerMatchesSearchTerm('Chaleira Elétrica Retrátil 600ml 110v Silenciosa Para Café', 'café'), false);
+  assert.equal(offerMatchesSearchTerm('YESOP Kit Acessórios Banheiro 5 Peças Inox Suporte Papel Higiênico', 'papel higiênico'), false);
+  assert.equal(offerMatchesSearchTerm('Kit Pia 3 Peças Organizador de Plástico Porta Esponja e Detergente', 'esponja'), false);
+  assert.equal(offerMatchesSearchTerm('Body Splash Divine Agapis Beauty 200ml Fragrância Desodorante', 'desodorante'), false);
+  assert.equal(offerMatchesSearchTerm('Garrafa Térmica 800ml/1000ml Inox Aço', 'garrafa térmica'), true);
+  assert.equal(offerMatchesSearchTerm('OralGos Creme Dental 90g Limpeza', 'creme dental'), true);
+  assert.equal(offerMatchesSearchTerm('Kit Jogo Pano De Prato Cozinha Copa', 'pano de prato'), true);
+  assert.equal(offerMatchesSearchTerm('Café Melitta Tradicional 500g', 'café'), true);
+});
+
+test('filtro de tema: nome que começa como acessório (suporte, porta, dispenser...) fica fora', async () => {
+  const { offerMatchesSearchTerm, AUTOMATION_CATEGORY_PLAN: plan } = await import('../server/services/automation/categories.mjs');
+  assert.equal(offerMatchesSearchTerm('Suporte De Papel Higiênico Premium Para Banheiro', 'papel higiênico'), false);
+  assert.equal(offerMatchesSearchTerm('Porta Sabonete Líquido Duplo com Suporte', 'sabonete'), false);
+  assert.equal(offerMatchesSearchTerm('Dispenser Detergente Suporte Para Esponja', 'detergente'), false);
+  assert.equal(offerMatchesSearchTerm('Copo Térmico de Cafe 450 ml Inox', 'café'), false);
+  assert.equal(offerMatchesSearchTerm('Base Amaciante Concentrada 100ml faz 20 litros', 'amaciante'), true);
+  const essenciais = plan.find((c) => c.id === 'essenciais-dia-a-dia').terms;
+  assert.ok(!essenciais.includes('sabão em pó') && !essenciais.includes('absorvente'), 'buscas sem produto real saíram');
+});
+
+test('filtro de tema: acessório depois da marca também fica fora', async () => {
+  const { offerMatchesSearchTerm } = await import('../server/services/automation/categories.mjs');
+  assert.equal(offerMatchesSearchTerm('MEIDOO Suporte para papel higiênico sem furos', 'papel higiênico'), false);
+  assert.equal(offerMatchesSearchTerm('Forma Silicone Sabonete Artesanal', 'sabonete'), false);
+  assert.equal(offerMatchesSearchTerm('Neve Papel Higiênico Folha Dupla 12 rolos', 'papel higiênico'), true);
+});
