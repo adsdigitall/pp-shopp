@@ -43,6 +43,7 @@ import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferF
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
 import { AUTOMATION_DISCOVERY_FILTER, automationSearchTerms } from './services/automation/categories.mjs';
+import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -2768,6 +2769,10 @@ async function runAutomaticOfferDiscovery() {
       const cadence = config.offerInterval || config.interval || { value: 30, unit: 'seconds' };
       const nextDiscoveryAt = new Date(Date.now() + Math.max(10_000, getIntervalMs(cadence))).toISOString();
       try {
+        // Fila já abastecida: não garimpa, senão ofertas envelhecem e saem na
+        // categoria de uma faixa que já passou. Volta a buscar quando esvaziar.
+        const queueRoom = AUTOMATION_QUEUE_TARGET - pendingAutomationJobs(await DispatchStore.list(config.userId || 'default_user', 200));
+        if (queueRoom <= 0) continue;
         const categories = Array.isArray(config.categories) ? config.categories : [];
         const categoryCursor = Math.max(0, Number(config.categoryCursor) || 0);
         // Faixa desligada no horário atual pausa a descoberta (antes caía no
@@ -2843,7 +2848,7 @@ async function runAutomaticOfferDiscovery() {
               return true;
             })
             .sort((a, b) => scoreAutomationOffer(b) - scoreAutomationOffer(a))
-            .slice(0, batchSize);
+            .slice(0, Math.min(batchSize, queueRoom));
           if (offers.length) break;
         }
         const lastDiscovery = {
@@ -3444,6 +3449,9 @@ async function resumeDispatchQueue() {
         return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now());
       });
     if (!nextJob) return;
+    // Oferta automática só sai depois do delay da tela de Automação desde o último envio.
+    if (nextJob.source === 'queue_automation' && nextJob.status !== 'running'
+      && automationPaceWaitMs(jobs, automation?.interval || nextJob.destinations?.interval) > 0) return;
     dispatchJobs.set(nextJob.id, nextJob);
     await processDispatchJob(nextJob.id);
   } catch (error) {
