@@ -45,6 +45,7 @@ import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } 
 import { AUTOMATION_DISCOVERY_FILTER, automationSearchTerms } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
+import { buildDashboard } from './services/analytics/dashboard.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -1637,6 +1638,10 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
 
       // ========== ANALYTICS ENDPOINTS ==========
       // GET /api/analytics/overview - Dashboard metrics
+      if (req.method === 'GET' && pathOnly === '/api/dashboard') {
+        await handleDashboard(req, res);
+        return;
+      }
       if (req.method === 'GET' && pathOnly === '/api/analytics/overview') {
         await handleAnalyticsOverview(req, res);
         return;
@@ -4367,6 +4372,42 @@ const {
 // ========== COUPONS HANDLERS ==========
 
 // ========== ANALYTICS HANDLERS ==========
+
+const dashboardCache = new Map();
+const DASHBOARD_CACHE_MS = 60_000;
+
+async function handleDashboard(req, res) {
+  try {
+    const requested = new URL(req.url || '/', 'http://localhost').searchParams.get('period');
+    const period = ['today', '7d', '30d'].includes(requested) ? requested : '7d';
+    const cached = dashboardCache.get(period);
+    if (cached && Date.now() - cached.at < DASHBOARD_CACHE_MS) {
+      sendJson(res, 200, cached.body);
+      return;
+    }
+    // Janela dupla: período atual + anterior para a comparação.
+    const lookbackDays = period === '30d' ? 60 : period === '7d' ? 14 : 2;
+    let conversions = [];
+    let salesAvailable = true;
+    let salesTruncated = false;
+    try {
+      const config = await loadShopeeConfigForUser('default_user');
+      const { nodes, pageInfo } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - lookbackDays * 86_400 });
+      conversions = nodes;
+      salesTruncated = Boolean(pageInfo?.hasNextPage);
+    } catch (error) {
+      salesAvailable = false;
+      logLine(`[DASHBOARD] Relatório de vendas indisponível: ${error.message}`);
+    }
+    const jobs = await DispatchStore.list('default_user', 5000);
+    const body = { ...buildDashboard({ conversions, jobs, period }), salesAvailable, salesTruncated, generatedAt: new Date().toISOString() };
+    dashboardCache.set(period, { at: Date.now(), body });
+    sendJson(res, 200, body);
+  } catch (err) {
+    logLine(`[DASHBOARD ERROR] ${err.message}`);
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível carregar a visão geral.' } });
+  }
+}
 
 async function handleAnalyticsOverview(req, res) {
   try {

@@ -188,36 +188,6 @@ export function App() {
   // Fechamento funcional: histórico real para Visão Geral (sem mock).
   // Fonte: GET /api/dispatch/history. Se indisponível, mantém [] neutro.
   const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
-  // Vendas reais da Shopee nos últimos 7 dias (relatório de conversões).
-  // Links dos grupos saem sem rastreamento do Radar, então não há clique a mostrar.
-  // null = ainda não carregou ou falhou: a tela mostra "—", nunca um 0 inventado.
-  const [weeklySales, setWeeklySales] = useState<{ count: number; commission: number } | null>(null);
-  // Grupos que receberam oferta de verdade nas últimas 24h (tentativas enviadas).
-  const [activeGroups, setActiveGroups] = useState<{ count: number; names: string[] } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let loading = false;
-    const loadActiveGroups = async () => {
-      if (loading) return;
-      loading = true;
-      try {
-        const response = await fetch('/api/dispatch/active-groups?hours=24', { cache: 'no-store' });
-        if (!response.ok) return;
-        const body = await response.json();
-        if (cancelled || !Array.isArray(body?.groups)) return;
-        setActiveGroups({ count: body.groups.length, names: body.groups.map((group: { name?: string; id: string }) => group.name || group.id) });
-      } catch {
-        // Mantém o último valor válido; falha de rede não vira "0 grupos".
-      } finally {
-        loading = false;
-      }
-    };
-    void loadActiveGroups();
-    const intervalId = window.setInterval(loadActiveGroups, 60_000);
-    return () => { cancelled = true; window.clearInterval(intervalId); };
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     fetch('/api/dispatch/history', { cache: 'no-store' })
@@ -362,11 +332,6 @@ export function App() {
         if (!response.ok) return;
         const body = await response.json();
         const sales = Array.isArray(body.sales) ? body.sales : [];
-        const validSales = sales.filter((sale: any) => String(sale.conversionStatus || '').toUpperCase() !== 'CANCELLED');
-        setWeeklySales({
-          count: validSales.length,
-          commission: validSales.reduce((sum: number, sale: any) => sum + (Number(sale.netCommission ?? sale.totalCommission) || 0), 0),
-        });
         for (const sale of sales) {
           const id = String(sale.conversionId || sale.checkoutId || '');
           if (!id || seenSalesRef.current.has(id)) continue;
@@ -855,18 +820,15 @@ export function App() {
 
       <main className="min-w-0 w-full max-w-none flex-1 space-y-5 px-3 pb-28 pt-4 sm:space-y-6 sm:px-6 sm:pb-10 sm:pt-6 lg:ml-64 lg:px-10 xl:px-12">
         <div className={activeSection === 'visao-geral' ? '' : 'hidden'}><VisaoGeral
+          isActive={activeSection === 'visao-geral'}
           onNavigateToGarimpar={() => { setActiveSection('garimpar'); setMobileSidebarOpen(false); }}
           onNavigateToDispatch={() => { setActiveSection('disparar'); }}
           onNavigateToGroups={() => { setActiveSection('grupos'); setMobileSidebarOpen(false); }}
           onNavigateToQueue={() => { setActiveSection('fila'); setMobileSidebarOpen(false); }}
-          onNavigateToWhatsApp={() => { setActiveSection('whatsapp'); setMobileSidebarOpen(false); window.history.pushState({}, '', '#whatsapp'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onNavigateToMetrics={() => { setActiveSection('metricas'); setMobileSidebarOpen(false); }}
           queuedCount={queueItems.length}
-          dispatchCount={dispatchHistory.filter((job: any) => job.createdAt && new Date(job.createdAt).toDateString() === new Date().toDateString()).length}
-          activeGroups={activeGroups}
-          weeklySales={weeklySales}
           whatsappConnected={whatsappConnected}
           shopeeConfigured={shopeeConfigured}
-          latestDispatch={dispatchHistory[0]}
         /></div>
 
         <div className={activeSection === 'whatsapp' ? '' : 'hidden'}><WhatsAppPage
