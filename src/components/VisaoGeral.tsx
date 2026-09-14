@@ -30,7 +30,7 @@ interface VisaoGeralProps {
   onNavigateToWhatsApp?: () => void;
   queuedCount: number;
   dispatchCount: number;
-  groupsCount: number;
+  activeGroups: { count: number; names: string[] } | null;
   weeklySales: { count: number; commission: number } | null;
   whatsappConnected: boolean;
   shopeeConfigured: boolean;
@@ -45,7 +45,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
   onNavigateToWhatsApp = () => undefined,
   queuedCount,
   dispatchCount,
-  groupsCount,
+  activeGroups,
   weeklySales,
   whatsappConnected,
   shopeeConfigured,
@@ -61,7 +61,14 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
 
   const stats = [
     { label: 'Disparos hoje', value: dispatchCount, icon: Send, tint: 'bg-[var(--surface-brand-soft)] text-[var(--brand-400)]' },
-    { label: 'Grupos ativos', value: groupsCount, icon: Users, tint: 'bg-[rgba(56,189,248,.12)] text-sky-400' },
+    {
+      label: 'Grupos ativos (24h)',
+      value: activeGroups?.count ?? 0,
+      display: activeGroups ? String(activeGroups.count) : '—',
+      hint: activeGroups ? (activeGroups.count ? activeGroups.names.join(', ') : 'Nenhum envio nas últimas 24h') : 'Consultando envios',
+      icon: Users,
+      tint: 'bg-[rgba(56,189,248,.12)] text-sky-400',
+    },
     {
       label: 'Vendas (7 dias)',
       value: weeklySales?.count ?? 0,
@@ -183,7 +190,7 @@ export const VisaoGeral: React.FC<VisaoGeralProps> = ({
           <div className="my-3 h-px bg-[var(--border)]" />
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
-              { value: groupsCount, label: 'grupos ativos' },
+              { value: activeGroups ? activeGroups.count : '—', label: 'grupos ativos (24h)' },
               { value: weeklySales ? weeklySales.count : '—', label: 'vendas (7 dias)' },
               { value: queuedCount, label: 'ofertas na fila' },
             ].map((s) => (

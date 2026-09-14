@@ -192,6 +192,31 @@ export function App() {
   // Links dos grupos saem sem rastreamento do Radar, então não há clique a mostrar.
   // null = ainda não carregou ou falhou: a tela mostra "—", nunca um 0 inventado.
   const [weeklySales, setWeeklySales] = useState<{ count: number; commission: number } | null>(null);
+  // Grupos que receberam oferta de verdade nas últimas 24h (tentativas enviadas).
+  const [activeGroups, setActiveGroups] = useState<{ count: number; names: string[] } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loading = false;
+    const loadActiveGroups = async () => {
+      if (loading) return;
+      loading = true;
+      try {
+        const response = await fetch('/api/dispatch/active-groups?hours=24', { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json();
+        if (cancelled || !Array.isArray(body?.groups)) return;
+        setActiveGroups({ count: body.groups.length, names: body.groups.map((group: { name?: string; id: string }) => group.name || group.id) });
+      } catch {
+        // Mantém o último valor válido; falha de rede não vira "0 grupos".
+      } finally {
+        loading = false;
+      }
+    };
+    void loadActiveGroups();
+    const intervalId = window.setInterval(loadActiveGroups, 60_000);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -837,7 +862,7 @@ export function App() {
           onNavigateToWhatsApp={() => { setActiveSection('whatsapp'); setMobileSidebarOpen(false); window.history.pushState({}, '', '#whatsapp'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           queuedCount={queueItems.length}
           dispatchCount={dispatchHistory.filter((job: any) => job.createdAt && new Date(job.createdAt).toDateString() === new Date().toDateString()).length}
-          groupsCount={groups.length}
+          activeGroups={activeGroups}
           weeklySales={weeklySales}
           whatsappConnected={whatsappConnected}
           shopeeConfigured={shopeeConfigured}

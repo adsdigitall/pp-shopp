@@ -44,6 +44,7 @@ import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroup
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
 import { AUTOMATION_DISCOVERY_FILTER, automationSearchTerms } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
+import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -1319,6 +1320,13 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         const worker = await dataStore.findById('workerStatus', 'dispatch-worker');
         const ageMs = worker?.updatedAt ? Date.now() - new Date(worker.updatedAt).getTime() : Infinity;
         sendJson(res, 200, { running: ageMs < 45_000, lastHeartbeat: worker?.updatedAt || null });
+        return;
+      }
+      // Precisa vir antes de GET /api/dispatch/:id, que casaria "active-groups" como id.
+      if (req.method === 'GET' && pathOnly === '/api/dispatch/active-groups') {
+        const hours = Math.min(168, Math.max(1, Number(new URL(req.url || '/', 'http://localhost').searchParams.get('hours')) || 24));
+        const groups = activeDispatchGroups(await DispatchStore.list('default_user', 200), { hours });
+        sendJson(res, 200, { hours, count: groups.length, groups });
         return;
       }
       if (req.method === 'POST' && /^\/api\/dispatch\/[^/]+\/cancel$/.test(pathOnly)) {
