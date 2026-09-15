@@ -47,6 +47,7 @@ import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } 
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
 import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
+import { summarizeDispatchJob } from './services/analytics/dispatchSummary.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -3590,16 +3591,6 @@ async function handleCancelDispatch(req, res, pathOnly) {
   }
 }
 
-/**
- * Versão leve do job para polling da UI (o job completo com ofertas,
- * tentativas e mensagem passa de 1 MB no histórico e trava o app a cada poll).
- * Mantém tudo que as telas exibem: status, stats, grupos, datas e contagem.
- */
-function summarizeDispatchJob(job) {
-  if (!job || typeof job !== 'object') return job;
-  const { offers, attempts, message, ...rest } = job;
-  return { ...rest, offersCount: Array.isArray(offers) ? offers.length : 0 };
-}
 
 async function handleDispatchHistory(req, res) {
   try {
