@@ -120,3 +120,53 @@ test('atividade recente reserva as vendas mais recentes mesmo com muitos envios 
   assert.equal(data.activity.filter((a) => a.type === 'sale').length, 1);
   assert.equal(data.activity.at(-1).type, 'sale');
 });
+
+test('status real da venda: não pago e cancelado ficam fora da comissão, pago e concluído contam', () => {
+  const data = buildDashboard({
+    period: '7d',
+    now: NOW,
+    conversions: [
+      sale(1 * HOUR, { status: 'PENDING', commission: '2', item: 'Pago' }),
+      sale(2 * HOUR, { status: 'COMPLETED', commission: '3', item: 'Concluido' }),
+      sale(3 * HOUR, { status: 'UNPAID', commission: '5', item: 'NaoPago', itemId: 'i9' }),
+      sale(4 * HOUR, { status: 'CANCELLED', commission: '7', item: 'Cancelado' }),
+    ],
+    jobs: [],
+  });
+  assert.equal(data.kpis.commission.value, 5);
+  assert.equal(data.kpis.sales.value, 2);
+  assert.deepEqual(data.salesSummary, {
+    paid: { count: 1, commission: 2 },
+    completed: { count: 1, commission: 3 },
+    unpaid: { count: 1, commission: 5 },
+    cancelled: { count: 1, commission: 7 },
+  });
+  assert.ok(!data.topProducts.items.some((p) => p.name === 'NaoPago'));
+  const titles = data.activity.filter((a) => a.type === 'sale').map((a) => a.title);
+  assert.deepEqual(titles, ['Venda paga', 'Venda concluída']);
+});
+
+test('lista de vendas traz todas as conversões do período, mais nova primeiro, com status', () => {
+  const conversions = Array.from({ length: 12 }, (_, i) => sale((i + 1) * HOUR, { status: i === 0 ? 'UNPAID' : 'PENDING', commission: '1', item: `P${i}`, itemId: `i${i}` }));
+  conversions.push(sale(10 * DAY, { item: 'Antiga' }));
+  const data = buildDashboard({ period: '7d', now: NOW, conversions, jobs: [] });
+  assert.equal(data.sales.length, 12);
+  assert.equal(data.sales[0].product, 'P0');
+  assert.equal(data.sales[0].status, 'unpaid');
+  assert.equal(data.sales[1].status, 'paid');
+  assert.equal(data.sales[0].commission, 1);
+  assert.equal(data.sales[0].price, 30);
+  assert.equal(data.sales[0].image, 'https://img/i0');
+  assert.ok(!data.sales.some((s) => s.product === 'Antiga'));
+});
+
+test('status pelo pedido quando a conversão não informa', () => {
+  const data = buildDashboard({
+    period: '7d',
+    now: NOW,
+    conversions: [{ ...sale(HOUR, { item: 'X' }), conversionStatus: undefined, orders: [{ orderStatus: 'UNPAID', items: [{ itemId: 'x', itemName: 'X', itemPrice: '10', qty: 1 }] }] }],
+    jobs: [],
+  });
+  assert.equal(data.sales[0].status, 'unpaid');
+  assert.equal(data.kpis.sales.value, 0);
+});

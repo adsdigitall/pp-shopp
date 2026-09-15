@@ -73,6 +73,36 @@ function conversionTime(conversion) {
   return raw < 1e12 ? raw * 1000 : raw;
 }
 
+// Status da Shopee: UNPAID = pedido ainda não pago; PENDING = pago, esperando a
+// entrega para liberar a comissão; COMPLETED = concluído; CANCELLED/INVALID = perdido.
+// Só pago e concluído entram em vendas e comissão.
+const SALE_STATUS = {
+  paid: { tone: 'success', title: 'Venda paga' },
+  completed: { tone: 'success', title: 'Venda concluída' },
+  unpaid: { tone: 'warning', title: 'Aguardando pagamento' },
+  cancelled: { tone: 'danger', title: 'Venda cancelada' },
+};
+
+function normalizeStatus(raw) {
+  const value = String(raw || '').toUpperCase();
+  if (!value) return null;
+  if (value === 'UNPAID') return 'unpaid';
+  if (value === 'COMPLETED') return 'completed';
+  if (value === 'CANCELLED' || value === 'INVALID' || value === 'FRAUD') return 'cancelled';
+  return 'paid';
+}
+
+export function saleStatus(conversion) {
+  const direct = normalizeStatus(conversion?.conversionStatus);
+  if (direct) return direct;
+  const orders = (Array.isArray(conversion?.orders) ? conversion.orders : []).map((o) => normalizeStatus(o?.orderStatus)).filter(Boolean);
+  if (!orders.length) return 'paid';
+  if (orders.includes('unpaid')) return 'unpaid';
+  if (orders.every((s) => s === 'cancelled')) return 'cancelled';
+  if (orders.every((s) => s === 'completed' || s === 'cancelled')) return 'completed';
+  return 'paid';
+}
+
 function conversionItems(conversion) {
   return (Array.isArray(conversion?.orders) ? conversion.orders : [])
     .flatMap((order) => (Array.isArray(order?.items) ? order.items : []))
@@ -98,16 +128,35 @@ export function buildDashboard({ conversions = [], jobs = [], period = '7d', now
   };
   const activity = [];
   const sold = new Map();
+  const sales = [];
+  const summary = Object.fromEntries(Object.keys(SALE_STATUS).map((key) => [key, { count: 0, commission: 0 }]));
 
   for (const conversion of Array.isArray(conversions) ? conversions : []) {
     if (!conversion) continue;
     const at = conversionTime(conversion);
     if (!Number.isFinite(at) || at > now + HOUR) continue;
-    const cancelled = String(conversion.conversionStatus || '').toUpperCase() === 'CANCELLED';
+    const status = saleStatus(conversion);
+    const counts = status === 'paid' || status === 'completed';
     const items = conversionItems(conversion);
+    const commission = toNumber(conversion.netCommission ?? conversion.totalCommission);
     const place = locate(at);
-    if (place && !cancelled) {
-      const commission = toNumber(conversion.netCommission ?? conversion.totalCommission);
+    const first = items[0];
+    if (place?.window === 'current') {
+      summary[status].count += 1;
+      summary[status].commission += commission;
+      sales.push({
+        id: String(conversion.conversionId || `${at}-${sales.length}`),
+        at: new Date(at).toISOString(),
+        status,
+        product: String(first?.itemName || 'Produto Shopee'),
+        image: first?.imageUrl || null,
+        price: round2(toNumber(first?.itemPrice)),
+        qty: items.reduce((sum, item) => sum + Math.max(1, toNumber(item.qty)), 0),
+        extraItems: Math.max(0, items.length - 1),
+        commission: round2(commission),
+      });
+    }
+    if (place && counts) {
       const bucket = totals[place.window];
       bucket.commission += commission;
       bucket.sales += 1;
@@ -123,13 +172,11 @@ export function buildDashboard({ conversions = [], jobs = [], period = '7d', now
         }
       }
     }
-    const first = items[0];
-    const status = String(conversion.conversionStatus || '').toUpperCase();
     activity.push({
       type: 'sale',
       at: new Date(at).toISOString(),
-      tone: cancelled ? 'danger' : status === 'COMPLETED' ? 'success' : 'warning',
-      title: cancelled ? 'Venda cancelada' : status === 'COMPLETED' ? 'Venda aprovada' : 'Nova venda (pendente)',
+      tone: SALE_STATUS[status].tone,
+      title: SALE_STATUS[status].title,
       detail: `${money(toNumber(first?.itemPrice))} — ${String(first?.itemName || 'Shopee')}`,
     });
   }
@@ -198,6 +245,8 @@ export function buildDashboard({ conversions = [], jobs = [], period = '7d', now
     },
     series: series.map(({ key, label, commission, sales, sends }) => ({ key, label, commission: round2(commission), sales, sends })),
     activity: recentActivity(activity),
+    sales: sales.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 500),
+    salesSummary: Object.fromEntries(Object.entries(summary).map(([key, value]) => [key, { count: value.count, commission: round2(value.commission) }])),
     topProducts: topSold.length ? { kind: 'sold', items: topSold } : { kind: 'sent', items: rank(sentProducts) },
   };
 }
