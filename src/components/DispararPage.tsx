@@ -1,19 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Product, QueueItem, Template, Group, DispatchStep, IntervalUnit } from '../types/product';
-import { ChevronLeft, ChevronRight, Check, X, Send, MessageSquare, Users, Clock, Moon, Sun, Calendar, RotateCcw, AlertTriangle, CheckCircle2, Radio, Layers, Zap, Shuffle, List, Copy, Trash2, Plus, Search, AlertCircle, BarChart2, Box, Image, Eye, Ban } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/Select';
-import { Checkbox } from '@/components/ui/Checkbox';
+import { AlertTriangle, ArrowRight, Box, CalendarClock, Check, CheckCircle2, ChevronLeft, ClipboardCheck, Clock, MessageSquare, Moon, RotateCw, Search, Send, Shuffle, Trash2, Users } from 'lucide-react';
 import { Switch } from '@/components/ui/Switch';
-import { Textarea } from '@/components/ui/Textarea';
-import { Badge } from '@/components/ui/Badge';
-import { Separator } from '@/components/ui/Separator';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog';
-import { Input } from '@/components/ui/Input';
 import { DEFAULT_OFFER_TEMPLATES } from '../services/offerTemplates';
+import { inferMarketplace, marketplaceInfo } from '@/services/queueOverview';
+import { DispatchStepper } from '@/components/disparar/DispatchStepper';
+import { NextStepCard, WhatsAppBubble } from '@/components/disparar/NextStepCard';
+import { ACTIVE_DISPATCH_STATUSES, DispatchMonitor, type DispatchSummary } from '@/components/disparar/DispatchMonitor';
 
 interface DispararPageProps {
   isOpen: boolean;
@@ -53,16 +46,23 @@ const formatTemplateMessage = (value: string) => value
   .replace(/\n{3,}/g, '\n\n')
   .trim();
 
-const steps = [
-  { num: 1, label: 'Ofertas' },
-  { num: 2, label: 'Mensagem' },
-  { num: 3, label: 'Destinos' },
-] as const;
+const brl = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const UNIT_LABEL: Record<IntervalUnit, string> = { seconds: 'segundos', minutes: 'minutos', hours: 'horas' };
+const unitMs = (unit: IntervalUnit) => (unit === 'hours' ? 3_600_000 : unit === 'minutes' ? 60_000 : 1000);
+
+function durationText(ms: number) {
+  if (ms <= 0) return 'Imediato';
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return `${Math.round(ms / 1000)} s`;
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h${minutes % 60 ? ` ${minutes % 60} min` : ''}`;
+}
+
+type DispatchTab = 'new' | 'ongoing' | 'history';
 
 export const DispararPage: React.FC<DispararPageProps> = ({
   isOpen,
-  onClose,
-  offers,
   queueItems,
   templates: userTemplates,
   groups,
@@ -79,9 +79,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState('achado-vale-pena');
   const [templateMode, setTemplateMode] = useState<'fixed' | 'rotate'>('fixed');
   const [customMessage, setCustomMessage] = useState(formatTemplateMessage(defaultTemplates[0].message));
-  const [showImage, setShowImage] = useState(true);
   const [rotatingCTAs, setRotatingCTAs] = useState(true);
-  const [dispatchJob, setDispatchJob] = useState<any>(null);
   const [dispatching, setDispatching] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [schedule, setSchedule] = useState<'now' | 'scheduled'>('now');
@@ -92,59 +90,58 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const [weekendPause, setWeekendPause] = useState(false);
   const [expirePause, setExpirePause] = useState(true);
   const [searchGroups, setSearchGroups] = useState('');
-  const [activeTab, setActiveTab] = useState<'new' | 'ongoing'>('new');
-  const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<DispatchTab>('new');
+  const [dispatchHistory, setDispatchHistory] = useState<DispatchSummary[]>([]);
   const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [pendingCancelJobId, setPendingCancelJobId] = useState<string | null>(null);
 
   const refreshHistory = useCallback(() => fetch('/api/dispatch/history?summary=1', { cache: 'no-store' })
     .then(response => response.ok ? response.json() : null)
     .then(body => {
-      const history = Array.isArray(body?.history) ? body.history : [];
+      const history: DispatchSummary[] = Array.isArray(body?.history) ? body.history : [];
       setDispatchHistory(history);
       return history;
     })
-    .catch(() => []), []);
+    .catch(() => [] as DispatchSummary[]), []);
 
   useEffect(() => {
     let cancelled = false;
-    refreshHistory()
-      .then(history => {
-        if (cancelled) return;
-        if (history.some((job: any) => ['pending', 'running', 'waiting_connection'].includes(job.status))) setActiveTab('ongoing');
-      })
+    refreshHistory().then(history => {
+      if (cancelled) return;
+      // Abre direto no acompanhamento quando há disparo manual rodando.
+      if (history.some(job => job.source !== 'queue_automation' && ['pending', 'running', 'waiting_connection'].includes(job.status))) setActiveTab('ongoing');
+    });
     return () => { cancelled = true; };
   }, [refreshHistory]);
 
   useEffect(() => {
-    if (activeTab !== 'ongoing') return;
+    if (activeTab === 'new' || !isOpen) return;
     void refreshHistory();
     const timer = window.setInterval(() => void refreshHistory(), 8000);
     return () => window.clearInterval(timer);
-  }, [activeTab, refreshHistory]);
+  }, [activeTab, isOpen, refreshHistory]);
 
   const allTemplates = [...defaultTemplates, ...(userTemplates || [])];
-  const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId) || defaultTemplates[0];
 
   useEffect(() => {
     if (step !== 1) return;
     setSelectedOffers(queueItems.filter(item => item.selected !== false).map(item => item.id));
   }, [queueItems, step]);
 
+  // Produtos da seleção da FILA (antes a prévia buscava na lista do Garimpar e mostrava outro produto).
+  const selectedProducts = queueItems.filter(item => selectedOffers.includes(item.id)).map(item => item.product);
+  const previewProduct = selectedProducts[0] || queueItems[0]?.product || null;
+
   const previewMessage = useCallback(() => {
-    const firstOffer = offers.find(o => selectedOffers.includes(o.id)) || offers[0];
-    if (!firstOffer) return customMessage;
-    
+    const firstOffer = previewProduct;
+    if (!firstOffer) return formatTemplateMessage(customMessage);
     let msg = formatTemplateMessage(customMessage);
-    if (!firstOffer.originalPrice || firstOffer.originalPrice <= firstOffer.currentPrice) msg = msg.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
+    if (!firstOffer.originalPrice || firstOffer.currentPrice == null || firstOffer.originalPrice <= firstOffer.currentPrice) msg = msg.split('\n').filter(line => !line.includes('{PRECO_ANTIGO}')).join('\n');
     msg = msg.replace(/{TITULO}/g, firstOffer.name);
-    const brl = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? `R$ ${brl(firstOffer.currentPrice)}` : '—');
-    msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? `R$ ${brl(firstOffer.originalPrice)}` : '—');
+    msg = msg.replace(/{PRECO}/g, firstOffer.currentPrice ? brl(firstOffer.currentPrice) : '—');
+    msg = msg.replace(/{PRECO_ANTIGO}/g, firstOffer.originalPrice ? brl(firstOffer.originalPrice) : '—');
     const desconto = firstOffer.discountPercentage ?? (firstOffer.originalPrice && firstOffer.currentPrice && firstOffer.originalPrice > firstOffer.currentPrice ? Math.round((1 - firstOffer.currentPrice / firstOffer.originalPrice) * 100) : null);
-    msg = msg.replace(/{DESCONTO}/g, desconto ? `${desconto}% OFF` : '');
+    msg = msg.replace(/{DESCONTO}/g, desconto ? `${Math.round(desconto)}% OFF` : '');
     msg = msg.replace(/{CTA}/g, rotatingCTAs ? rotatingCtaExamples[0] : 'Confira a oferta');
     msg = msg.replace(/{LINK}/g, firstOffer.affiliateUrl || firstOffer.productUrl);
     msg = msg.replace(/{CUPOM}/g, 'CUPOM10');
@@ -153,17 +150,47 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     msg = msg.replace(/{VENDAS}|{SALES}/g, firstOffer.salesCountText || (firstOffer.salesCount ? `+${firstOffer.salesCount.toLocaleString('pt-BR')} vendidos` : ''));
     msg = msg.replace(/{AVALIACAO}|{RATING}/g, firstOffer.rating ? `⭐ ${firstOffer.rating.toFixed(1)} de avaliação` : '');
     return formatTemplateMessage(msg);
-  }, [customMessage, offers, selectedOffers, rotatingCTAs]);
+  }, [customMessage, previewProduct, rotatingCTAs]);
 
-  const filteredGroups = groups.filter(g => 
-    g.name.toLowerCase().includes(searchGroups.toLowerCase())
-  );
+  const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(searchGroups.toLowerCase()));
+
+  const destinationsPayload = () => ({
+    groups: groups.filter(g => selectedGroups.includes(g.id)),
+    schedule,
+    scheduledAt: schedule === 'scheduled' ? scheduledAt : undefined,
+    interval: { value: intervalValue, unit: intervalUnit },
+    nightPause,
+    weekendPause,
+    expirePause,
+  });
+
+  const resetWizard = () => {
+    setStep(1);
+    setSelectedGroups([]);
+    setSchedule('now');
+    setScheduledAt('');
+  };
+
+  const handleExecute = async () => {
+    if (selectedGroups.length === 0) {
+      onShowToast('Selecione pelo menos um grupo', undefined, 'error');
+      setStep(3);
+      return;
+    }
+    onSaveDestinations(destinationsPayload());
+    setDispatching(true);
+    const created = await onExecuteDispatch();
+    setDispatching(false);
+    if (created?.jobId) {
+      resetWizard();
+      await refreshHistory();
+      setActiveTab('ongoing');
+    }
+  };
 
   const handleNext = () => {
     if (step === 1) {
-      const offersToDispatch = selectedOffers.length
-        ? selectedOffers
-        : queueItems.map(item => item.id);
+      const offersToDispatch = selectedOffers.length ? selectedOffers : queueItems.map(item => item.id);
       if (offersToDispatch.length === 0) {
         onShowToast('A fila está vazia', 'Adicione pelo menos uma oferta antes de criar o disparo.', 'error');
         return;
@@ -173,7 +200,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
       setStep(2);
     } else if (step === 2) {
       onSaveMessage({
-        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage: formatTemplateMessage(customMessage), showImage, rotatingCTAs: true, templateMode, templatePool: templateMode === 'rotate' ? allTemplates.map(template => ({ id: template.id, message: template.message })) : undefined }
+        whatsapp: { enabled: whatsappEnabled, templateId: selectedTemplateId, customMessage: formatTemplateMessage(customMessage), showImage: true, rotatingCTAs: true, templateMode, templatePool: templateMode === 'rotate' ? allTemplates.map(template => ({ id: template.id, message: template.message })) : undefined },
       });
       setStep(3);
     } else if (step === 3) {
@@ -181,59 +208,22 @@ export const DispararPage: React.FC<DispararPageProps> = ({
         onShowToast('Selecione pelo menos um grupo', undefined, 'error');
         return;
       }
-      onSaveDestinations({
-        groups: groups.filter(g => selectedGroups.includes(g.id)),
-        schedule,
-        scheduledAt: schedule === 'scheduled' ? scheduledAt : undefined,
-        interval: { value: intervalValue, unit: intervalUnit },
-        nightPause,
-        weekendPause,
-        expirePause,
-      });
       setStep(4);
     } else if (step === 4) {
+      if (schedule === 'scheduled' && (!scheduledAt || new Date(scheduledAt).getTime() <= Date.now())) {
+        onShowToast('Escolha uma data futura', 'Informe quando o disparo deve começar.', 'error');
+        return;
+      }
+      onSaveDestinations(destinationsPayload());
       setStep(5);
+    } else if (step === 5) {
+      void handleExecute();
     }
   };
 
   const handleBack = () => {
     if (step > 1) setStep((step - 1) as DispatchStep);
   };
-
-  const handleExecute = async () => {
-    if (selectedGroups.length === 0) {
-      onShowToast('Selecione pelo menos um grupo', undefined, 'error');
-      return;
-    }
-    onSaveDestinations({
-      groups: groups.filter(g => selectedGroups.includes(g.id)),
-      schedule,
-      scheduledAt: schedule === 'scheduled' ? scheduledAt : undefined,
-      interval: { value: intervalValue, unit: intervalUnit },
-      nightPause,
-      weekendPause,
-      expirePause,
-    });
-    setDispatching(true);
-    const created = await onExecuteDispatch();
-    setDispatching(false);
-    if (created?.jobId) {
-      setDispatchJob({ id: created.jobId, status: created.status, stats: { sent: 0, failed: 0, pending: totalEnvios } });
-      await refreshHistory();
-      setActiveTab('ongoing');
-    }
-  };
-
-  useEffect(() => {
-    if (!dispatchJob?.id || ['completed', 'failed', 'cancelled'].includes(dispatchJob.status)) return;
-    const refresh = () => fetch(`/api/dispatch/${encodeURIComponent(dispatchJob.id)}?summary=1`)
-      .then(response => response.ok ? response.json() : null)
-      .then(job => { if (job) setDispatchJob(job); })
-      .catch(() => undefined);
-    refresh();
-    const timer = window.setInterval(refresh, 5000);
-    return () => window.clearInterval(timer);
-  }, [dispatchJob?.id, dispatchJob?.status]);
 
   const toggleGroup = (groupId: string) => {
     setSelectedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]);
@@ -242,11 +232,7 @@ export const DispararPage: React.FC<DispararPageProps> = ({
   const handleVariableInsert = (variable: string) => {
     setCustomMessage(prev => {
       const textarea = document.querySelector('textarea[role="message-editor"]') as HTMLTextAreaElement;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        return prev.slice(0, start) + variable + prev.slice(end);
-      }
+      if (textarea) return prev.slice(0, textarea.selectionStart) + variable + prev.slice(textarea.selectionEnd);
       return prev + variable;
     });
   };
@@ -258,16 +244,14 @@ export const DispararPage: React.FC<DispararPageProps> = ({
       ? `Cancelar os ${ids.length} disparos automáticos da fila? Os envios já concluídos serão mantidos, mas nenhuma dessas ofertas será enviada. A automação continua ligada e volta a garimpar no próximo ciclo.`
       : 'Cancelar este disparo? Os envios já concluídos serão mantidos, mas nenhum item pendente será enviado.';
     if (!window.confirm(confirmText)) return;
-    const requestId = ids.join('|');
-    setCancellingJobId(requestId);
+    setCancellingJobId(ids.join('|'));
     try {
-      const results = await Promise.all(ids.map(async id => {
+      await Promise.all(ids.map(async id => {
         const response = await fetch(`/api/dispatch/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
         const body = await response.json().catch(() => null);
         if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível cancelar o disparo.');
         return body;
       }));
-      if (dispatchJob?.id && ids.includes(dispatchJob.id)) setDispatchJob(results[0]?.job);
       await refreshHistory();
       onShowToast('Disparo cancelado', 'Os envios pendentes foram interrompidos.', 'info');
     } catch (error) {
@@ -277,471 +261,383 @@ export const DispararPage: React.FC<DispararPageProps> = ({
     }
   };
 
+  const copyText = (text: string) => {
+    void navigator.clipboard?.writeText(text);
+    onShowToast('Link copiado', undefined, 'success');
+  };
+
   if (!isOpen) return null;
 
   const selectedGroupsData = groups.filter(g => selectedGroups.includes(g.id));
   const totalEnvios = selectedOffers.length * selectedGroups.length;
-  const activeJobs = dispatchHistory.filter(job => ['pending', 'running', 'waiting_connection'].includes(job.status));
-  const visibleActiveJobs = Object.values(activeJobs.reduce((result: Record<string, any>, job: any) => {
-    const key = job.source === 'queue_automation' ? `automatico:${job.destinations?.sessionId || 'default'}` : job.id;
-    const existing = result[key];
-    if (!existing) {
-      result[key] = { ...job, id: key, jobIds: [job.id], offers: [...(job.offers || [])], stats: { ...(job.stats || {}) }, destinations: { ...job.destinations, groups: [...(job.destinations?.groups || [])] } };
-      return result;
-    }
-    existing.jobIds.push(job.id);
-    existing.offers.push(...(job.offers || []));
-    existing.stats.sent = (existing.stats.sent || 0) + (job.stats?.sent || 0);
-    existing.stats.failed = (existing.stats.failed || 0) + (job.stats?.failed || 0);
-    existing.stats.pending = (existing.stats.pending || 0) + (job.stats?.pending || 0);
-    const knownGroups = new Set(existing.destinations.groups.map((group: any) => String(group.id)));
-    existing.destinations.groups.push(...(job.destinations?.groups || []).filter((group: any) => !knownGroups.has(String(group.id))));
-    if (job.status === 'running') existing.status = 'running';
-    return result;
-  }, {}));
-  const recentJobs = dispatchHistory.filter(job => !['pending', 'running', 'waiting_connection'].includes(job.status));
-  const dispatchTabs = (
-    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'new' | 'ongoing')}>
-      <TabsList className="flex gap-5 border-b border-[var(--border)] px-3 pt-3 text-[12px]">
-        <TabsTrigger value="new" className={`pb-2.5 font-semibold ${activeTab === 'new' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Novo Disparo</TabsTrigger>
-        <TabsTrigger value="ongoing" className={`flex items-center gap-1.5 pb-2.5 font-semibold ${activeTab === 'ongoing' ? 'border-b-2 border-[var(--primary)] text-[var(--text-primary)]' : 'border-b-2 border-transparent text-[var(--text-secondary)]'}`}>Em andamento <span className="grid min-w-5 place-items-center rounded-full bg-[var(--primary)] px-1 text-[9px] text-white">{visibleActiveJobs.length}</span></TabsTrigger>
-      </TabsList>
-    </Tabs>
+  const estimatedDurationMs = Math.max(0, selectedOffers.length - 1) * intervalValue * unitMs(intervalUnit);
+  const activeCount = dispatchHistory.filter(job => ACTIVE_DISPATCH_STATUSES.includes(job.status)).length;
+  const offersWithoutName = selectedProducts.filter(product => !product.name?.trim()).length;
+  const dateLine = (() => {
+    const raw = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(new Date());
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  })();
+
+  const tabs: { id: DispatchTab; label: string; badge?: number }[] = [
+    { id: 'new', label: 'Novo disparo' },
+    { id: 'ongoing', label: 'Em andamento', badge: activeCount },
+    { id: 'history', label: 'Histórico' },
+  ];
+
+  const header = (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-extrabold leading-tight tracking-[-0.02em] text-[var(--text-title)] sm:text-[34px]">Disparos</h1>
+          <p className="mt-1 text-[15px] text-[var(--text-body)]">Envie ofertas para seus grupos de forma automática e segura.</p>
+        </div>
+        <div className="text-right text-[13px] text-[var(--text-secondary)]">
+          <p>{dateLine}</p>
+          <p>Que tal um bom dia de ofertas? 🚀</p>
+        </div>
+      </div>
+      <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            className={`-mb-px inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 pb-3 pt-1 text-[15px] transition-colors ${activeTab === tab.id ? 'border-[var(--brand-500)] font-semibold text-[var(--text-title)]' : 'border-transparent font-medium text-[var(--text-secondary)] hover:text-[var(--text-title)]'}`}
+          >
+            {tab.label}
+            {tab.badge ? <span className="rdo-num rounded-full bg-[var(--brand-500)] px-1.5 text-xs font-bold text-white">{tab.badge}</span> : null}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 
-  if (activeTab === 'ongoing') return (
-<section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)] section-enter">
-      {dispatchTabs}
-      <div className="space-y-5 px-3 py-4 pb-24">
-          <header><h2 className="text-xl font-black text-[var(--text-primary)]">Disparos em andamento</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado.</p></header>
-        <div className="space-y-2.5">
-          {visibleActiveJobs.map((job: any) => {
-            const offersCount = job.offersCount ?? job.offers?.length ?? 0;
-            const total = Math.max(1, offersCount * (job.destinations?.groups?.length || 0));
-            const done = (job.stats?.sent || 0) + (job.stats?.failed || 0);
-            const percent = Math.min(100, Math.round(done / total * 100));
-            return <Card key={job.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-              <div className="flex items-start justify-between gap-3"><div><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[var(--warning)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--warning)]" />{job.status === 'waiting_connection' ? 'Aguardando conexão' : job.status === 'pending' ? 'Na fila' : 'Enviando'}</span><h3 className="mt-1 text-[13px] font-bold text-[var(--text-primary)]">{job.offersCount ?? job.offers?.length ?? 0} oferta(s) para {job.destinations?.groups?.length || 0} grupo(s)</h3>{job.jobIds?.length > 1 && <p className="mt-1 text-[9px] text-[var(--text-secondary)]">Piloto automático: {job.jobIds.length} entradas agrupadas nesta linha.</p>}</div><span className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')}</span></div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--primary)] transition-[width]" style={{ width: `${percent}%` }} /></div>
-              <div className="mt-2 flex justify-between text-[10px] text-[var(--text-secondary)]"><span>{job.stats?.sent || 0} enviados · {job.stats?.failed || 0} falhas</span><span>{percent}% · intervalo {job.destinations?.interval?.value || 30} {job.destinations?.interval?.unit === 'minutes' ? 'min' : job.destinations?.interval?.unit === 'hours' ? 'h' : 's'}</span></div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button type="button" onClick={() => void handleCancelDispatch(job.jobIds || job.id)} disabled={cancellingJobId === (job.jobIds || [job.id]).join('|')} variant="outline" className="pressable mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--error)]/60 bg-[var(--error)]/10 px-3 text-[10px] font-bold text-[var(--error)] transition hover:bg-[var(--error)]/20 disabled:cursor-wait disabled:opacity-60"><Ban className="h-3.5 w-3.5" />{cancellingJobId === (job.jobIds || [job.id]).join('|') ? 'Cancelando…' : 'Cancelar disparo'}</Button>
-                </TooltipTrigger>
-                <TooltipContent><span>Cancelar este disparo</span></TooltipContent>
-              </Tooltip>
-            </Card>;
-          })}
-          {!activeJobs.length && <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[11px] text-[var(--text-secondary)]">Nenhum disparo em andamento.</div>}
-        </div>
-        <div><h3 className="mb-2 text-[13px] font-bold text-[var(--text-primary)]">Histórico recente</h3><div className="space-y-2">{recentJobs.slice(0, 10).map(job => <Card key={job.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"><div><p className="text-[11px] font-semibold text-[var(--text-primary)]">{job.offersCount ?? job.offers?.length ?? 0} oferta(s) · {job.destinations?.groups?.length || 0} grupo(s)</p><p className="text-[9px] text-[var(--text-secondary)]">{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.stats?.sent || 0} enviados</p></div><Badge variant={job.status === 'completed' ? 'success' : 'destructive'} className={`text-[10px] font-bold ${job.status === 'completed' ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--error)]/10 text-[var(--error)]'}`}>{job.status === 'completed' ? 'Concluído' : 'Falhou'}</Badge></Card>)}</div></div>
-      </div>
-    </section>
+  if (activeTab !== 'new') {
+    return (
+      <section className="mx-auto w-full max-w-[1440px] space-y-5 pb-24">
+        {header}
+        <DispatchMonitor
+          history={dispatchHistory}
+          mode={activeTab === 'ongoing' ? 'ongoing' : 'history'}
+          cancellingId={cancellingJobId}
+          onCancel={(ids) => void handleCancelDispatch(ids)}
+          onNewDispatch={() => setActiveTab('new')}
+          onCopy={copyText}
+        />
+      </section>
+    );
+  }
+
+  const panelCard = 'panel p-4 sm:p-5';
+  const optionRow = (title: string, description: string, checked: boolean, onChange: (v: boolean) => void, icon: React.ReactNode) => (
+    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border-subtle)] p-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[.05] text-[var(--text-secondary)]">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-[var(--text-title)]">{title}</span>
+        <span className="block text-xs text-[var(--text-secondary)]">{description}</span>
+      </span>
+      <Switch checked={checked} onCheckedChange={(value) => onChange(value as boolean)} />
+    </label>
   );
+
+  const stepIntro: Record<number, { title: string; description: string }> = {
+    1: { title: 'Selecione as ofertas que deseja disparar para sua audiência.', description: 'Você pode escolher uma ou mais ofertas da sua fila. Recomendamos de 1 a 10 ofertas por disparo para melhores resultados.' },
+    2: { title: 'Personalize a mensagem que vai junto com as ofertas.', description: 'Escolha um modelo ou escreva o seu. As variáveis são trocadas pelos dados de cada produto.' },
+    3: { title: 'Escolha os grupos que vão receber as ofertas.', description: 'Nenhum grupo vem marcado. Selecione só onde faz sentido para esse público.' },
+    4: { title: 'Defina quando começar e o ritmo entre os envios.', description: 'Intervalos maiores parecem mais naturais nos grupos e reduzem risco no WhatsApp.' },
+    5: { title: 'Revise tudo antes de disparar.', description: 'Confira ofertas, grupos, mensagem e ritmo. Ao confirmar, o Radar cria a fila e envia pelo WhatsApp conectado.' },
+  };
+
+  const footer: Record<number, { summary: string; detail: string; cta: string }> = {
+    1: { summary: `${selectedOffers.length} ${selectedOffers.length === 1 ? 'oferta selecionada' : 'ofertas selecionadas'}`, detail: 'Essas ofertas serão incluídas no seu disparo.', cta: 'Continuar para mensagem' },
+    2: { summary: templateMode === 'rotate' ? 'Alternando modelos' : 'Modelo fixo', detail: 'A mensagem é montada para cada oferta.', cta: 'Continuar para destinos' },
+    3: { summary: `${selectedGroups.length} ${selectedGroups.length === 1 ? 'grupo selecionado' : 'grupos selecionados'}`, detail: `${totalEnvios} envio(s) no total.`, cta: 'Continuar para intervalo' },
+    4: { summary: `A cada ${intervalValue} ${UNIT_LABEL[intervalUnit]}`, detail: schedule === 'scheduled' && scheduledAt ? `Começa em ${new Date(scheduledAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.` : 'Começa assim que você confirmar.', cta: 'Revisar disparo' },
+    5: { summary: `${selectedOffers.length} oferta(s) · ${selectedGroups.length} grupo(s)`, detail: `${totalEnvios} envio(s) · duração estimada ${durationText(estimatedDurationMs)}.`, cta: dispatching ? 'Criando disparo…' : 'Confirmar disparo' },
+  };
+
+  const nextCard = (() => {
+    if (step === 1) return <NextStepCard icon={MessageSquare} eyebrow="Próximo passo" title="Mensagem" description="Na próxima etapa, você vai personalizar a mensagem que será enviada com as ofertas selecionadas." footnote="Exemplo de como sua mensagem pode ficar nos grupos."><WhatsAppBubble product={previewProduct} text={previewMessage()} /></NextStepCard>;
+    if (step === 2) return <NextStepCard icon={Users} eyebrow="Próximo passo" title="Destinos" description="Depois, escolha os grupos do WhatsApp que vão receber as ofertas." footnote="Prévia com a primeira oferta selecionada."><WhatsAppBubble product={previewProduct} text={previewMessage()} /></NextStepCard>;
+    if (step === 3) return (
+      <NextStepCard icon={Clock} eyebrow="Próximo passo" title="Intervalo" description="Em seguida, defina quando começa e quanto tempo esperar entre uma oferta e outra.">
+        <div className="grid grid-cols-2 gap-2 text-center">
+          <div className="rounded-xl border border-[var(--border-subtle)] p-3"><p className="rdo-num text-2xl font-bold text-[var(--text-title)]">{selectedGroups.length}</p><p className="text-xs text-[var(--text-secondary)]">grupos</p></div>
+          <div className="rounded-xl border border-[var(--border-subtle)] p-3"><p className="rdo-num text-2xl font-bold text-[var(--text-title)]">{totalEnvios}</p><p className="text-xs text-[var(--text-secondary)]">envios</p></div>
+        </div>
+      </NextStepCard>
+    );
+    if (step === 4) return (
+      <NextStepCard icon={ClipboardCheck} eyebrow="Próximo passo" title="Revisão" description="Por último, revise tudo e confirme o disparo.">
+        <div className="rounded-xl border border-[var(--border-subtle)] p-3 text-sm text-[var(--text-body)]">
+          <p className="text-xs text-[var(--text-secondary)]">Duração estimada</p>
+          <p className="rdo-num text-2xl font-bold text-[var(--text-title)]">{durationText(estimatedDurationMs)}</p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">{selectedOffers.length} oferta(s) com {intervalValue} {UNIT_LABEL[intervalUnit]} entre elas{nightPause ? ', sem enviar de madrugada' : ''}.</p>
+        </div>
+      </NextStepCard>
+    );
+    return <NextStepCard icon={Send} eyebrow="Tudo pronto" title="Confirmar disparo" description="Ao confirmar, o Radar cria a fila e envia pelo WhatsApp conectado. Você acompanha tudo em “Em andamento”." footnote="É assim que a primeira oferta vai chegar."><WhatsAppBubble product={previewProduct} text={previewMessage()} /></NextStepCard>;
+  })();
 
   return (
-    <section className="dispatch-page min-h-[calc(100dvh-5rem)] w-full bg-[var(--background)]">
-      <div className="flex min-h-[calc(100dvh-5rem)] flex-col overflow-hidden">
-        {dispatchTabs}
-        {/* Step Indicator - Top Fixed */}
-        <Card className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur-xl overflow-x-auto no-scrollbar">
-          {steps.map((s, i) => (
-            <div key={s.num} className="flex items-center gap-1.5 shrink-0">
-              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition ${step >= s.num ? 'bg-[var(--primary)] text-white' : 'bg-[var(--border)] text-[var(--text-secondary)]'}`}>
-                {step > s.num ? <Check className="w-3.5 h-3.5" /> : s.num}
-              </div>
-              <span className={`text-[11px] font-bold whitespace-nowrap ${step === s.num ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>{s.label}</span>
-              {i < steps.length - 1 && <span className={`h-0.5 w-6 shrink-0 transition ${step > s.num ? 'bg-[var(--primary)]' : 'bg-[var(--border)]'}`} />}
-            </div>
-          ))}
-          <Button onClick={onClose} variant="ghost" size="icon" className="ml-auto shrink-0 rounded p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]"><X className="h-4 w-4" /></Button>
-         </Card>
-         <Separator className="my-2" />
+    <section className="mx-auto w-full max-w-[1440px] space-y-5 pb-24">
+      {header}
+      <DispatchStepper step={step} onGoTo={(target) => setStep(target as DispatchStep)} />
 
-         {/* Step Content */}
-         <div key={step} className="dispatch-step-enter flex-1 overflow-y-auto px-3 py-3 pb-24 section-enter">
-          {/* Step 1: Ofertas - Compact list with images */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,400px)] xl:items-start">
+        <div className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="max-w-3xl">
+              <h2 className="text-lg text-[var(--text-title)]">{stepIntro[step].title}</h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">{stepIntro[step].description}</p>
+            </div>
+            {step === 1 && (
+              <span className="inline-flex items-center gap-2 text-[15px] text-[var(--text-title)]">
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--brand-500)] text-white"><Check className="h-4 w-4" /></span>
+                {selectedOffers.length} {selectedOffers.length === 1 ? 'selecionada' : 'selecionadas'}
+              </span>
+            )}
+          </div>
+
           {step === 1 && (
-            <div className="space-y-3">
-              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3"><div><h3 className="text-[13px] font-black text-[var(--text-primary)]">Escolha as ofertas</h3><p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">Toque no card para incluir ou retirar.</p></div><Badge variant="default" className="shrink-0 rounded-lg bg-[var(--primary)]/12 px-2 py-1 text-[10px] font-black text-[var(--primary)]">{selectedOffers.length} selecionadas</Badge></div>
-                <Button type="button" onClick={() => setSelectedOffers(selectedOffers.length === queueItems.length ? [] : queueItems.map(item => item.id))} variant="ghost" className="mt-2 text-[10px] font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--primary)]">{selectedOffers.length === queueItems.length ? 'Desmarcar todas' : 'Selecionar todas'}</Button>
-              </Card>
-              <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
-                {queueItems.map(item => {
-                  const isSelected = selectedOffers.includes(item.id);
-                  const discount = item.product.discountPercentage || (item.product.originalPrice && item.product.currentPrice && item.product.originalPrice > item.product.currentPrice ? Math.round((1 - item.product.currentPrice / item.product.originalPrice) * 100) : null);
-                  return <button key={item.id} type="button" aria-pressed={isSelected} onClick={() => setSelectedOffers(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])} className={`pressable flex w-full items-center gap-3 rounded-xl border bg-[var(--surface)] p-2.5 text-left shadow-[0_8px_20px_rgba(0,0,0,.12)] transition-all duration-200 ${isSelected ? 'border-[var(--primary)]/75 ring-1 ring-[var(--primary)]/20' : 'border-[var(--border)]'} hover:-translate-y-0.5 hover:border-[var(--primary)]/75`}>
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-[var(--border)] text-transparent'}`}><Check className="h-3.5 w-3.5" /></span>
-                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-elevated)]">
-                      {item.product.imageUrl ? <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[var(--text-secondary)]"><Box className="h-5 w-5" /></div>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2"><p className="line-clamp-2 text-[11px] font-bold leading-4 text-[var(--text-primary)]">{item.product.name}</p>{discount && <span className="shrink-0 rounded-md bg-[var(--primary)]/12 px-1.5 py-0.5 text-[9px] font-black text-[var(--primary)]">-{discount}%</span>}</div>
-                      <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                        <Badge variant="outline" className={`rounded px-1.5 py-0.5 font-bold ${item.product.marketplace === 'mercado_livre' ? 'border-yellow-300 text-yellow-700 bg-yellow-50' : 'border-orange-300 text-orange-700 bg-orange-50'}`}>
-                          {item.product.marketplace === 'shopee' ? 'Shopee' : item.product.marketplace === 'mercado_livre' ? 'Mercado Livre' : item.product.marketplace}
-                        </Badge>
-                        {item.product.originalPrice && <span className="line-through text-[var(--text-secondary)]">R$ {item.product.originalPrice.toFixed(2).replace('.', ',')}</span>}
-                        <span className="font-black text-[var(--success)]">R$ {item.product.currentPrice?.toFixed(2).replace('.', ',')}</span>
-                      </div>
-                    </div>
-                  </button>;
-                })}
-              </div>
-              {queueItems.length === 0 && (
-                <div className="text-center py-8 text-[var(--text-secondary)]">
-                  <Box className="h-8 w-8 mx-auto mb-2 text-[var(--border)]" />
-                  <p className="text-[11px]">Fila vazia. Garimpe ofertas primeiro.</p>
+            <div className={panelCard}>
+              {queueItems.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Box className="mx-auto h-9 w-9 text-[var(--text-muted)]" />
+                  <p className="mt-2 text-sm text-[var(--text-secondary)]">Fila vazia. Garimpe ofertas primeiro.</p>
                 </div>
+              ) : (
+                <>
+                  <div className="mb-3 flex justify-end">
+                    <button type="button" onClick={() => setSelectedOffers(selectedOffers.length === queueItems.length ? [] : queueItems.map(item => item.id))} className="text-[13px] text-[var(--brand-400)] hover:underline">
+                      {selectedOffers.length === queueItems.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                    </button>
+                  </div>
+                  <div className="max-h-[56vh] space-y-2.5 overflow-y-auto pr-1">
+                    {queueItems.map(item => {
+                      const isSelected = selectedOffers.includes(item.id);
+                      const product = item.product;
+                      const mp = marketplaceInfo(inferMarketplace(product.marketplace, product.affiliateUrl, product.productUrl));
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedOffers(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])}
+                          className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${isSelected ? 'border-[var(--border-default)] bg-[var(--surface-card-raised)]' : 'border-[var(--border-subtle)] opacity-80 hover:opacity-100'}`}
+                        >
+                          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${isSelected ? 'border-[var(--brand-500)] bg-[var(--brand-500)] text-white' : 'border-[var(--border-strong)]'}`}>{isSelected && <Check className="h-4 w-4" />}</span>
+                          <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-white">
+                            {product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" /> : <Box className="h-6 w-6 text-[var(--ink-500)]" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className={`h-2 w-2 shrink-0 rounded-full ${isSelected ? 'bg-[var(--brand-500)]' : 'bg-[var(--ink-500)]'}`} />
+                              <span className="truncate text-[15px] font-medium text-[var(--text-title)]">{product.name}</span>
+                            </span>
+                            <span className="mt-1 block text-sm">
+                              {product.currentPrice != null && <strong className="rdo-num font-semibold text-[var(--text-title)]">{brl(product.currentPrice)}</strong>}
+                              {product.originalPrice != null && product.currentPrice != null && product.originalPrice > product.currentPrice && <span className="rdo-num ml-2 text-[var(--text-muted)] line-through">{brl(product.originalPrice)}</span>}
+                            </span>
+                          </span>
+                          <span className="hidden shrink-0 items-center gap-2 rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-[13px] text-[var(--text-body)] sm:inline-flex">
+                            {mp.logo && <img src={mp.logo} alt="" className="h-7 w-7 rounded-md object-contain" />}{mp.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           )}
 
-          {/* Step 2: Mensagem */}
           {step === 2 && (
             <div className="space-y-3">
-              <p className="text-[11px] text-[var(--text-secondary)]">Configure a mensagem do WhatsApp.</p>
-
-              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <Checkbox checked={whatsappEnabled} onCheckedChange={(checked) => setWhatsappEnabled(checked as boolean)} className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-green-100"><MessageSquare className="w-4 h-4 text-green-700" /></span>
-                    <span className="font-bold text-[var(--text-primary)]">WhatsApp</span>
-                  </div>
-                </label>
-              </Card>
-
+              {optionRow('Enviar pelo WhatsApp', 'Canal usado neste disparo (grupos conectados no WAHA).', whatsappEnabled, setWhatsappEnabled, <MessageSquare className="h-4 w-4" />)}
               {whatsappEnabled && (
                 <>
-                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Modelo</label>
-                    <Tabs value={templateMode} onValueChange={(v) => setTemplateMode(v as 'fixed' | 'rotate')} className="mb-3">
-                      <TabsList className="grid w-full grid-cols-2 gap-2">
-                        <TabsTrigger value="fixed" className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'fixed' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
-                          <span><strong className="block text-[10px] text-[var(--text-primary)]">Modelo fixo</strong><small className="text-[9px] text-[var(--text-secondary)]">Usa o modelo escolhido em todas as ofertas.</small></span>
-                        </TabsTrigger>
-                        <TabsTrigger value="rotate" className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 ${templateMode === 'rotate' ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-[var(--border)]'}`}>
-                          <span><strong className="block text-[10px] text-[var(--text-primary)]">Alternar modelos</strong><small className="text-[9px] text-[var(--text-secondary)]">Troca o template a cada oferta.</small></span>
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                    <Select value={selectedTemplateId} onValueChange={(e) => { setSelectedTemplateId(e); setCustomMessage(formatTemplateMessage(allTemplates.find(t => t.id === e)?.message || '')); }}>
-                      <SelectTrigger className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {allTemplates.map(t => (
-                          <SelectItem key={t.id} value={t.id}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Card>
+                  <div className={panelCard}>
+                    <h3 className="text-sm font-semibold text-[var(--text-title)]">Modelo</h3>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {([['fixed', 'Modelo fixo', 'Usa o modelo escolhido em todas as ofertas.', MessageSquare], ['rotate', 'Alternar modelos', 'Troca o modelo a cada oferta.', Shuffle]] as const).map(([mode, title, description, Icon]) => (
+                        <button key={mode} type="button" onClick={() => setTemplateMode(mode)} aria-pressed={templateMode === mode} className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${templateMode === mode ? 'border-[var(--border-brand)] bg-[var(--surface-active)]' : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]'}`}>
+                          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-500)]" />
+                          <span><span className="block text-sm font-semibold text-[var(--text-title)]">{title}</span><span className="block text-xs text-[var(--text-secondary)]">{description}</span></span>
+                        </button>
+                      ))}
+                    </div>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(event) => { setSelectedTemplateId(event.target.value); setCustomMessage(formatTemplateMessage(allTemplates.find(t => t.id === event.target.value)?.message || '')); }}
+                      aria-label="Modelo de mensagem"
+                      className="mt-3 h-11 w-full rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] px-3 text-sm text-[var(--text-title)] outline-none focus:border-[var(--border-focus)]"
+                    >
+                      {allTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</option>)}
+                    </select>
+                  </div>
 
-                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] mb-1">Mensagem</label>
-                    <Textarea
+                  <div className={panelCard}>
+                    <h3 className="text-sm font-semibold text-[var(--text-title)]">Mensagem</h3>
+                    <textarea
                       role="message-editor"
                       value={customMessage}
                       onChange={e => setCustomMessage(e.target.value)}
-                      className="w-full min-h-[80px] rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-mono text-[var(--text-primary)] outline-none focus:border-[var(--primary)] resize-none"
+                      rows={9}
                       placeholder="Digite sua mensagem... Use as variáveis abaixo."
+                      className="mt-2 w-full resize-y rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] p-3 font-mono text-[13px] leading-relaxed text-[var(--text-title)] outline-none focus:border-[var(--border-focus)]"
                     />
-                    <div className="mt-2 flex flex-wrap gap-1">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {variables.map(v => (
-                        <Button
-                          key={v.key}
-                          type="button"
-                          onClick={() => handleVariableInsert(v.key)}
-                          variant="outline"
-                          className="rounded border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-2 py-0.5 text-[9px] font-bold text-[var(--primary)] hover:bg-[var(--primary)]/20"
-                          title={v.label}
-                        >
-                          {v.key}
-                        </Button>
+                        <button key={v.key} type="button" onClick={() => handleVariableInsert(v.key)} title={v.label} className="rounded-lg border border-[var(--border-brand)] bg-[var(--surface-brand-soft)] px-2 py-1 font-mono text-xs text-[var(--brand-400)] hover:bg-[var(--surface-active)]">{v.key}</button>
                       ))}
                     </div>
-                  </Card>
+                  </div>
 
-                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Opções</h4>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
-                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">Imagem do produto</span><span className="text-[9px] text-[var(--text-secondary)]">Sempre envia a foto original junto com a legenda.</span></span>
-                        <Checkbox checked aria-label="Imagem do produto sempre incluída" className="w-4 h-4 accent-[var(--primary)]" />
-                      </div>
-                      <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-elevated)] px-2 py-2">
-                        <span className="flex-1"><span className="block text-[11px] font-bold text-[var(--text-primary)]">CTAs rotativas</span><span className="text-[9px] text-[var(--text-secondary)]">Alterna a chamada quando o modelo usar {'{CTA}'}.</span></span>
-                        <Switch checked={rotatingCTAs} onCheckedChange={(checked) => setRotatingCTAs(checked as boolean)} />
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <h4 className="mb-2 text-[10px] font-bold text-[var(--text-secondary)]">Prévia no WhatsApp</h4>
-                    <div className="grid gap-2 sm:grid-cols-[80px_1fr]">
-                      {showImage && (
-                        <div className="aspect-square w-full rounded-lg bg-[var(--surface-elevated)] overflow-hidden">
-                          {(() => { const offer = offers.find(o => selectedOffers.includes(o.id)) || offers[0]; return offer?.imageUrl ? <img src={offer.imageUrl} alt={offer.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[9px] text-[var(--text-secondary)]">Sem imagem</div>; })()}
-                        </div>
-                      )}
-                      <div className="whitespace-pre-wrap rounded-lg bg-[var(--background)] p-3 text-[10px] font-medium leading-5 text-[var(--text-primary)]">
-                        {previewMessage()}
-                      </div>
-                    </div>
-                    {rotatingCTAs && <div className="mt-2 flex flex-wrap gap-1">{rotatingCtaExamples.map((cta, index) => <span key={cta} className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[9px] text-[var(--text-secondary)]">CTA {index + 1}: {cta}</span>)}</div>}
-                  </Card>
+                  {optionRow('CTAs rotativas', 'Alterna a chamada para ação quando o modelo usar {CTA}.', rotatingCTAs, setRotatingCTAs, <RotateCw className="h-4 w-4" />)}
+                  <p className="text-xs text-[var(--text-muted)]">A foto do produto sempre vai junto com a mensagem.</p>
                 </>
               )}
             </div>
           )}
 
-          {/* Step 3: Destinos */}
           {step === 3 && (
-            <div className="space-y-3">
-              <p className="text-[11px] text-[var(--text-secondary)]">Escolha os grupos que vão receber — nenhum vem marcado.</p>
-
-              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-green-100"><Users className="w-4 h-4 text-green-700" /></span>
-                    <span className="font-bold text-[var(--text-primary)]">WhatsApp · grupos</span>
-                  </div>
+            <div className={panelCard}>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <input type="text" placeholder="Buscar grupos" value={searchGroups} onChange={e => setSearchGroups(e.target.value)} className="h-11 w-full rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] pl-10 pr-3 text-sm text-[var(--text-title)] outline-none focus:border-[var(--border-focus)]" />
                 </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Input
-                    type="text"
-                    placeholder="Buscar grupos"
-                    value={searchGroups}
-                    onChange={e => setSearchGroups(e.target.value)}
-                    className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-                  />
-                  {onRefreshGroups && (
-                    <Button
-                      type="button"
-                      onClick={async () => {
-                        setRefreshingGroups(true);
-                        try {
-                          await onRefreshGroups();
-                        } finally {
-                          setRefreshingGroups(false);
-                        }
-                      }}
-                      variant="outline"
-                      title="Recarregar todos os grupos"
-                      className="rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
-                      disabled={refreshingGroups}
-                    >
-                      {refreshingGroups ? '↻...' : '↻'}
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    onClick={() => setSelectedGroups(prev => prev.length === filteredGroups.length ? [] : filteredGroups.map(g => g.id))}
-                    variant="outline"
-                    className="rounded border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
-                  >
-                    {selectedGroups.length === filteredGroups.length ? 'desmarcar' : 'selecionar todos'}
-                  </Button>
-                </div>
-                <p className="mb-2 text-[10px] font-semibold text-[var(--text-secondary)]">{filteredGroups.length} grupo(s) carregado(s){searchGroups ? ` · filtro "${searchGroups}"` : ''}</p>
-                <div className="max-h-[45vh] overflow-y-auto space-y-1">
-                  {filteredGroups.map(group => (
-                    <label key={group.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 hover:border-[var(--primary)] cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          checked={selectedGroups.includes(group.id)}
-                          onCheckedChange={() => toggleGroup(group.id)}
-                          className="w-4 h-4 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]"
-                        />
-                        <div>
-                          <p className="text-[11px] font-bold text-[var(--text-primary)]">{group.name}</p>
-                          <p className="text-[9px] text-[var(--text-secondary)]">{group.memberCount} membros</p>
-                        </div>
-                      </div>
-                      {!group.isAdmin && (
-                        <span className="flex items-center gap-1 text-[9px] text-red-600">
-                          <AlertTriangle className="w-2.5 h-2.5" /> admin
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              </Card>
-
-              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2.5">
-                <h4 className="text-[10px] font-bold text-[var(--text-secondary)]">Quando</h4>
-                <div className="flex gap-2">
-                  <Button type="button" onClick={() => setSchedule('now')} variant={schedule === 'now' ? 'default' : 'outline'} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'now' ? '' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agora</Button>
-                  <Button type="button" onClick={() => setSchedule('scheduled')} variant={schedule === 'scheduled' ? 'default' : 'outline'} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold ${schedule === 'scheduled' ? '' : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}>Agendar</Button>
-                </div>
-                {schedule === 'scheduled' && (
-                  <Input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]" />
+                {onRefreshGroups && (
+                  <button type="button" disabled={refreshingGroups} onClick={async () => { setRefreshingGroups(true); try { await onRefreshGroups(); } finally { setRefreshingGroups(false); } }} title="Recarregar grupos" className="inline-flex h-11 items-center gap-2 rounded-xl border border-[var(--border-default)] px-3 text-[13px] text-[var(--text-body)] hover:border-[var(--border-brand)] disabled:opacity-50">
+                    <RotateCw className={`h-4 w-4 ${refreshingGroups ? 'animate-spin' : ''}`} /> Atualizar
+                  </button>
                 )}
-
-                <h4 className="text-[10px] font-bold text-[var(--text-secondary)]">Ritmo</h4>
-                <p className="text-[9px] text-[var(--text-secondary)]">Recomendamos intervalos de 20+ min para segurança</p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    max="3600"
-                    value={intervalValue}
-                    onChange={e => setIntervalValue(parseInt(e.target.value) || 1)}
-                    className="w-16 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)] text-center"
-                  />
-                  <Select value={intervalUnit} onValueChange={(e) => setIntervalUnit(e as IntervalUnit)}>
-                    <SelectTrigger className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-primary)] outline-none focus:border-[var(--primary)]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="seconds">segundos</SelectItem>
-                      <SelectItem value="minutes">minutos</SelectItem>
-                      <SelectItem value="hours">horas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 border-t border-[var(--border)] pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={nightPause} onCheckedChange={(checked) => setNightPause(checked as boolean)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
-                    <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar 23h–6h</span><p className="text-[9px] text-[var(--text-secondary)]">Evita disparos de madrugada.</p></div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={weekendPause} onCheckedChange={(checked) => setWeekendPause(checked as boolean)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
-                    <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar fim de semana</span><p className="text-[9px] text-[var(--text-secondary)]">Pausa sáb/dom, retoma segunda.</p></div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={expirePause} onCheckedChange={(checked) => setExpirePause(checked as boolean)} className="w-3.5 h-3.5 text-[var(--primary)] border-[var(--border)] rounded focus:ring-[var(--primary)]" />
-                    <div className="flex-1"><span className="text-[11px] font-bold text-[var(--text-primary)]">Não enviar ofertas expiradas</span><p className="text-[9px] text-[var(--text-secondary)]">Evita mandar link que já saiu da promo.</p></div>
-                  </label>
-                </div>
-              </Card>
+                <button type="button" onClick={() => setSelectedGroups(prev => prev.length === filteredGroups.length ? [] : filteredGroups.map(g => g.id))} className="inline-flex h-11 items-center rounded-xl border border-[var(--border-default)] px-3 text-[13px] text-[var(--text-body)] hover:border-[var(--border-brand)]">
+                  {selectedGroups.length === filteredGroups.length && filteredGroups.length > 0 ? 'Desmarcar todos' : 'Selecionar todos'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-[var(--text-secondary)]">{filteredGroups.length} grupo(s) carregado(s){searchGroups ? ` · filtro "${searchGroups}"` : ''}</p>
+              <div className="mt-3 grid max-h-[52vh] grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2">
+                {filteredGroups.map(group => {
+                  const checked = selectedGroups.includes(group.id);
+                  return (
+                    <button key={group.id} type="button" onClick={() => toggleGroup(group.id)} aria-pressed={checked} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${checked ? 'border-[var(--border-brand)] bg-[var(--surface-selected)]' : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]'}`}>
+                      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${checked ? 'border-[var(--brand-500)] bg-[var(--brand-500)] text-white' : 'border-[var(--border-strong)]'}`}>{checked && <Check className="h-3.5 w-3.5" />}</span>
+                      <Users className="h-5 w-5 shrink-0 text-[var(--text-secondary)]" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-[var(--text-title)]">{group.name}</span>
+                        <span className="block text-xs text-[var(--text-secondary)]">{Number(group.memberCount || 0).toLocaleString('pt-BR')} participantes</span>
+                      </span>
+                      {!group.isAdmin && <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-[var(--amber-400)]" title="Você não é admin deste grupo"><AlertTriangle className="h-3.5 w-3.5" />sem admin</span>}
+                    </button>
+                  );
+                })}
+                {filteredGroups.length === 0 && <p className="py-6 text-center text-sm text-[var(--text-secondary)] md:col-span-2">Nenhum grupo encontrado.</p>}
+              </div>
             </div>
           )}
 
-          {/* Step 4: Revisar */}
           {step === 4 && (
             <div className="space-y-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--primary)]">Etapa 3 de 3</p>
-                <h2 className="mt-1 text-xl font-black text-[var(--text-primary)]">Revise antes de disparar</h2>
-                <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">Confira ofertas, grupos e o ritmo.</p>
+              <div className={panelCard}>
+                <h3 className="text-sm font-semibold text-[var(--text-title)]">Quando começar</h3>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {([['now', 'Agora', 'Assim que confirmar'], ['scheduled', 'Agendar', 'Escolher data e hora']] as const).map(([value, title, description]) => (
+                    <button key={value} type="button" onClick={() => setSchedule(value)} aria-pressed={schedule === value} className={`rounded-xl border p-3 text-left transition-colors ${schedule === value ? 'border-[var(--border-brand)] bg-[var(--surface-active)]' : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]'}`}>
+                      <span className="block text-sm font-semibold text-[var(--text-title)]">{title}</span>
+                      <span className="block text-xs text-[var(--text-secondary)]">{description}</span>
+                    </button>
+                  ))}
+                </div>
+                {schedule === 'scheduled' && (
+                  <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} aria-label="Data e hora de início" className="mt-3 h-11 w-full rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] px-3 text-sm text-[var(--text-title)] outline-none focus:border-[var(--border-focus)] sm:w-auto" />
+                )}
               </div>
-              <div className="grid gap-2 grid-cols-3">
-                {[
-                  ['Ofertas', `${selectedOffers.length} selecionada(s)`],
-                  ['Grupos', `${selectedGroups.length} selecionado(s)`],
-                  ['Ritmo', `${intervalValue} ${intervalUnit}`],
-                ].map(([label, value]) => (
-                  <Card key={label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
-                    <p className="text-[9px] text-[var(--text-secondary)]">{label}</p>
-                    <p className="mt-1 font-bold text-[var(--text-primary)]">{value}</p>
-                  </Card>
-                ))}
+
+              <div className={panelCard}>
+                <h3 className="text-sm font-semibold text-[var(--text-title)]">Intervalo entre ofertas</h3>
+                <p className="text-xs text-[var(--text-secondary)]">Recomendamos 20 minutos ou mais para mais segurança.</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <input type="number" min={1} max={3600} value={intervalValue} onChange={e => setIntervalValue(parseInt(e.target.value) || 1)} aria-label="Intervalo" className="h-11 w-24 rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] px-3 text-center text-sm text-[var(--text-title)] outline-none focus:border-[var(--border-focus)]" />
+                  <select value={intervalUnit} onChange={e => setIntervalUnit(e.target.value as IntervalUnit)} aria-label="Unidade do intervalo" className="h-11 rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] px-3 text-sm text-[var(--text-title)] outline-none focus:border-[var(--border-focus)]">
+                    <option value="seconds">segundos</option>
+                    <option value="minutes">minutos</option>
+                    <option value="hours">horas</option>
+                  </select>
+                </div>
               </div>
-              <Card className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
-                <p className="text-[9px] font-bold text-[var(--text-secondary)]">Mensagem</p>
-                <p className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-[var(--text-primary)]">{previewMessage()}</p>
-              </Card>
+
+              <div className="space-y-2">
+                {optionRow('Não enviar entre 23h e 6h', 'Evita disparos de madrugada.', nightPause, setNightPause, <Moon className="h-4 w-4" />)}
+                {optionRow('Não enviar no fim de semana', 'Pausa sábado e domingo e retoma na segunda.', weekendPause, setWeekendPause, <CalendarClock className="h-4 w-4" />)}
+                {optionRow('Não enviar ofertas expiradas', 'Evita mandar link que já saiu da promoção.', expirePause, setExpirePause, <AlertTriangle className="h-4 w-4" />)}
+              </div>
             </div>
           )}
 
-          {/* Step 5: Confirmar / Acompanhar */}
           {step === 5 && (
             <div className="space-y-3">
-              {dispatchJob ? (
-                <>
-                  {/* Header do disparo em andamento */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="warning" className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
-                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-600 animate-pulse" />
-                        Enviando
-                      </Badge>
-                      <span className="text-[11px] text-[var(--text-secondary)]">criado {new Date(dispatchJob.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    <Button type="button" onClick={() => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); }} variant="outline" className="pressable inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-red-600 border-red-200 hover:bg-red-50"><Ban className="w-3.5 h-3.5" />Cancelar</Button>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  ['Ofertas', String(selectedOffers.length)],
+                  ['Grupos', String(selectedGroups.length)],
+                  ['Envios', String(totalEnvios)],
+                  ['Intervalo', `${intervalValue} ${UNIT_LABEL[intervalUnit]}`],
+                ].map(([label, value]) => (
+                  <div key={label} className="panel p-4">
+                    <p className="text-xs text-[var(--text-secondary)]">{label}</p>
+                    <p className="rdo-num mt-1 text-xl font-bold text-[var(--text-title)]">{value}</p>
                   </div>
-
-                  {/* Grupos destinatários */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {selectedGroupsData.map(group => (
-                      <span key={group.id} className="max-w-[160px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">#{group.id.slice(-4)} {group.name}</span>
-                    ))}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--border)]">
-                      <div className="h-full rounded-full transition-[width] duration-500 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)]" style={{ width: `${Math.min(100, ((dispatchJob.stats?.sent || 0) + (dispatchJob.stats?.failed || 0)) / Math.max(1, totalEnvios) * 100)}%` }} />
-                    </div>
-                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">
-                      {dispatchJob.stats?.sent || 0}/{totalEnvios} envios · {Math.round(((dispatchJob.stats?.sent || 0) + (dispatchJob.stats?.failed || 0)) / Math.max(1, totalEnvios) * 100)}%
-                    </span>
-                  </div>
-
-                  {/* Previsão de conclusão */}
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[var(--text-secondary)]">
-                    <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Previsão: {(() => { const sent = dispatchJob.stats?.sent || 0; const failed = dispatchJob.stats?.failed || 0; const done = sent + failed; const remaining = totalEnvios - done; const intervalMs = (intervalValue * (intervalUnit === 'seconds' ? 1000 : intervalUnit === 'minutes' ? 60000 : 3600000)); const eta = remaining * intervalMs; const etaDate = new Date(Date.now() + eta); return etaDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); })()}</span>
-                    <span className="inline-flex items-center gap-1.5"><Send className="w-3.5 h-3.5" />{selectedGroupsData.length} grupo(s)</span>
-                    <span className="inline-flex items-center gap-1.5"><Box className="w-3.5 h-3.5" />{selectedOffers.length} oferta(s)</span>
-                  </div>
-
-                  {/* Stats detalhadas */}
-                  <div className="mt-3 grid grid-cols-3 gap-1 text-center">
-                    <Card className="rounded-lg bg-[var(--success)]/10 p-3"><b className="block text-xl text-[var(--success)]">{dispatchJob.stats?.sent || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Enviados</span></Card>
-                    <Card className="rounded-lg bg-[var(--error)]/10 p-3"><b className="block text-xl text-[var(--error)]">{dispatchJob.stats?.failed || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Falhas</span></Card>
-                    <Card className="rounded-lg bg-[var(--warning)]/10 p-3"><b className="block text-xl text-[var(--warning)]">{dispatchJob.stats?.pending || 0}</b><span className="text-[9px] text-[var(--text-secondary)]">Pendentes</span></Card>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--primary)]/10 text-[var(--primary)]"><Send className="h-7 w-7" /></div>
-                  <p className="mt-4 text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--primary)]">Tudo pronto</p>
-                  <h2 className="mt-1 text-2xl font-black text-[var(--text-primary)]">Confirmar disparo</h2>
-                  <p className="mt-2 max-w-md text-[11px] leading-5 text-[var(--text-secondary)]">Ao confirmar, o Radar cria a fila e envia pelo WhatsApp conectado.</p>
-                  <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-[11px] text-[var(--text-secondary)]">{selectedOffers.length} oferta(s) · {selectedGroups.length} grupo(s)</div>
-                  {(() => {
-                    const semNome = offers.filter(o => selectedOffers.includes(o.id) && !(o.name || (o as any).productName || (o as any).title)).length;
-                    return semNome > 0 ? (
-                      <div className="mt-3 rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 px-4 py-3 text-[11px] font-bold text-[var(--error)]">
-                        {semNome} oferta(s) sem nome — saem como "Oferta especial" no grupo. Volte e retire elas da seleção.
-                      </div>
-                    ) : null;
-                  })()}
+                ))}
+              </div>
+              <div className={panelCard}>
+                <h3 className="text-sm font-semibold text-[var(--text-title)]">Grupos ({selectedGroupsData.length})</h3>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedGroupsData.map(group => <span key={group.id} className="rounded-lg border border-[var(--border-subtle)] px-2 py-1 text-xs text-[var(--text-body)]">{group.name}</span>)}
                 </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-[var(--text-body)] sm:grid-cols-2">
+                  <p className="inline-flex items-center gap-2"><Clock className="h-4 w-4 text-[var(--text-secondary)]" />{schedule === 'scheduled' && scheduledAt ? `Começa em ${new Date(scheduledAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : 'Começa assim que confirmar'}</p>
+                  <p className="inline-flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--text-secondary)]" />Duração estimada: {durationText(estimatedDurationMs)}</p>
+                </div>
+              </div>
+              <div className={panelCard}>
+                <h3 className="text-sm font-semibold text-[var(--text-title)]">Mensagem (primeira oferta)</h3>
+                <p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card-raised)] p-3 text-[13px] leading-relaxed text-[var(--text-body)]">{previewMessage()}</p>
+              </div>
+              {offersWithoutName > 0 && (
+                <p className="rounded-xl border border-[rgba(239,68,68,.3)] bg-[var(--surface-red-soft)] p-3 text-sm text-[var(--red-400)]">{offersWithoutName} oferta(s) sem nome. Volte e retire da seleção antes de disparar.</p>
               )}
             </div>
           )}
 
+          <div className="dispatch-footer sticky bottom-3 z-10 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-app)]/95 p-3 backdrop-blur-xl">
+            {step === 1 ? (
+              <button type="button" onClick={() => setSelectedOffers([])} disabled={!selectedOffers.length} className="inline-flex h-12 items-center gap-2 rounded-xl border border-[var(--border-brand)] px-4 text-sm font-semibold text-[var(--brand-400)] hover:bg-[var(--surface-brand-soft)] disabled:opacity-40">
+                <Trash2 className="h-4 w-4" /> Limpar seleção
+              </button>
+            ) : (
+              <button type="button" onClick={handleBack} className="inline-flex h-12 items-center gap-2 rounded-xl border border-[var(--border-default)] px-4 text-sm font-semibold text-[var(--text-body)] hover:border-[var(--border-strong)]">
+                <ChevronLeft className="h-4 w-4" /> Voltar
+              </button>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-[var(--text-title)]">{footer[step].summary}</p>
+              <p className="truncate text-xs text-[var(--text-secondary)]">{footer[step].detail}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={dispatching || (step === 1 && !queueItems.length) || (step === 5 && (selectedGroups.length === 0 || offersWithoutName > 0))}
+              className="btn-brand inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold disabled:cursor-not-allowed sm:w-auto"
+            >
+              {footer[step].cta} {step === 5 ? <Send className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="dispatch-footer sticky bottom-0 z-10 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface)]/95 px-3 py-2.5 backdrop-blur-xl safe-bottom">
-          <Button
-            type="button"
-            onClick={handleBack}
-            disabled={step === 1}
-            variant="outline"
-            className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1.5 text-[10px] font-bold text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" /> Voltar
-          </Button>
-          <Button
-            type="button"
-            onClick={dispatchJob ? () => { setDispatchJob(null); setStep(1); setSelectedOffers([]); setSelectedGroups([]); } : step === 5 ? handleExecute : handleNext}
-            disabled={dispatching || (step === 5 && (selectedGroups.length === 0 || offers.some(o => selectedOffers.includes(o.id) && !(o.name || (o as any).productName || (o as any).title))))}
-            className="pressable flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-[10px] font-black text-white hover:bg-[var(--primary-hover)]"
-          >
-            {dispatchJob ? <>Novo <Plus className="h-3.5 w-3.5" /></> : step === 5 ? (
-              <>{dispatching ? 'Criando…' : 'Confirmar'} <span className="ml-0.5 px-1 py-0.5 bg-white/20 rounded text-[9px]">{selectedGroups.length}</span></>
-            ) : (
-              <>Continuar <ChevronRight className="w-3.5 h-3.5" /></>
-            )}
-          </Button>
-        </div>
+        <div className="xl:sticky xl:top-4">{nextCard}</div>
       </div>
     </section>
   );
