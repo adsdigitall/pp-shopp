@@ -34,6 +34,8 @@ import {
   WhatsAppSessionStore,
 } from './services/storage/DataStore.mjs';
 import { dataStore } from './services/storage/DataStore.mjs';
+import { PublicPagesStore } from './services/storage/DataStore.mjs';
+import { sanitizePageInput, uniqueSlug, renderPublicPage, pageItemTarget, isPreviewBot, pageCoverImage } from './services/pages/publicPages.mjs';
 import { createSupabaseAnalyticsStore } from './services/analytics/SupabaseAnalyticsStore.mjs';
 import { redactSensitive } from './lib/redactSensitive.mjs';
 import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
@@ -1413,38 +1415,29 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
 
       // ========== PUBLIC PAGES (PÁGINAS) ENDPOINTS ==========
-      // POST /api/pages - Cria página pública
-      if (req.method === 'POST' && pathOnly === '/api/pages') {
-        await handleCreatePage(req, res);
-        return;
-      }
-      // GET /api/pages - Lista páginas
       if (req.method === 'GET' && pathOnly === '/api/pages') {
         await handleGetPages(req, res);
         return;
       }
-      // GET /api/pages/:slug - Página pública (render)
-      if (req.method === 'GET' && pathOnly.startsWith('/api/pages/') && !pathOnly.startsWith('/api/pages/') && pathOnly !== '/api/pages') {
-        // handled by public route below
-      }
-      // PUT /api/pages/:id - Atualiza página
-      if (req.method === 'PUT' && pathOnly.startsWith('/api/pages/')) {
-        await handleUpdatePage(req, res, pathOnly);
+      if (req.method === 'POST' && pathOnly === '/api/pages') {
+        await handleCreatePage(req, res);
         return;
       }
-      // DELETE /api/pages/:id - Deleta página
-      if (req.method === 'DELETE' && pathOnly.startsWith('/api/pages/')) {
-        await handleDeletePage(req, res, pathOnly);
+      if (req.method === 'POST' && /^\/api\/pages\/[^/]+\/duplicate$/.test(pathOnly)) {
+        await handleDuplicatePage(req, res, decodeURIComponent(pathOnly.split('/')[3]));
         return;
       }
-      // POST /api/pages/:id/products - Adiciona produtos à página
-      if (req.method === 'POST' && pathOnly.startsWith('/api/pages/') && pathOnly.endsWith('/products')) {
-        await handleAddProductsToPage(req, res, pathOnly);
+      if ((req.method === 'PUT' || req.method === 'PATCH') && /^\/api\/pages\/[^/]+$/.test(pathOnly)) {
+        await handleUpdatePage(req, res, decodeURIComponent(pathOnly.split('/')[3]));
         return;
       }
-      // GET /p/:slug - Rota pública da vitrine
-      if (req.method === 'GET' && pathOnly.startsWith('/p/')) {
-        await handlePublicPage(req, res, pathOnly);
+      if (req.method === 'DELETE' && /^\/api\/pages\/[^/]+$/.test(pathOnly)) {
+        await handleDeletePage(req, res, decodeURIComponent(pathOnly.split('/')[3]));
+        return;
+      }
+      // Rotas públicas (fora de /api, sem login): página, clique contado e compartilhamento
+      if (pathOnly.startsWith('/p/')) {
+        await handlePublicPageRoute(req, res, pathOnly);
         return;
       }
 
@@ -3799,155 +3792,161 @@ async function checkAndMirror(config) {
 
 // ========== PUBLIC PAGES HANDLERS ==========
 
-const publicPages = new Map();
+const PAGES_USER_ID = 'default_user';
 
-async function handleCreatePage(req, res) {
-  try {
-    const userId = 'default_user';
-    const body = await readJsonBody(req);
-    const { name, type, products, customization } = body;
-
-    if (!name || !type) {
-      sendJson(res, 400, { error: { code: 'MISSING_PARAMS', message: 'Nome e tipo são obrigatórios.' } });
-      return;
-    }
-
-    const pageId = `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    
-    const page = {
-      id: pageId,
-      userId,
-      name,
-      type, // 'vitrine' | 'convite' | 'linktree'
-      status: 'draft',
-      slug,
-      products: products || [],
-      customization: customization || { theme: 'light', primaryColor: '#EE4D2D' },
-      createdAt: new Date().toISOString(),
-      publishedAt: null,
-      publicUrl: `/p/${slug}`,
-    };
-    publicPages.set(pageId, page);
-    sendJson(res, 201, { page });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao criar página.' } });
-  }
+function sendPageError(res, status, code, message) {
+  sendJson(res, status, { error: { code, message } });
 }
 
 async function handleGetPages(req, res) {
   try {
-    const userId = 'default_user';
-    const pages = Array.from(publicPages.values()).filter(p => p.userId === userId);
-    sendJson(res, 200, { pages });
+    const pages = await PublicPagesStore.list(PAGES_USER_ID);
+    sendJson(res, 200, { pages: pages.map(serializePage) });
   } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao buscar páginas.' } });
+    logLine(`[PAGES] erro ao listar: ${err.message}`);
+    sendPageError(res, 500, 'INTERNAL_ERROR', 'Erro ao buscar páginas.');
   }
 }
 
-async function handleUpdatePage(req, res, pathOnly) {
+async function handleCreatePage(req, res) {
   try {
-    const pageId = pathOnly.replace('/api/pages/', '');
     const body = await readJsonBody(req);
-    const page = publicPages.get(pageId);
-    if (!page) {
-      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Página não encontrada.' } });
-      return;
-    }
-    Object.assign(page, body);
-    publicPages.set(pageId, page);
-    sendJson(res, 200, { page });
+    const { value, error } = sanitizePageInput(body);
+    if (error) return sendPageError(res, 400, 'INVALID_PAGE', error);
+    const taken = await PublicPagesStore.slugs();
+    const now = new Date().toISOString();
+    const page = {
+      id: `page_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      userId: PAGES_USER_ID,
+      ...value,
+      slug: uniqueSlug(value.slug || value.name, taken),
+      stats: { visits: 0, clicks: 0, shares: 0 },
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: value.status === 'published' ? now : null,
+    };
+    await PublicPagesStore.add(page);
+    sendJson(res, 201, { page: serializePage(page) });
   } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao atualizar página.' } });
+    logLine(`[PAGES] erro ao criar: ${err.message}`);
+    sendPageError(res, 500, 'INTERNAL_ERROR', 'Erro ao criar página.');
   }
 }
 
-async function handleDeletePage(req, res, pathOnly) {
+async function handleUpdatePage(req, res, pageId) {
   try {
-    const pageId = pathOnly.replace('/api/pages/', '');
-    publicPages.delete(pageId);
+    const existing = await PublicPagesStore.get(PAGES_USER_ID, pageId);
+    if (!existing) return sendPageError(res, 404, 'NOT_FOUND', 'Página não encontrada.');
+    const body = await readJsonBody(req);
+    const { value, error } = sanitizePageInput(body, existing);
+    if (error) return sendPageError(res, 400, 'INVALID_PAGE', error);
+    let slug = existing.slug;
+    if (value.slug && value.slug !== existing.slug) {
+      const taken = (await PublicPagesStore.slugs()).filter((s) => s !== existing.slug);
+      if (taken.includes(value.slug)) return sendPageError(res, 409, 'SLUG_TAKEN', 'Esse endereço já está em uso. Escolha outro.');
+      slug = value.slug;
+    }
+    const becamePublished = value.status === 'published' && existing.status !== 'published';
+    const page = await PublicPagesStore.update(existing.id, {
+      ...value,
+      slug,
+      publishedAt: becamePublished ? new Date().toISOString() : existing.publishedAt || null,
+    });
+    sendJson(res, 200, { page: serializePage(page) });
+  } catch (err) {
+    logLine(`[PAGES] erro ao atualizar: ${err.message}`);
+    sendPageError(res, 500, 'INTERNAL_ERROR', 'Erro ao atualizar página.');
+  }
+}
+
+async function handleDuplicatePage(req, res, pageId) {
+  try {
+    const existing = await PublicPagesStore.get(PAGES_USER_ID, pageId);
+    if (!existing) return sendPageError(res, 404, 'NOT_FOUND', 'Página não encontrada.');
+    const { value } = sanitizePageInput({ ...existing, name: `${existing.name} (cópia)`.slice(0, 80), status: 'draft', slug: undefined });
+    const now = new Date().toISOString();
+    const page = {
+      id: `page_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      userId: PAGES_USER_ID,
+      ...value,
+      slug: uniqueSlug(existing.slug, await PublicPagesStore.slugs()),
+      stats: { visits: 0, clicks: 0, shares: 0 },
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: null,
+    };
+    await PublicPagesStore.add(page);
+    sendJson(res, 201, { page: serializePage(page) });
+  } catch (err) {
+    logLine(`[PAGES] erro ao duplicar: ${err.message}`);
+    sendPageError(res, 500, 'INTERNAL_ERROR', 'Erro ao duplicar página.');
+  }
+}
+
+async function handleDeletePage(req, res, pageId) {
+  try {
+    const existing = await PublicPagesStore.get(PAGES_USER_ID, pageId);
+    if (!existing) return sendPageError(res, 404, 'NOT_FOUND', 'Página não encontrada.');
+    await PublicPagesStore.remove(existing.id);
     sendJson(res, 200, { ok: true });
   } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao excluir página.' } });
+    logLine(`[PAGES] erro ao excluir: ${err.message}`);
+    sendPageError(res, 500, 'INTERNAL_ERROR', 'Erro ao excluir página.');
   }
 }
 
-async function handleAddProductsToPage(req, res, pathOnly) {
+function serializePage(page) {
+  return {
+    ...page,
+    coverUrl: pageCoverImage(page),
+    publicPath: `/p/${page.slug}`,
+    stats: { visits: 0, clicks: 0, shares: 0, ...(page.stats || {}) },
+  };
+}
+
+function sendPublicHtml(res, status, html) {
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  });
+  res.end(html);
+}
+
+const PUBLIC_NOT_FOUND = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página não encontrada</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0c1418;color:#d9dee1;font-family:system-ui,sans-serif;text-align:center"><div><h1 style="color:#f2f5f6">Página não encontrada</h1><p>Esse link não existe ou ainda não foi publicado.</p></div></body></html>';
+
+async function handlePublicPageRoute(req, res, pathOnly) {
   try {
-    const pageId = pathOnly.replace('/api/pages/', '').replace('/products', '');
-    const body = await readJsonBody(req);
-    const { productIds } = body;
-    const page = publicPages.get(pageId);
-    if (!page) {
-      sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Página não encontrada.' } });
+    const match = pathOnly.match(/^\/p\/([a-z0-9-]{1,60})(?:\/(ir)\/(\d{1,3})|\/(compartilhar))?\/?$/);
+    if (!match) return sendPublicHtml(res, 404, PUBLIC_NOT_FOUND);
+    const [, slug, go, index, share] = match;
+    const page = await PublicPagesStore.getPublishedBySlug(slug);
+    if (!page) return sendPublicHtml(res, 404, PUBLIC_NOT_FOUND);
+    const bot = isPreviewBot(req.headers['user-agent']);
+
+    if (share) {
+      if (req.method !== 'POST') return sendPublicHtml(res, 405, PUBLIC_NOT_FOUND);
+      if (!bot) await PublicPagesStore.increment(page.id, 'shares');
+      res.writeHead(204);
+      res.end();
       return;
     }
-    page.products = [...new Set([...page.products, ...productIds])];
-    publicPages.set(pageId, page);
-    sendJson(res, 200, { page });
-  } catch (err) {
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao adicionar produtos.' } });
-  }
-}
-
-async function handlePublicPage(req, res, pathOnly) {
-  try {
-    const slug = pathOnly.replace('/p/', '');
-    const page = Array.from(publicPages.values()).find(p => p.slug === slug && p.status === 'published');
-    if (!page) {
-      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<h1>Página não encontrada</h1>');
+    if (go) {
+      const target = pageItemTarget(page, index);
+      if (!target) return sendPublicHtml(res, 404, PUBLIC_NOT_FOUND);
+      if (!bot) await PublicPagesStore.increment(page.id, 'clicks');
+      res.writeHead(302, { Location: target, 'Cache-Control': 'no-store' });
+      res.end();
       return;
     }
-    // Renderiza HTML da página pública
-    const html = renderPublicPage(page);
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
+    if (req.method !== 'GET' && req.method !== 'HEAD') return sendPublicHtml(res, 405, PUBLIC_NOT_FOUND);
+    if (req.method === 'GET' && !bot) await PublicPagesStore.increment(page.id, 'visits');
+    sendPublicHtml(res, 200, renderPublicPage(page));
   } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<h1>Erro interno</h1>');
+    logLine(`[PAGES] erro na página pública: ${err.message}`);
+    sendPublicHtml(res, 500, PUBLIC_NOT_FOUND);
   }
-}
-
-function renderPublicPage(page) {
-  const productsHtml = page.products.map(p => `
-    <div class="product-card">
-      <img src="${p.imageUrl || ''}" alt="${p.name}" />
-      <h3>${p.name}</h3>
-      <p class="price">R$ ${p.currentPrice?.toFixed(2).replace('.', ',')}</p>
-      ${p.originalPrice ? `<p class="original-price">De R$ ${p.originalPrice.toFixed(2).replace('.', ',')}</p>` : ''}
-      <a href="${p.affiliateUrl || p.productUrl}" target="_blank">Ver Oferta</a>
-    </div>
-  `).join('');
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${page.name}</title>
-  <style>
-    body { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 20px; background: #f8fafc; }
-    .container { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    h1 { color: #1e293b; margin-bottom: 8px; }
-    .subtitle { color: #64748b; margin-bottom: 24px; }
-    .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
-    .product-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center; }
-    .product-card img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; }
-    .product-card h3 { font-size: 14px; margin: 12px 0 4px; color: #1e293b; }
-    .price { font-size: 18px; font-weight: bold; color: #EE4D2D; margin: 8px 0; }
-    .original-price { text-decoration: line-through; color: #94a3b8; font-size: 14px; }
-    .product-card a { display: inline-block; margin-top: 12px; padding: 8px 16px; background: #EE4D2D; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>${page.name}</h1>
-    <p class="subtitle">${page.customization?.description || 'Minhas ofertas selecionadas'}</p>
-    <div class="products">${productsHtml}</div>
-  </div>
-</body>
-</html>`;
 }
 
 // ========== SETTINGS HANDLERS ==========

@@ -28,6 +28,7 @@ const STORAGE_FILES = {
   workerStatus: 'worker_status.json',
   apiTokens: 'api_tokens.json',
   extensionTags: 'extension_tags.json',
+  publicPages: 'public_pages.json',
 };
 
 class DataStore {
@@ -564,6 +565,29 @@ export const ProductsCacheStore = {
 };
 
 // Click Tracking Store
+export const PublicPagesStore = {
+  async list(userId) {
+    const rows = await dataStore.find('publicPages', { userId });
+    return rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  },
+  async get(userId, id) { return dataStore.findOne('publicPages', { userId, id }); },
+  async slugs() { return (await dataStore.load('publicPages')).map((p) => p.slug); },
+  async getPublishedBySlug(slug) {
+    return dataStore.findOne('publicPages', { slug, status: 'published' });
+  },
+  async add(page) { return dataStore.add('publicPages', page); },
+  async update(id, updates) { return dataStore.update('publicPages', id, updates); },
+  async remove(id) { return dataStore.remove('publicPages', id); },
+  /** Soma 1 em visits, clicks ou shares relendo o registro na hora de gravar. */
+  async increment(id, field) {
+    const page = await dataStore.findById('publicPages', id);
+    if (!page) return null;
+    const stats = { visits: 0, clicks: 0, shares: 0, ...(page.stats || {}) };
+    stats[field] = (Number(stats[field]) || 0) + 1;
+    return dataStore.update('publicPages', id, { stats });
+  },
+};
+
 export const ClickTrackingStore = {
   async add(data) {
     return dataStore.add('clickTracking', {

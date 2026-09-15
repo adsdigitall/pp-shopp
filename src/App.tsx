@@ -235,7 +235,6 @@ export function App() {
   // Lista real vem de GET /api/whatsapp/groups (efeito abaixo).
   // Estado inicial neutro [] usa o empty-state já aprovado ("Nenhum grupo conectado").
   const [groups, setGroups] = useState<Group[]>([]);
-  const [pages, setPages] = useState<any[]>([]);
   const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([
     { id: 'mirror-demo', name: 'Ofertas TOP Brasil', sourceGroupId: '1', destinationGroupIds: ['2', '3'], type: 'instant', status: 'active', onlyOffers: true, templateIds: [], mirroredMessages: 128, failedMessages: 2, createdAt: '2026-09-04' },
   ]);
@@ -716,18 +715,6 @@ export function App() {
     }
   };
 
-  const handleCreatePage = (page: any) => {
-    const newPage = { ...page, id: `page-${Date.now()}`, createdAt: new Date().toISOString() };
-    setPages(prev => [...prev, newPage]);
-    showToast('Página criada', 'Agora adicione ofertas e personalize.', 'success');
-  };
-
-  const handleDeletePage = (pageId: string) => { setPages(prev => prev.filter(p => p.id !== pageId)); showToast('Página excluída', undefined, 'info'); };
-
-  const handleEditPage = (page: any) => { showToast('Editar página', 'Funcionalidade em desenvolvimento', 'info'); };
-
-  const handlePublishPage = (pageId: string) => { setPages(prev => prev.map(p => p.id === pageId ? { ...p, status: 'published', publishedAt: new Date().toISOString() } : p)); showToast('Página publicada', 'Link público gerado.', 'success'); };
-
   const handleCreateMirroring = (config: any) => {
     const newConfig = { ...config, id: `mirror-${Date.now()}`, status: 'active', createdAt: new Date().toISOString() };
     setMirroringConfigs(prev => [...prev, newConfig]);
@@ -905,11 +892,9 @@ export function App() {
         /></div>
 
         <div className={activeSection === 'paginas' || activeSection === 'templates' ? '' : 'hidden'}><PaginasPage
-          pages={pages}
-          onCreatePage={handleCreatePage}
-          onDeletePage={handleDeletePage}
-          onEditPage={handleEditPage}
-          onPublishPage={handlePublishPage}
+          queueItems={queueItems}
+          products={products}
+          isActive={activeSection === 'paginas' || activeSection === 'templates'}
           onShowToast={showToast}
         /></div>
 
