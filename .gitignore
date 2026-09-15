@@ -31,3 +31,4 @@ dist-ssr
 data/api_tokens.json
 data/dispatch_automations.json
 data/extension_tags.json
+data/public_pages.json
