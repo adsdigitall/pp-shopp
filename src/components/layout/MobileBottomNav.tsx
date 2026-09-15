@@ -20,6 +20,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { Icon3D } from '@/components/ui/Icon3D';
 
 export type MainNavTab = 'home' | 'products' | 'dispatch' | 'queue' | 'groups' | 'config' | 'whatsapp';
 
@@ -87,7 +88,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     sheetOpen ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <item.icon className="h-6 w-6" aria-hidden="true" />
+                  <Icon3D icon={item.icon} size={28} tone={sheetOpen ? 'orange' : 'muted'} />
                   <span className="text-[10px] font-semibold">{item.label}</span>
                 </button>
               );
@@ -102,9 +103,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   aria-label={item.label}
                   className="relative flex flex-col items-center justify-start gap-1"
                 >
-                  <span className="btn-brand -mt-7 grid h-[52px] w-[52px] place-items-center rounded-2xl text-white">
-                    <item.icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
+                  <Icon3D icon={item.icon} size={52} className="-mt-7" />
                   <span className={cn("text-[10px]", isActive ? "font-black text-primary" : "font-semibold text-muted-foreground")}>{item.label}</span>
                 </button>
               );
@@ -120,8 +119,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {isActive && <span className="absolute top-0.5 h-1 w-1 rounded-full bg-primary" />}
-                <item.icon className="h-6 w-6" aria-hidden="true" />
+                <Icon3D icon={item.icon} size={28} tone={isActive ? 'orange' : 'muted'} />
                 <span className={cn("text-[10px]", isActive ? "font-black" : "font-semibold")}>{item.label}</span>
               </button>
             );
@@ -165,7 +163,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                         : "border-border bg-muted/50 text-muted-foreground active:bg-muted"
                     )}
                   >
-                    <item.icon className="h-5 w-5" aria-hidden="true" />
+                    <Icon3D icon={item.icon} size={38} tone={isActive ? 'orange' : 'dark'} />
                     <span className="text-[11px] font-bold leading-tight">{item.label}</span>
                   </button>
                 );

@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Link2, Package, Send, SkipForward, Square, Tag, XCircle } from 'lucide-react';
 import { inferMarketplace, marketplaceInfo } from '@/services/queueOverview';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 export interface DispatchSummary {
   id: string;
@@ -181,7 +182,7 @@ export function DispatchMonitor({ history, mode, cancellingId, onCancel, onNewDi
     );
   })() : (
     <section className="panel flex flex-col items-center gap-3 p-8 text-center">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Send className="h-7 w-7" /></span>
+      <Icon3D icon={Send} size={60} />
       <h2 className="text-lg font-bold text-[var(--text-title)]">Nenhum disparo em andamento</h2>
       <p className="text-sm text-[var(--text-secondary)]">A fila continua no servidor mesmo com o aplicativo fechado. Quando um disparo começar, o progresso aparece aqui.</p>
       <button type="button" onClick={onNewDispatch} className="btn-brand mt-1 inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-bold">Criar novo disparo</button>

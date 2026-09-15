@@ -1,6 +1,7 @@
 import type { ElementType } from 'react';
 import { ArrowDownRight, ArrowUpRight, Info, Minus } from 'lucide-react';
 import { Sparkline } from '@/components/charts';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 interface KpiCardProps {
   icon: ElementType;
@@ -40,9 +41,7 @@ export function KpiCard({ icon: Icon, label, info, display, value, previous, ser
 
   return (
     <div className="panel flex min-w-0 items-start gap-3 p-4 sm:p-5">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]">
-        <Icon className="h-5 w-5" />
-      </span>
+      <Icon3D icon={Icon} size={44} />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--text-secondary)]">
           {label}

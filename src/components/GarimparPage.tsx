@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 interface GarimparPageProps {
   activeFilter: FilterType;
@@ -237,7 +238,7 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
           <p className="mt-1 text-[15px] text-[var(--text-body)]">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p>
         </div>
         <button type="button" onClick={showBestOffers} className="panel flex items-center gap-4 p-4 text-left transition-colors hover:border-[var(--border-brand)] lg:min-w-[330px]">
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Target className="h-7 w-7" /></span>
+          <Icon3D icon={Target} size={56} />
           <span className="flex-1">
             <span className="block text-[15px] font-semibold text-[var(--text-title)]">Boas ofertas hoje</span>
             <span className="block text-[13px] text-[var(--text-secondary)]">Ver os mais vendidos agora.</span>

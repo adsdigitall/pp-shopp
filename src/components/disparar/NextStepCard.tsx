@@ -1,6 +1,7 @@
 import type { ElementType, ReactNode } from 'react';
 import { Package } from 'lucide-react';
 import type { Product } from '../../types/product';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 const brl = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -45,7 +46,7 @@ export function NextStepCard({ icon: Icon, eyebrow, title, description, children
   return (
     <aside className="panel flex flex-col gap-4 p-4 sm:p-5">
       <div className="flex gap-3">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Icon className="h-6 w-6" /></span>
+        <Icon3D icon={Icon} size={48} />
         <div className="min-w-0">
           <p className="text-[13px] text-[var(--text-secondary)]">{eyebrow}</p>
           <h2 className="text-xl font-bold text-[var(--text-title)]">{title}</h2>

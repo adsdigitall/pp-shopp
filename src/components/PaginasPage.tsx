@@ -5,6 +5,7 @@ import { PageCard } from '@/components/paginas/PageCard';
 import { PageEditorDialog } from '@/components/paginas/PageEditorDialog';
 import { PAGE_TYPE_INFO, pagesApi, type PageInput, type PageType, type PublicPageData } from '@/services/publicPages';
 import type { Product, QueueItem } from '../types/product';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 interface PaginasPageProps {
   queueItems: QueueItem[];
@@ -182,7 +183,7 @@ export function PaginasPage({ queueItems, products, isActive, onShowToast }: Pag
             onClick={() => openNew()}
             className={`empty-state flex flex-col items-center justify-center gap-3 px-6 py-10 text-center transition-colors hover:border-[var(--border-brand)] hover:bg-[var(--surface-selected)] ${visible.length ? 'min-h-[200px]' : 'min-h-[320px] sm:col-span-2 xl:col-span-3'}`}
           >
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Plus className="h-6 w-6" /></span>
+            <Icon3D icon={Plus} size={52} />
             <span className="text-[15px] font-semibold text-[var(--text-title)]">{visible.length ? info.newLabel : `Você ainda não tem ${activeTab === 'linktree' ? 'uma LinkTree' : activeTab === 'convite' ? 'páginas de convite' : 'vitrines'}`}</span>
             <span className="max-w-sm text-[13px] text-[var(--text-secondary)]">{info.empty}</span>
           </button>
@@ -192,7 +193,7 @@ export function PaginasPage({ queueItems, products, isActive, onShowToast }: Pag
       <div className="panel relative overflow-hidden p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
           <div className="flex min-w-0 items-start gap-4 lg:w-[38%]">
-            <span className="btn-brand grid h-12 w-12 shrink-0 place-items-center rounded-2xl"><Sparkles className="h-6 w-6" /></span>
+            <Icon3D icon={Sparkles} size={52} />
             <div className="min-w-0">
               <h2 className="text-lg font-bold text-[var(--text-title)]">Crie mais páginas e aumente seus resultados</h2>
               <p className="mt-1 text-[13px] text-[var(--text-secondary)]">Cada página é mais uma porta de entrada pras suas ofertas.</p>
@@ -204,7 +205,7 @@ export function PaginasPage({ queueItems, products, isActive, onShowToast }: Pag
           <div className="grid flex-1 gap-3 sm:grid-cols-3">
             {BENEFITS.map(({ icon: Icon, title, text }) => (
               <div key={title} className="flex gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card-raised)] p-3.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Icon className="h-4.5 w-4.5" /></span>
+                <Icon3D icon={Icon} size={38} tone="dark" dot />
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-[var(--text-title)]">{title}</p>
                   <p className="mt-0.5 text-xs leading-5 text-[var(--text-secondary)]">{text}</p>

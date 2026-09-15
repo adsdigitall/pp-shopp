@@ -21,6 +21,13 @@
   --amber-500:#f59e0b; --amber-400:#fbbf24; --amber-900:#2a1e06;
   --violet-500:#8b5cf6;
 
+  /* ── Ícones 3D (mesmo acabamento do logo) ───────────── */
+  --icon3d-orange-top:#ffb070; --icon3d-orange-mid:#fd6a2a; --icon3d-orange-bot:#d9420f; --icon3d-orange-side:#8f2a07;
+  --icon3d-dark-top:#4a5157;   --icon3d-dark-mid:#1c2126;   --icon3d-dark-bot:#07090b;   --icon3d-dark-side:#000000;
+  --icon3d-muted-top:#3a4147;  --icon3d-muted-mid:#20262b;  --icon3d-muted-bot:#0f1316;  --icon3d-muted-side:#050708;
+  --icon3d-red-top:#ff9a9a;    --icon3d-red-mid:#ef4444;    --icon3d-red-bot:#b91c1c;    --icon3d-red-side:#6f1010;
+  --icon3d-glyph:#ffffff; --icon3d-glyph-muted:#9aa3a9;
+
   /* ── Partner brand colors (marketplaces / canais) ───── */
   --mp-shopee:#ee4d2d; --mp-mercadolivre:#ffe600; --mp-amazon:#ff9900;
   --mp-magalu:#0086ff; --mp-aliexpress:#e62e04;

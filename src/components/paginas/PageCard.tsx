@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Copy, CopyPlus, ExternalLink, Eye, Globe, Link2, MoreHorizontal, MousePointerClick, Pencil, Share2, ShoppingBag, Trash2, Users, EyeOff } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { publicPageUrl, type PublicPageData } from '@/services/publicPages';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 const TYPE_ICON = { vitrine: ShoppingBag, convite: Users, linktree: Link2 } as const;
 const num = (value: number) => value.toLocaleString('pt-BR');
@@ -49,9 +50,7 @@ export function PageCard({ page, busy, onEdit, onDuplicate, onDelete, onToggleSt
           <img src={page.coverUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} className="h-full w-full bg-white object-cover" />
         ) : (
           <div className="grid h-full w-full place-items-center bg-[var(--surface-brand-soft)]">
-            <span className="btn-brand grid h-14 w-14 place-items-center rounded-2xl">
-              <Icon className="h-7 w-7" />
-            </span>
+            <Icon3D icon={Icon} size={64} />
           </div>
         )}
         <span className="absolute left-3 top-3 rounded-full bg-[var(--surface-scrim)] px-2.5 py-1 text-xs font-medium text-[var(--text-title)] backdrop-blur">

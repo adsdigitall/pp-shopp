@@ -17,6 +17,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Separator } from '@/components/ui/Separator';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { Icon3D } from '@/components/ui/Icon3D';
 
 // Ids = slugs do plano de descoberta do backend (AUTOMATION_CATEGORY_PLAN);
 // os rótulos exibidos continuam humanos. Não mudar os ids sem alinhar com
@@ -416,7 +417,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
           <p className="mt-1 text-[15px] text-[var(--text-body)]">Organize, edite e acompanhe as ofertas prontas para disparo.</p>
         </div>
         <button type="button" onClick={() => setView('automacao')} className="panel flex items-center gap-4 p-4 text-left transition-colors hover:border-[var(--border-brand)] lg:min-w-[330px]">
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Target className="h-7 w-7" /></span>
+          <Icon3D icon={Target} size={56} />
           <span className="flex-1">
             <span className="block text-[15px] font-semibold text-[var(--text-title)]">Mantenha sua fila organizada.</span>
             <span className="block text-[13px] text-[var(--text-secondary)]">Ajuste a automação e os grupos.</span>

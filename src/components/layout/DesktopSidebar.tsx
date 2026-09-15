@@ -25,6 +25,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthGate";
+import { Icon3D } from '@/components/ui/Icon3D';
 
 type SectionId = 
   | 'visao-geral' 
@@ -154,8 +155,6 @@ export function DesktopSidebar({
         ? "border-[var(--border-brand)] bg-[var(--surface-active)] font-semibold text-[var(--brand-400)]"
         : "border-transparent font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-title)]",
     );
-  const iconClass = (isActive: boolean) =>
-    cn("h-[18px] w-[18px] shrink-0", isActive ? "text-[var(--brand-500)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-title)]");
 
   return (
     <>
@@ -204,7 +203,7 @@ export function DesktopSidebar({
                       onClick={() => handleClick(normalizeSection(item.href))}
                       className={itemClass(isActive)}
                     >
-                      <item.icon className={iconClass(isActive)} />
+                      <Icon3D icon={item.icon} size={30} tone={isActive ? 'orange' : 'dark'} />
                       <span className="truncate">{item.label}</span>
                     </button>
                   );
@@ -222,7 +221,7 @@ export function DesktopSidebar({
                   onClick={() => handleClick(normalizeSection(item.href))}
                   className={itemClass(isActive)}
                 >
-                  <item.icon className={iconClass(isActive)} />
+                  <Icon3D icon={item.icon} size={30} tone={isActive ? 'orange' : 'dark'} />
                   {item.label}
                 </button>
               );

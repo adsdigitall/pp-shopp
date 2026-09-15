@@ -709,6 +709,58 @@ html { scroll-behavior: smooth; }
   .container-main { width: 100%; max-width: var(--content-max); margin-inline: auto; padding-inline: var(--page-pad-x); }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Ícone 3D: bloco com volume (gradiente + borda de baixo + brilho) e símbolo com sombra.
+     Tamanho em --icon3d-size; tom em data-tone. */
+  .icon-3d {
+    --t: var(--icon3d-orange-top); --m: var(--icon3d-orange-mid); --b: var(--icon3d-orange-bot); --sd: var(--icon3d-orange-side);
+    --g: var(--icon3d-glyph);
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: var(--icon3d-size, 44px);
+    height: var(--icon3d-size, 44px);
+    border-radius: 30%;
+    color: var(--g);
+    background: linear-gradient(180deg, var(--t) 0%, var(--m) 45%, var(--b) 100%);
+    box-shadow:
+      0 calc(var(--icon3d-size, 44px) * 0.07) 0 var(--sd),
+      0 calc(var(--icon3d-size, 44px) * 0.16) calc(var(--icon3d-size, 44px) * 0.22) rgba(0, 0, 0, 0.45),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.45);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .icon-3d::before {
+    content: "";
+    position: absolute;
+    inset: 5% 14% 52% 8%;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at 40% 25%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.12) 50%, transparent 75%);
+    pointer-events: none;
+  }
+  .icon-3d > svg {
+    position: relative;
+    width: 48%;
+    height: 48%;
+    filter: drop-shadow(0 calc(var(--icon3d-size, 44px) * 0.028) 0 color-mix(in srgb, var(--sd) 60%, transparent));
+  }
+  .icon-3d[data-small] > svg { width: 56%; height: 56%; }
+  .icon-3d[data-tone="dark"] { --t: var(--icon3d-dark-top); --m: var(--icon3d-dark-mid); --b: var(--icon3d-dark-bot); --sd: var(--icon3d-dark-side); }
+  .icon-3d[data-tone="muted"] { --t: var(--icon3d-muted-top); --m: var(--icon3d-muted-mid); --b: var(--icon3d-muted-bot); --sd: var(--icon3d-muted-side); --g: var(--icon3d-glyph-muted); }
+  .icon-3d[data-tone="red"] { --t: var(--icon3d-red-top); --m: var(--icon3d-red-mid); --b: var(--icon3d-red-bot); --sd: var(--icon3d-red-side); }
+  .icon-3d[data-dot]::after {
+    content: "";
+    position: absolute;
+    top: -6%;
+    right: -6%;
+    width: 26%;
+    height: 26%;
+    border-radius: 50%;
+    background: var(--brand-500);
+    border: 1.5px solid rgba(255, 255, 255, 0.75);
+  }
+  .group:hover .icon-3d[data-lift] { transform: translateY(-2px); }
+  @media (prefers-reduced-motion: reduce) { .icon-3d { transition: none; } .group:hover .icon-3d[data-lift] { transform: none; } }
 }
 
 .dark body { background-color: var(--surface-app); }
