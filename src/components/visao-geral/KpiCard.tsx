@@ -13,6 +13,10 @@ interface KpiCardProps {
   comparison: string;
   unavailable?: boolean;
   footnote?: string;
+  /** Texto no lugar da variação, para métricas sem histórico de comparação. */
+  note?: string;
+  /** Subir é ruim (ex.: falhas): verde quando cai, vermelho quando sobe. */
+  invertTone?: boolean;
 }
 
 // Variação só com base real: sem período anterior não há porcentagem inventada.
@@ -25,10 +29,12 @@ function describeDelta(value: number, previous: number) {
   return { tone: rounded > 0 ? ('up' as const) : rounded < 0 ? ('down' as const) : ('neutral' as const), text };
 }
 
-export function KpiCard({ icon: Icon, label, info, display, value, previous, series, comparison, unavailable, footnote }: KpiCardProps) {
+export function KpiCard({ icon: Icon, label, info, display, value, previous, series, comparison, unavailable, footnote, note, invertTone }: KpiCardProps) {
   const delta = describeDelta(value, previous);
+  const good = invertTone ? delta.tone === 'down' : delta.tone === 'up';
+  const bad = invertTone ? delta.tone === 'up' : delta.tone === 'down';
   const DeltaIcon = delta.tone === 'up' ? ArrowUpRight : delta.tone === 'down' ? ArrowDownRight : Minus;
-  const deltaColor = delta.tone === 'up' ? 'text-[var(--green-400)]' : delta.tone === 'down' ? 'text-[var(--red-400)]' : 'text-[var(--text-muted)]';
+  const deltaColor = good ? 'text-[var(--green-400)]' : bad ? 'text-[var(--red-400)]' : 'text-[var(--text-muted)]';
 
   return (
     <div className="panel flex min-w-0 items-start gap-3 p-4 sm:p-5">
@@ -44,11 +50,13 @@ export function KpiCard({ icon: Icon, label, info, display, value, previous, ser
           <p className="rdo-num truncate text-2xl font-extrabold leading-tight text-[var(--text-title)]">{unavailable ? '—' : display}</p>
           {!unavailable && series.some((point) => point > 0) && (
             <span className="hidden shrink-0 sm:block">
-              <Sparkline values={series} width={72} height={30} stroke={delta.tone === 'down' ? 'var(--red-400)' : 'var(--brand-500)'} />
+              <Sparkline values={series} width={72} height={30} stroke={bad ? 'var(--red-400)' : 'var(--brand-500)'} />
             </span>
           )}
         </div>
-        {unavailable ? (
+        {note && !unavailable ? (
+          <p className="mt-1.5 truncate text-xs text-[var(--text-muted)]">{note}</p>
+        ) : unavailable ? (
           <p className="mt-1.5 truncate text-xs text-[var(--text-muted)]">{footnote || 'Indisponível agora'}</p>
         ) : (
           <p className="mt-1.5 flex min-w-0 items-center gap-1 text-xs">

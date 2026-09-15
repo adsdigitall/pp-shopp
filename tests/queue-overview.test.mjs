@@ -68,3 +68,16 @@ test('dados quebrados não derrubam a visão da fila', () => {
   assert.equal(data.counts.scheduled, 1);
   assert.equal(data.scheduled[0].product.name, 'Oferta');
 });
+
+test('listas de enviadas e falhas trazem só hoje (batem com os cards)', () => {
+  const data = buildQueueOverview({
+    now: NOW,
+    jobs: [
+      { id: 'hoje', status: 'completed', offers: [offer('h')], destinations: { groups }, attempts: [{ status: 'sent', offerId: 'h', groupId: 'g10', sentAt: at(HOUR) }] },
+      { id: 'ontem', status: 'completed', offers: [offer('o')], destinations: { groups }, attempts: [{ status: 'sent', offerId: 'o', groupId: 'g10', sentAt: at(22 * HOUR) }, { status: 'failed', offerId: 'o', groupId: 'g17', sentAt: at(22 * HOUR), error: 'x' }] },
+    ],
+  });
+  assert.deepEqual(data.sent.map((e) => e.jobId), ['hoje']);
+  assert.equal(data.sent.length, data.counts.sentToday);
+  assert.equal(data.failed.length, data.counts.failedToday);
+});

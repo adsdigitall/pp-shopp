@@ -39,7 +39,7 @@ function groupList(job) {
     .map((group) => ({ id: String(group.id), name: String(group.name || group.id) }));
 }
 
-export function buildQueueOverview({ jobs = [], now = Date.now(), timeZone = 'America/Sao_Paulo', limit = 50 } = {}) {
+export function buildQueueOverview({ jobs = [], now = Date.now(), timeZone = 'America/Sao_Paulo', limit = 300 } = {}) {
   const today = zonedParts(now, timeZone);
   const yesterday = zonedParts(now - 24 * HOUR, timeZone);
   const scheduled = [];
@@ -134,6 +134,7 @@ export function buildQueueOverview({ jobs = [], now = Date.now(), timeZone = 'Am
   const sentStats = dayStats(sentList);
   const failedStats = dayStats(failedList);
   const newestFirst = (a, b) => b.at - a.at;
+  const isToday = (event) => zonedParts(event.at, timeZone).day === today.day;
   const scheduleTime = (item) => new Date(item.scheduledAt || item.createdAt || 0).getTime() || 0;
 
   return {
@@ -146,7 +147,8 @@ export function buildQueueOverview({ jobs = [], now = Date.now(), timeZone = 'Am
     },
     series: { sent: sentStats.series, failed: failedStats.series },
     scheduled: scheduled.sort((a, b) => (b.scheduledAt ? 1 : 0) - (a.scheduledAt ? 1 : 0) || scheduleTime(a) - scheduleTime(b)).slice(0, limit),
-    sent: sentList.sort(newestFirst).slice(0, limit).map(finalize),
-    failed: failedList.sort(newestFirst).slice(0, limit).map(finalize),
+    // Listas de hoje, para bater com os cards "Enviadas hoje" e "Falhas".
+    sent: sentList.filter(isToday).sort(newestFirst).slice(0, limit).map(finalize),
+    failed: failedList.filter(isToday).sort(newestFirst).slice(0, limit).map(finalize),
   };
 }

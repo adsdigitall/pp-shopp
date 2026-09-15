@@ -635,6 +635,14 @@ export function App() {
     showToast('Oferta removida da fila', undefined, 'info');
   };
 
+  const handleRemoveManyFromQueue = (queueIds: string[]) => {
+    const ids = new Set(queueIds);
+    setQueueItems(prev => prev.filter(item => !ids.has(item.id)));
+    Promise.all(queueIds.map(id => fetch(`/api/queue/${encodeURIComponent(id)}`, { method: 'DELETE' })))
+      .catch(() => showToast('Ofertas removidas localmente', 'Não foi possível sincronizar a fila agora.', 'info'));
+    showToast(`${queueIds.length} oferta(s) removida(s) da fila`, undefined, 'info');
+  };
+
   const handleClearQueue = () => {
     setQueueItems([]);
     void fetch('/api/queue/clear', { method: 'POST' }).catch(() => {
@@ -884,6 +892,8 @@ export function App() {
           groups={groups}
           onAddToQueue={handleAddToQueue}
           onRemoveFromQueue={handleRemoveFromQueue}
+          onRemoveManyFromQueue={handleRemoveManyFromQueue}
+          isActive={activeSection === 'fila' || activeSection === 'ofertas'}
           onClearQueue={handleClearQueue}
           onSelectAll={handleSelectAllQueue}
           onToggleSelection={handleToggleQueueSelection}
