@@ -46,6 +46,7 @@ import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchT
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
+import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
 
 // Carrega segredos antes de inicializar os clientes de integração.
 initEnv();
@@ -1279,6 +1280,15 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         return;
       }
       // PATCH /api/queue/:id - Atualiza seleção do item
+      if (req.method === 'GET' && pathOnly === '/api/queue/overview') {
+        const overview = buildQueueOverview({ jobs: await DispatchStore.list('default_user', 5000) });
+        sendJson(res, 200, overview);
+        return;
+      }
+      if (req.method === 'GET' && /^\/api\/queue\/[^/]+\/preview$/.test(pathOnly)) {
+        await handleQueueItemPreview(req, res, pathOnly);
+        return;
+      }
       if (req.method === 'PATCH' && pathOnly.startsWith('/api/queue/')) {
         await handleUpdateQueueItem(req, res, pathOnly);
         return;
@@ -2575,6 +2585,30 @@ const SAFE_HUMAN_MESSAGES = [
 function getSafeHumanMessage(index = 0, human = true) {
   const pool = human && HUMAN_INTERSTITIALS.length ? HUMAN_INTERSTITIALS : SAFE_HUMAN_MESSAGES;
   return pool[Math.max(0, Number(index) || 0) % pool.length];
+}
+
+// Prévia do texto que "Disparar agora" manda: mesmo template e mesma renderização do
+// envio manual (sem tom humano, que só vale para a automação).
+async function handleQueueItemPreview(req, res, pathOnly) {
+  try {
+    const userId = requestUserId(req);
+    const queueId = decodeURIComponent(pathOnly.replace('/api/queue/', '').replace(/\/preview$/, ''));
+    const item = (await PublicationHistoryStore.getByUser(userId, 500)).find(entry => entry.id === queueId);
+    if (!item) { sendJson(res, 404, { error: { code: 'NOT_FOUND', message: 'Item da fila não encontrado.' } }); return; }
+    const config = await DispatchAutomationStore.get(userId).catch(() => null);
+    const offer = {
+      id: item.productId, marketplace: item.marketplace, name: item.productName, currentPrice: item.price,
+      originalPrice: item.originalPrice, discountPercentage: item.discountPercentage, salesCount: item.salesCount,
+      salesCountText: item.salesCountText, rating: item.rating, reviewsCount: item.reviewsCount, category: item.category,
+      affiliateUrl: item.affiliateUrl, productUrl: item.originalUrl, imageUrl: item.imageUrl,
+      highlightPoints: item.highlightPoints, shortDescription: item.shortDescription,
+    };
+    const template = config?.template || DEFAULT_AUTOMATION_MESSAGE;
+    const message = sanitizeOfferCopy(renderWhatsAppMessage(template, offer, { rotatingCTAs: config?.rotatingCTAs !== false, rotationIndex: 0 }), offer);
+    sendJson(res, 200, { message, templateConfigured: Boolean(config?.template) });
+  } catch {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível montar a prévia.' } });
+  }
 }
 
 async function handleSendQueueItemNow(req, res, pathOnly) {
