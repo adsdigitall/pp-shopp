@@ -23,6 +23,28 @@ export interface DashboardProduct {
   count: number;
 }
 
+/** paid = pago esperando entrega; completed = concluído; unpaid = não pago; cancelled = cancelado. */
+export type SaleStatus = 'paid' | 'completed' | 'unpaid' | 'cancelled';
+
+export interface DashboardSale {
+  id: string;
+  at: string;
+  status: SaleStatus;
+  product: string;
+  image: string | null;
+  price: number;
+  qty: number;
+  extraItems: number;
+  commission: number;
+}
+
+export const SALE_STATUS_INFO: Record<SaleStatus, { label: string; hint: string }> = {
+  paid: { label: 'Paga', hint: 'Pedido pago. A comissão libera quando o cliente receber.' },
+  completed: { label: 'Concluída', hint: 'Pedido entregue. Comissão confirmada.' },
+  unpaid: { label: 'Aguardando pagamento', hint: 'O cliente ainda não pagou. Só conta quando pagar.' },
+  cancelled: { label: 'Cancelada', hint: 'Pedido cancelado. Não gera comissão.' },
+};
+
 export interface DashboardData {
   period: DashboardPeriod;
   kpis: {
@@ -34,6 +56,8 @@ export interface DashboardData {
   series: { key: string; label: string; commission: number; sales: number; sends: number }[];
   activity: DashboardActivity[];
   topProducts: { kind: 'sold' | 'sent'; items: DashboardProduct[] };
+  sales: DashboardSale[];
+  salesSummary: Record<SaleStatus, { count: number; commission: number }>;
   salesAvailable: boolean;
   salesTruncated: boolean;
   generatedAt: string;

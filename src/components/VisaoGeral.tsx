@@ -4,6 +4,7 @@ import { KpiCard } from '@/components/visao-geral/KpiCard';
 import { PerformanceChart } from '@/components/visao-geral/PerformanceChart';
 import { QuickActions } from '@/components/visao-geral/QuickActions';
 import { RecentActivity } from '@/components/visao-geral/RecentActivity';
+import { SalesList } from '@/components/visao-geral/SalesList';
 import { TopProducts } from '@/components/visao-geral/TopProducts';
 import { fetchDashboard, formatBRL, PERIOD_OPTIONS, type DashboardData, type DashboardPeriod } from '@/services/dashboard';
 
@@ -74,6 +75,9 @@ export function VisaoGeral({
   })();
   const salesOff = data ? !data.salesAvailable : false;
   const showData = data && data.period === period;
+  const unpaid = showData ? data.salesSummary?.unpaid : undefined;
+  const unpaidCommission = unpaid?.count ? `+ ${formatBRL(unpaid.commission)} não pago` : undefined;
+  const unpaidSales = unpaid?.count ? `+ ${unpaid.count} ${unpaid.count === 1 ? 'pedido não pago' : 'pedidos não pagos'}` : undefined;
 
   return (
     <section id="visao-geral" className="mx-auto w-full max-w-[1440px] space-y-4 sm:space-y-5">
@@ -125,8 +129,8 @@ export function VisaoGeral({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {showData ? (
           <>
-            <KpiCard icon={DollarSign} label="Comissão" info="Comissão das vendas na Shopee no período (canceladas não contam)." display={formatBRL(data.kpis.commission.value)} {...data.kpis.commission} comparison={periodOption.comparison} unavailable={salesOff} footnote={salesOff ? 'Relatório da Shopee indisponível' : undefined} />
-            <KpiCard icon={ShoppingCart} label="Vendas" info="Vendas registradas pela Shopee no período (canceladas não contam)." display={data.kpis.sales.value.toLocaleString('pt-BR')} {...data.kpis.sales} comparison={periodOption.comparison} unavailable={salesOff} footnote={salesOff ? 'Relatório da Shopee indisponível' : undefined} />
+            <KpiCard icon={DollarSign} label="Comissão" info="Comissão dos pedidos pagos e concluídos na Shopee no período. Não pagos e cancelados não contam." pending={unpaidCommission} display={formatBRL(data.kpis.commission.value)} {...data.kpis.commission} comparison={periodOption.comparison} unavailable={salesOff} footnote={salesOff ? 'Relatório da Shopee indisponível' : undefined} />
+            <KpiCard icon={ShoppingCart} label="Vendas" info="Pedidos pagos e concluídos na Shopee no período. Não pagos e cancelados não contam." pending={unpaidSales} display={data.kpis.sales.value.toLocaleString('pt-BR')} {...data.kpis.sales} comparison={periodOption.comparison} unavailable={salesOff} footnote={salesOff ? 'Relatório da Shopee indisponível' : undefined} />
             <KpiCard icon={Send} label="Ofertas enviadas" info="Mensagens de oferta entregues aos grupos no período." display={data.kpis.sends.value.toLocaleString('pt-BR')} {...data.kpis.sends} comparison={periodOption.comparison} />
             <KpiCard icon={Users} label="Grupos ativos" info={data.kpis.activeGroups.names.length ? `Receberam ofertas: ${data.kpis.activeGroups.names.join(', ')}` : 'Grupos que receberam ao menos uma oferta no período.'} display={data.kpis.activeGroups.value.toLocaleString('pt-BR')} value={data.kpis.activeGroups.value} previous={data.kpis.activeGroups.previous} series={data.kpis.activeGroups.series} comparison={periodOption.comparison} />
           </>
@@ -166,10 +170,16 @@ export function VisaoGeral({
               )}
             </div>
             {showData && data.salesTruncated && (
-              <p className="mt-2 text-xs text-[var(--text-muted)]">A Shopee devolveu só as 50 vendas mais recentes do período; o gráfico pode estar incompleto.</p>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">Muitos pedidos no período: o gráfico mostra só os que a Shopee devolveu.</p>
             )}
             {loading && showData && <p className="mt-2 text-right text-[11px] text-[var(--text-muted)]">Atualizando…</p>}
           </section>
+
+          {showData ? (
+            <SalesList sales={data.sales || []} summary={data.salesSummary} periodLabel={periodOption.label} unavailable={salesOff} truncated={data.salesTruncated} />
+          ) : (
+            <div className="panel h-[300px] animate-pulse" aria-hidden="true" />
+          )}
 
           <QuickActions onGarimpar={onNavigateToGarimpar} onDisparar={onNavigateToDispatch} onGrupos={onNavigateToGroups} onMetricas={onNavigateToMetrics} />
         </div>

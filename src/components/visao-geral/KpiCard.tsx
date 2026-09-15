@@ -17,6 +17,8 @@ interface KpiCardProps {
   note?: string;
   /** Subir é ruim (ex.: falhas): verde quando cai, vermelho quando sobe. */
   invertTone?: boolean;
+  /** Linha extra de aviso (ex.: valor aguardando pagamento). */
+  pending?: string;
 }
 
 // Variação só com base real: sem período anterior não há porcentagem inventada.
@@ -29,7 +31,7 @@ function describeDelta(value: number, previous: number) {
   return { tone: rounded > 0 ? ('up' as const) : rounded < 0 ? ('down' as const) : ('neutral' as const), text };
 }
 
-export function KpiCard({ icon: Icon, label, info, display, value, previous, series, comparison, unavailable, footnote, note, invertTone }: KpiCardProps) {
+export function KpiCard({ icon: Icon, label, info, display, value, previous, series, comparison, unavailable, footnote, note, invertTone, pending }: KpiCardProps) {
   const delta = describeDelta(value, previous);
   const good = invertTone ? delta.tone === 'down' : delta.tone === 'up';
   const bad = invertTone ? delta.tone === 'up' : delta.tone === 'down';
@@ -47,10 +49,10 @@ export function KpiCard({ icon: Icon, label, info, display, value, previous, ser
           <span title={info} aria-label={info} className="text-[var(--text-muted)]"><Info className="h-3.5 w-3.5" /></span>
         </p>
         <div className="mt-1 flex items-end justify-between gap-2">
-          <p className="rdo-num truncate text-2xl font-extrabold leading-tight text-[var(--text-title)]">{unavailable ? '—' : display}</p>
+          <p className="rdo-num shrink-0 whitespace-nowrap text-2xl font-extrabold leading-tight text-[var(--text-title)]">{unavailable ? '—' : display}</p>
           {!unavailable && series.some((point) => point > 0) && (
-            <span className="hidden shrink-0 sm:block">
-              <Sparkline values={series} width={72} height={30} stroke={bad ? 'var(--red-400)' : 'var(--brand-500)'} />
+            <span className="hidden min-w-0 overflow-hidden sm:block">
+              <Sparkline values={series} width={64} height={30} stroke={bad ? 'var(--red-400)' : 'var(--brand-500)'} />
             </span>
           )}
         </div>
@@ -63,6 +65,12 @@ export function KpiCard({ icon: Icon, label, info, display, value, previous, ser
             <DeltaIcon className={`h-3.5 w-3.5 shrink-0 ${deltaColor}`} />
             <span className={`shrink-0 whitespace-nowrap font-semibold ${deltaColor}`}>{delta.text}</span>
             <span className="min-w-0 truncate text-[var(--text-muted)]">{footnote || comparison}</span>
+          </p>
+        )}
+        {pending && !unavailable && (
+          <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-[var(--amber-400)]">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--amber-400)]" aria-hidden="true" />
+            <span className="truncate">{pending}</span>
           </p>
         )}
       </div>
