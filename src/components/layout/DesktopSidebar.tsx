@@ -179,7 +179,7 @@ export function DesktopSidebar({
         )}
       >
         <div className="flex items-center gap-2.5 px-2 pb-3 pt-1">
-          <img src="/brand/logo-mark-alpha.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
+          <img src="/brand/logo-mark-alpha.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
           <div className="min-w-0">
             <div className="truncate text-base font-extrabold leading-tight text-[var(--text-title)]">
               <span className="text-[var(--brand-500)]">Radar</span> de Oferta

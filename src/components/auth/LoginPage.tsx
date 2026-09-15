@@ -47,8 +47,8 @@ export function LoginPage({ notice, onSignedIn }: LoginPageProps) {
     <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[var(--surface-app)] px-4 py-10">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[image:var(--glow-brand)]" />
       <div className="relative w-full max-w-sm">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <img src="/brand/logo-mark-alpha.png" alt="" className="h-11 w-11 object-contain" />
+        <div className="mb-8 flex flex-col items-center gap-3 text-center">
+          <img src="/brand/logo-mark-alpha.png" alt="" className="h-24 w-24 object-contain drop-shadow-[0_10px_24px_var(--border-brand)]" />
           <div>
             <p className="text-xl font-extrabold leading-tight text-[var(--text-title)]">
               <span className="text-[var(--brand-500)]">Radar</span> de Oferta

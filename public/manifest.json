@@ -1,17 +1,14 @@
 {
   "name": "Radar de Oferta",
   "short_name": "Radar de Oferta",
-  "description": "Painel de seleção de produtos e gerador de ofertas para afiliados Shopee",
+  "description": "Automação para afiliados: garimpe ofertas e dispare para seus grupos de WhatsApp.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#ee4d2d",
+  "background_color": "#ffffff",
+  "theme_color": "#0c1418",
   "icons": [
-    {
-      "src": "/favicon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

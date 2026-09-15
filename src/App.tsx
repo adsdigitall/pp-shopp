@@ -313,7 +313,7 @@ export function App() {
       showToast('Ative as notificacoes primeiro', undefined, 'info');
       return;
     }
-    const options = { body: 'Produto de teste - comissao: R$ 10,00', icon: '/favicon.svg', badge: '/favicon.svg' };
+    const options = { body: 'Produto de teste - comissao: R$ 10,00', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png' };
     try {
       const registration = await navigator.serviceWorker?.ready;
       if (registration) {

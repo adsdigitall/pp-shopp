@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronRight, DollarSign, RefreshCw, Send, ShoppingCart, Sun, Target, Users } from 'lucide-react';
+import { ChevronRight, DollarSign, RefreshCw, Send, ShoppingCart, Sun, Users } from 'lucide-react';
 import { KpiCard } from '@/components/visao-geral/KpiCard';
 import { PerformanceChart } from '@/components/visao-geral/PerformanceChart';
 import { QuickActions } from '@/components/visao-geral/QuickActions';
@@ -109,9 +109,7 @@ export function VisaoGeral({
           onClick={onNavigateToMetrics}
           className="panel flex items-center gap-4 p-4 text-left transition-colors hover:border-[var(--border-brand)] lg:min-w-[330px]"
         >
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]">
-            <Target className="h-7 w-7" />
-          </span>
+          <img src="/brand/logo-mark-alpha.png" alt="Radar de Oferta" className="h-16 w-16 shrink-0 object-contain drop-shadow-[0_6px_14px_var(--surface-brand-soft)]" />
           <span className="flex-1 text-[15px] leading-snug text-[var(--text-title)]">Disciplina hoje,<br />resultados amanhã.</span>
           <ChevronRight className="h-5 w-5 text-[var(--text-secondary)]" />
         </button>
