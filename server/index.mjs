@@ -12,7 +12,8 @@ import { createTemplateHandlers } from './routes/templates.mjs';
 import { createCouponHandlers } from './routes/coupons.mjs';
 import { createSettingsReadHandler, createSettingsChannelsHandler, createSettingsTemplatesHandler, createSettingsAccountHandler } from './routes/settings.mjs';
 import { fetchRecentConversions } from './services/shopee/reports.mjs';
-import { getPublicKey, saveSubscription, notifySubscribers } from './services/push.mjs';
+import { getPublicKey, saveSubscription, notifySubscribers, removeSubscription, countSubscriptions, hasSubscription, getVapidKeys } from './services/push.mjs';
+import { planSaleAlerts } from './services/notifications/saleAlerts.mjs';
 import { normalizeWahaGroups } from './services/waha/groups.mjs';
 import { renderWhatsAppMessage, sanitizeOfferCopy, validateOfferMessage, humanizeMessage, HUMAN_INTERSTITIALS } from './services/waha/message.mjs';
 
@@ -224,7 +225,6 @@ async function wahaLogout(sessionName = WAHA_SESSION) {
   }
 }
 
-const notifiedSaleIds = new Set();
 const importedExtensionProducts = [];
 // Cache em memória dos tokens da extensão (espelha o DataStore; sobrevive
 // enquanto a instância estiver quente — o DataStore é a fonte durável).
@@ -481,26 +481,61 @@ async function handleSales(req, res) {
     const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(hoursRaw, 1), 168) : 24;
     const config = await loadShopeeConfigForUser(requestUserId(req));
     const { nodes, pageInfo } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - hours * 3600 });
-  for (const sale of nodes) {
-    const saleId = String(sale.conversionId || sale.checkoutId || '');
-    if (!saleId || notifiedSaleIds.has(saleId)) continue;
-    notifiedSaleIds.add(saleId);
-    await notifySubscribers({ title: 'Nova venda Shopee', body: `Produto vendido — comissão: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
-  }
   sendJson(res, 200, { sales: nodes, meta: { source: 'shopee-affiliate-api', operation: 'conversionReport', hasNextPage: Boolean(pageInfo.hasNextPage) } });
 }
 
-  async function pollSalesInBackground() {
-    try {
-      const config = await loadShopeeConfigForUser('default_user');
-    const { nodes } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - 168 * 3600 });
-    for (const sale of nodes) {
-      const saleId = String(sale.conversionId || sale.checkoutId || '');
-      if (!saleId || notifiedSaleIds.has(saleId)) continue;
-      notifiedSaleIds.add(saleId);
-      await notifySubscribers({ title: 'Nova venda Shopee', body: `Produto vendido — comissão: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
+// ========== AVISOS DE VENDA (PUSH) ==========
+// Roda só no worker (processo contínuo). Compara o relatório da Shopee com o
+// último status salvo e manda push para os aparelhos inscritos.
+const SALE_ALERT_INTERVAL_MS = 3 * 60_000;
+const SALE_ALERT_LOOKBACK_DAYS = 45;
+let lastSaleAlertRun = 0;
+let saleAlertRunning = false;
+
+async function runSaleAlerts({ force = false } = {}) {
+  if (saleAlertRunning) return { skipped: 'running' };
+  if (!force && Date.now() - lastSaleAlertRun < SALE_ALERT_INTERVAL_MS) return { skipped: 'interval' };
+  saleAlertRunning = true;
+  lastSaleAlertRun = Date.now();
+  try {
+    const config = await loadShopeeConfigForUser('default_user');
+    const { nodes } = await fetchRecentConversions({ config, sinceSeconds: Date.now() / 1000 - SALE_ALERT_LOOKBACK_DAYS * 86_400 });
+    const stateDoc = await dataStore.findById('saleAlertState', 'default_user');
+    const { alerts, state } = planSaleAlerts({ conversions: nodes, previous: stateDoc });
+    let delivered = { sent: 0, removed: 0, failed: 0, configured: true };
+    for (const alert of alerts) {
+      const result = await notifySubscribers({ title: alert.title, body: alert.body, url: '/#visao-geral', tag: `sale-${alert.conversionId}` });
+      delivered = { sent: delivered.sent + result.sent, removed: delivered.removed + result.removed, failed: delivered.failed + result.failed, configured: result.configured };
+      await dataStore.add('saleAlertHistory', {
+        id: `alert_${Date.now()}_${alert.conversionId}`.slice(0, 120),
+        userId: 'default_user',
+        kind: alert.kind,
+        title: alert.title,
+        body: alert.body,
+        conversionId: alert.conversionId,
+        devices: result.sent,
+        createdAt: new Date().toISOString(),
+      });
     }
-  } catch { /* polling não pode derrubar o servidor */ }
+    const nextState = { id: 'default_user', userId: 'default_user', statuses: state.statuses, checkedAt: new Date().toISOString() };
+    if (stateDoc) await dataStore.update('saleAlertState', 'default_user', nextState);
+    else await dataStore.add('saleAlertState', nextState);
+    if (alerts.length) logLine(`[SALE ALERTS] ${alerts.length} aviso(s), ${delivered.sent} entregue(s), ${delivered.removed} aparelho(s) removido(s)`);
+    await pruneSaleAlertHistory();
+    return { alerts: alerts.length, ...delivered, baseline: !stateDoc };
+  } catch (error) {
+    logLine(`[SALE ALERTS] falhou: ${error?.message || error}`);
+    return { error: error?.message || 'erro' };
+  } finally {
+    saleAlertRunning = false;
+  }
+}
+
+async function pruneSaleAlertHistory(keep = 40) {
+  const history = await dataStore.find('saleAlertHistory', { userId: 'default_user' });
+  if (history.length <= keep) return;
+  const old = history.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(keep);
+  for (const item of old) await dataStore.remove('saleAlertHistory', item.id);
 }
 
 /**
@@ -549,14 +584,44 @@ export function createApp() {
         return;
       }
       if (req.method === 'GET' && pathOnly === '/api/push/public-key') {
-        const publicKey = getPublicKey();
-        sendJson(res, publicKey ? 200 : 503, publicKey ? { publicKey } : { error: { code: 'PUSH_NOT_CONFIGURED', message: 'Notificações push não configuradas.' } });
+        const publicKey = await getPublicKey().catch(() => null);
+        sendJson(res, publicKey ? 200 : 503, publicKey ? { publicKey } : { error: { code: 'PUSH_NOT_CONFIGURED', message: 'Notificações ainda não disponíveis no servidor.' } });
         return;
       }
       if (req.method === 'POST' && pathOnly === '/api/push/subscribe') {
         const subscription = await readJsonBody(req);
-        const saved = saveSubscription(subscription);
-        sendJson(res, saved ? 201 : 400, saved ? { ok: true } : { error: { code: 'INVALID_SUBSCRIPTION', message: 'Assinatura de notificação inválida.' } });
+        const saved = await saveSubscription(subscription, { userAgent: req.headers['user-agent'] || '' });
+        sendJson(res, saved ? 201 : 400, saved ? { ok: true } : { error: { code: 'INVALID_SUBSCRIPTION', message: 'Não foi possível registrar este aparelho. Tente ativar de novo.' } });
+        return;
+      }
+      if (req.method === 'POST' && pathOnly === '/api/push/unsubscribe') {
+        const body = await readJsonBody(req);
+        await removeSubscription(body?.endpoint);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (req.method === 'POST' && pathOnly === '/api/push/status') {
+        const body = await readJsonBody(req);
+        const keys = await getVapidKeys().catch(() => null);
+        sendJson(res, 200, {
+          configured: Boolean(keys),
+          subscribed: await hasSubscription(body?.endpoint),
+          devices: await countSubscriptions(),
+        });
+        return;
+      }
+      if (req.method === 'POST' && pathOnly === '/api/push/test') {
+        const result = await notifySubscribers({ title: '🔔 Notificações ativadas', body: 'Pronto! Você vai receber um aviso aqui quando sair uma venda.', url: '/#visao-geral', tag: 'teste' });
+        sendJson(res, 200, result);
+        return;
+      }
+      if (req.method === 'GET' && pathOnly === '/api/sale-alerts') {
+        const history = await dataStore.find('saleAlertHistory', { userId: 'default_user' });
+        const state = await dataStore.findById('saleAlertState', 'default_user');
+        sendJson(res, 200, {
+          alerts: history.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 30),
+          checkedAt: state?.checkedAt || null,
+        });
         return;
       }
 
@@ -4558,8 +4623,7 @@ if (isDirectRun) {
     } catch (err) {
       logLine(`AVISO: ${/** @type {any} */ (err).message}`);
     }
-    setInterval(pollSalesInBackground, 120_000);
   });
 }
 
-export { resumeDispatchQueue, runAutomaticOfferDiscovery, runDailyRhythm };
+export { resumeDispatchQueue, runAutomaticOfferDiscovery, runDailyRhythm, runSaleAlerts };

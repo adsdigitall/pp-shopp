@@ -29,6 +29,10 @@ const STORAGE_FILES = {
   apiTokens: 'api_tokens.json',
   extensionTags: 'extension_tags.json',
   publicPages: 'public_pages.json',
+  pushSubscriptions: 'push_subscriptions.json',
+  appSecrets: 'app_secrets.json',
+  saleAlertState: 'sale_alert_state.json',
+  saleAlertHistory: 'sale_alert_history.json',
 };
 
 class DataStore {

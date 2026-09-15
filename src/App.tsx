@@ -5,6 +5,7 @@ import { productService } from './services/productService';
 import { OfferPreviewModal } from './components/OfferPreviewModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationsModal } from './components/NotificationsModal';
+import { fetchSaleAlerts, getAlertsSeenAt, markAlertsSeen, type SaleAlert } from './services/pushNotifications';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { VisaoGeral } from './components/VisaoGeral';
@@ -100,12 +101,6 @@ function normalizeQueueItem(raw: any): QueueItem {
 
 type Marketplace = 'shopee' | 'mercado_livre';
 
-function decodeVapidKey(value: string) {
-  const padding = '='.repeat((4 - (value.length % 4)) % 4);
-  const raw = atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'));
-  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
-}
-
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
@@ -131,8 +126,6 @@ export function App() {
   const [shopeeConfigured, setShopeeConfigured] = useState(true);
   const [activeSection, setActiveSection] = useState<SectionId>(() => sectionFromLocation());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const seenSalesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -288,69 +281,33 @@ export function App() {
     return () => mediaQuery.removeEventListener('change', handler);
   }, [settings.theme]);
 
-  const enableSaleNotifications = useCallback(async () => {
-    if (!('Notification' in window)) { showToast('Notificações não suportadas neste navegador', undefined, 'error'); return; }
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted' && 'serviceWorker' in navigator && 'PushManager' in window) {
-      try {
-        const keyResponse = await fetch('/api/push/public-key');
-        const { publicKey } = await keyResponse.json();
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeVapidKey(publicKey) });
-        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscription) });
-      } catch {
-        showToast('Push ainda não configurado no servidor', undefined, 'info');
-        setNotificationsEnabled(false);
-        return;
-      }
-    }
-    setNotificationsEnabled(permission === 'granted');
-    showToast(permission === 'granted' ? 'Notificações de vendas ativadas' : 'Permissão de notificações não concedida', undefined, permission === 'granted' ? 'success' : 'info');
-  }, []);
-
-  const sendTestNotification = useCallback(async () => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') {
-      showToast('Ative as notificacoes primeiro', undefined, 'info');
-      return;
-    }
-    const options = { body: 'Produto de teste - comissao: R$ 10,00', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png' };
-    try {
-      const registration = await navigator.serviceWorker?.ready;
-      if (registration) {
-        await registration.showNotification('Nova venda Shopee (teste)', options);
-        return;
-      }
-    } catch { }
-    new Notification('Nova venda Shopee (teste)', options);
-  }, []);
-
-  useEffect(() => {
-    const checkSales = async () => {
-      try {
-        const response = await fetch('/api/sales?hours=168');
-        if (!response.ok) return;
-        const body = await response.json();
-        const sales = Array.isArray(body.sales) ? body.sales : [];
-        for (const sale of sales) {
-          const id = String(sale.conversionId || sale.checkoutId || '');
-          if (!id || seenSalesRef.current.has(id)) continue;
-          seenSalesRef.current.add(id);
-          if (notificationsEnabled && Notification.permission === 'granted') {
-            new Notification('Nova venda Shopee', { body: `Comissão registrada: R$ ${sale.netCommission || sale.totalCommission || '—'}` });
-          }
-        }
-      } catch { }
-    };
-    checkSales();
-    const intervalId = window.setInterval(checkSales, 120_000);
-    return () => window.clearInterval(intervalId);
-  }, [notificationsEnabled]);
-
   const showToast = useCallback((title: string, description?: string, type: 'success' | 'info' | 'error' = 'success') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, title, description, type }]);
     setTimeout(() => { setToasts((prev) => prev.filter((t) => t.id !== id)); }, 3500);
   }, []);
+
+  // Avisos de venda: histórico real do servidor; bolinha no sininho só com aviso novo.
+  const [saleAlerts, setSaleAlerts] = useState<SaleAlert[]>([]);
+  const [saleAlertsCheckedAt, setSaleAlertsCheckedAt] = useState<string | null>(null);
+  const [alertsSeenAt, setAlertsSeenAt] = useState<string>(() => getAlertsSeenAt());
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const data = await fetchSaleAlerts();
+        if (cancelled) return;
+        setSaleAlerts(data.alerts);
+        setSaleAlertsCheckedAt(data.checkedAt);
+      } catch { /* sem aviso novo por enquanto */ }
+    };
+    void load();
+    const id = window.setInterval(load, 60_000);
+    document.addEventListener('visibilitychange', load);
+    return () => { cancelled = true; window.clearInterval(id); document.removeEventListener('visibilitychange', load); };
+  }, []);
+  const hasUnreadAlerts = saleAlerts.some((alert) => alert.createdAt > alertsSeenAt);
 
   const handleDismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -808,6 +765,7 @@ export function App() {
         onSearchChange={setSearchQuery}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenNotifications={() => setIsNotificationsModalOpen(true)}
+        hasUnreadNotifications={hasUnreadAlerts}
         whatsappConnected={whatsappConnected}
         user={user}
         className="lg:ml-64"
@@ -1004,7 +962,13 @@ export function App() {
 
       <OfferPreviewModal product={selectedProduct} isOpen={isOfferModalOpen} onClose={() => setIsOfferModalOpen(false)} onShowToast={showToast} />
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} settings={settings} onSaveSettings={setSettings} onShowToast={showToast} />
-      <NotificationsModal isOpen={isNotificationsModalOpen} onClose={() => setIsNotificationsModalOpen(false)} />
+      <NotificationsModal
+        isOpen={isNotificationsModalOpen}
+        onClose={() => { setIsNotificationsModalOpen(false); const now = new Date().toISOString(); markAlertsSeen(now); setAlertsSeenAt(now); }}
+        alerts={saleAlerts}
+        checkedAt={saleAlertsCheckedAt}
+        onShowToast={showToast}
+      />
       <AnalyticsModal isOpen={isAnalyticsModalOpen} onClose={() => setIsAnalyticsModalOpen(false)} onShowToast={showToast} activeMarketplace={activeMarketplace} />
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
       <MobileBottomNav
