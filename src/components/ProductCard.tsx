@@ -1,9 +1,6 @@
 import React from 'react';
-import { Copy, Eye, Layers3, Share2, ShoppingBag, Package } from 'lucide-react';
+import { Copy, Eye, Flame, Package, Plus, Share2, ShoppingCart, Star, TrendingUp } from 'lucide-react';
 import { Product } from '../types/product';
-import { Card, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 
 interface ProductCardProps {
   product: Product;
@@ -15,139 +12,120 @@ interface ProductCardProps {
   compact?: boolean;
 }
 
-const marketplaceConfig = {
-  shopee: { label: 'SH', color: 'bg-primary', textColor: 'text-primary-foreground', icon: '🛍️' },
-  mercado_livre: { label: 'ML', color: 'bg-yellow-500', textColor: 'text-yellow-900', icon: '🤝' },
-  amazon: { label: 'AMZ', color: 'bg-amber-500', textColor: 'text-amber-900', icon: '📦' },
-  magalu: { label: 'MGL', color: 'bg-purple-500', textColor: 'text-purple-50', icon: '💜' },
-  tiktok_shop: { label: 'TT', color: 'bg-neutral-900', textColor: 'text-neutral-50', icon: '🎵' },
-  shein: { label: 'SHN', color: 'bg-pink-500', textColor: 'text-pink-50', icon: '👗' },
-  aliexpress: { label: 'ALX', color: 'bg-red-500', textColor: 'text-red-50', icon: '🛒' },
-} as const;
+const brl = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const compactCount = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
 
-const getMarketplaceConfig = (marketplace: Product['marketplace']) => 
-  marketplaceConfig[marketplace] || marketplaceConfig.shopee;
+// Selo só a partir de dado real do produto (um por card, na ordem de importância).
+function ribbonFor(product: Product, commissionRate: number | null) {
+  const sales = product.salesCount ?? 0;
+  // isFlashSale vem da janela de validade da comissão (todo produto tem), não de promoção relâmpago real.
+  if (sales >= 10_000) return { label: 'Mais vendido', icon: Flame, tone: 'bg-[var(--brand-500)] text-white' };
+  if (commissionRate != null && commissionRate >= 15) return { label: 'Alta comissão', icon: TrendingUp, tone: 'bg-[rgba(7,9,11,.72)] text-[var(--green-400)]' };
+  if ((product.rating ?? 0) >= 4.8 && sales >= 500) return { label: 'Bem avaliado', icon: Star, tone: 'bg-[rgba(7,9,11,.72)] text-[var(--gold-400)]' };
+  return null;
+}
 
-export const ProductCard: React.FC<ProductCardProps> = ({ 
-  product, 
-  onGenerateOffer, 
-  onShare, 
-  onAddToQueue, 
-  onPreview, 
-  onCopyLink, 
-  compact 
-}) => {
-  const currentPrice = product.currentPrice != null 
-    ? `R$ ${product.currentPrice.toFixed(2).replace('.', ',')}` 
-    : 'Confira';
-  const originalPrice = product.originalPrice != null 
-    ? `R$ ${product.originalPrice.toFixed(2).replace('.', ',')}` 
-    : null;
-  const discount = product.discountPercentage != null 
-    ? Math.round(product.discountPercentage) 
-    : null;
-  const commission = product.privateCommission?.percentage ?? product.commissionRate;
-  const isCompact = compact === true;
-  const mpConfig = getMarketplaceConfig(product.marketplace);
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onGenerateOffer, onShare, onAddToQueue, onPreview, onCopyLink }) => {
+  const price = product.currentPrice;
+  const discount = product.discountPercentage != null ? Math.round(product.discountPercentage) : null;
+  const commissionRate = product.privateCommission?.percentage ?? product.commissionRate;
+  const commissionValue = product.commissionAmount ?? product.privateCommission?.estimatedValue
+    ?? (price != null && commissionRate != null ? (price * commissionRate) / 100 : null);
+  const ribbon = ribbonFor(product, commissionRate);
+  const RibbonIcon = ribbon?.icon;
+  const share = () => (onShare ? onShare(product) : onGenerateOffer(product));
 
   return (
-    <Card className={`group flex min-w-0 flex-col overflow-hidden transition-all duration-200 hover:shadow-md hover:border-primary/30 ${isCompact ? 'p-2' : 'p-2.5'}`}>
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+    <article className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] transition-colors hover:border-[var(--border-default)]">
+      <div className="relative aspect-[4/3] overflow-hidden bg-white">
         {product.imageUrl ? (
-          <img
-            src={product.imageUrl}
-            alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.015]"
-          />
+          <img src={product.imageUrl} alt={product.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
         ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <Package className="h-7 w-7" />
-          </div>
+          <div className="flex h-full items-center justify-center bg-[var(--surface-card-raised)] text-[var(--text-muted)]"><Package className="h-8 w-8" /></div>
         )}
-        
-        <Badge className="absolute bottom-1.5 left-1.5" variant="default" style={{ backgroundColor: mpConfig.color, color: mpConfig.textColor }}>
-          <span className="text-[9px] font-bold">{mpConfig.label}</span>
-        </Badge>
-        
+        {ribbon && RibbonIcon && (
+          <span className={`absolute left-2.5 top-2.5 inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${ribbon.tone}`}>
+            <RibbonIcon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{ribbon.label}</span>
+          </span>
+        )}
+        {onPreview && (
+          <button
+            type="button"
+            onClick={() => onPreview(product)}
+            aria-label="Visualizar oferta"
+            title="Visualizar oferta"
+            className="absolute right-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full border border-[var(--border-default)] bg-[rgba(7,9,11,.62)] text-[var(--text-body)] backdrop-blur-sm transition-colors hover:text-[var(--brand-400)]"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+        )}
         {discount != null && discount > 0 && (
-          <Badge className="absolute top-1.5 right-1.5" variant="destructive">
-            -{discount}%
-          </Badge>
+          <span className="absolute bottom-2.5 left-2.5 rounded-lg bg-[var(--brand-500)] px-2 py-0.5 text-xs font-extrabold text-white">-{discount}%</span>
         )}
       </div>
-      
-      <CardContent className={`flex flex-1 flex-col p-0 ${isCompact ? 'pt-1.5' : 'pt-2'}`}>
-        <h3 className={`line-clamp-2 font-bold leading-snug text-foreground ${isCompact ? 'text-[11px]' : 'text-[12px]'}`} title={product.name}>
-          {product.name}
-        </h3>
-        
-        <div className="mt-1.5 flex items-baseline gap-1.5">
-          {originalPrice && (
-            <span className={`line-through text-muted-foreground ${isCompact ? 'text-[9px]' : 'text-[10px]'}`}>
-              {originalPrice}
+
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <h3 className="line-clamp-2 h-9 text-[13px] font-semibold leading-[18px] text-[var(--text-title)]" title={product.name}>{product.name}</h3>
+
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <span className="rdo-num text-lg font-extrabold leading-tight text-[var(--brand-500)]">{price != null ? brl(price) : 'Confira'}</span>
+          {product.originalPrice != null && price != null && product.originalPrice > price && (
+            <span className="rdo-num text-xs text-[var(--text-muted)] line-through">{brl(product.originalPrice)}</span>
+          )}
+        </div>
+
+        {commissionRate != null && (
+          <p className="text-xs font-medium text-[var(--green-400)]">
+            Comissão {commissionValue != null && <strong className="font-bold">{brl(commissionValue)}</strong>} ({Math.round(commissionRate)}%)
+          </p>
+        )}
+
+        <div className="flex min-w-0 items-center gap-3 text-xs text-[var(--text-secondary)]">
+          {product.rating != null && product.rating > 0 && (
+            <span className="inline-flex shrink-0 items-center gap-1">
+              <Star className="h-3.5 w-3.5 fill-[var(--gold-400)] text-[var(--gold-400)]" />
+              <span className="rdo-num">{product.rating.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</span>
             </span>
           )}
-          <p className={`font-black text-primary ${isCompact ? 'text-[15px]' : 'text-[17px]'}`}>
-            {currentPrice}
-          </p>
+          {product.salesCount != null && product.salesCount > 0 && (
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{compactCount.format(product.salesCount)} vendidos</span>
+            </span>
+          )}
         </div>
-        
-        <div className="mt-1.5 flex items-center justify-between gap-1 text-muted-foreground">
-          <span className={`font-medium truncate ${isCompact ? 'text-[9px]' : 'text-[10px]'}`}>
-            {product.salesCountText || 'Em alta'}
-          </span>
-          <Badge variant="success" className={`text-[9px] ${isCompact ? 'text-[8px]' : ''}`}>
-            {commission != null ? `${Math.round(commission)}%` : '—'}
-          </Badge>
-        </div>
-        
-        <div className={`mt-2 flex items-center gap-1.5 ${isCompact ? 'justify-center' : ''}`}>
-          <Button
-            size={isCompact ? 'sm' : 'default'}
-            className="flex-1 min-w-0"
-            onClick={() => (onShare ? onShare(product) : onGenerateOffer(product))}
-          >
-            <Share2 className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate hidden sm:inline">Compartilhar</span>
-          </Button>
-          
-          {onAddToQueue && (
-            <Button
-              variant="outline"
-              size={isCompact ? 'icon-sm' : 'icon'}
-              className="border-primary/60 bg-primary/5 text-primary hover:bg-primary/15"
+
+        <div className="mt-auto flex items-center gap-1.5 pt-2">
+          {onAddToQueue ? (
+            <button
+              type="button"
               onClick={() => onAddToQueue(product)}
-              aria-label="Adicionar à fila"
+              className="btn-brand inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[13px] font-bold"
             >
-              <Layers3 className={isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-            </Button>
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="truncate sm:hidden">Adicionar</span>
+              <span className="hidden truncate sm:inline">Adicionar à fila</span>
+            </button>
+          ) : (
+            <button type="button" onClick={share} className="btn-brand inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[13px] font-bold">
+              <Share2 className="h-4 w-4 shrink-0" />
+              <span className="truncate">Compartilhar</span>
+            </button>
           )}
-          
+          {onAddToQueue && (
+            <button type="button" onClick={share} aria-label="Compartilhar" title="Compartilhar" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-default)] text-[var(--text-body)] transition-colors hover:border-[var(--border-brand)] hover:text-[var(--brand-400)]">
+              <Share2 className="h-4 w-4" />
+            </button>
+          )}
           {onCopyLink && (
-            <Button
-              variant="ghost"
-              size={isCompact ? 'icon-sm' : 'icon'}
-              onClick={() => onCopyLink(product)}
-              aria-label="Copiar link"
-            >
-              <Copy className={isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-            </Button>
-          )}
-          
-          {onPreview && (
-            <Button
-              variant="ghost"
-              size={isCompact ? 'icon-sm' : 'icon'}
-              onClick={() => onPreview(product)}
-              aria-label="Visualizar"
-            >
-              <Eye className={isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-            </Button>
+            <button type="button" onClick={() => onCopyLink(product)} aria-label="Copiar link" title="Copiar link" className="hidden h-10 w-10 sm:grid shrink-0 place-items-center rounded-xl border border-[var(--border-default)] text-[var(--text-body)] transition-colors hover:border-[var(--border-brand)] hover:text-[var(--brand-400)]">
+              <Copy className="h-4 w-4" />
+            </button>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 };
 

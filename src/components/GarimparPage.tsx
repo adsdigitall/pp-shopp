@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Product, FilterType, GarimparPlatform, GarimparTab, NACIONAIS_FILTER_HINT } from '../types/product';
 import { ProductCard } from './ProductCard';
-import { Grid2X2, Search, SearchX, Tag, TrendingUp, RefreshCw, Star, DollarSign, ArrowDown, Percent, Copy, Plus, BadgeCheck } from 'lucide-react';
+import { Grid2X2, Search, SearchX, Tag, TrendingUp, RefreshCw, Star, DollarSign, ArrowDown, Percent, Copy, Plus, BadgeCheck, Sun, Target, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -63,11 +63,11 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
     return () => observer.disconnect();
   }, [onLoadMore]);
 
-  const platforms: Array<{ id: GarimparPlatform; label: string; icon: string; color: string }> = [
-    { id: 'shopee', label: 'Shopee', icon: '🛍️', color: 'from-orange-500 to-orange-600' },
-    { id: 'mercado_livre', label: 'Mercado Livre', icon: '🤝', color: 'from-yellow-500 to-yellow-600' },
-    { id: 'amazon', label: 'Amazon', icon: '📦', color: 'from-amber-500 to-amber-600' },
-    { id: 'magalu', label: 'Magalu', icon: '💜', color: 'from-purple-500 to-purple-600' },
+  const platforms: Array<{ id: GarimparPlatform; label: string; logo: string }> = [
+    { id: 'shopee', label: 'Shopee', logo: '/brand/marketplaces/shopee.png' },
+    { id: 'mercado_livre', label: 'Mercado Livre', logo: '/brand/marketplaces/mercado-livre.png' },
+    { id: 'amazon', label: 'Amazon', logo: '/brand/marketplaces/amazon.png' },
+    { id: 'magalu', label: 'Magalu', logo: '/brand/marketplaces/magalu.png' },
   ];
   
   const tabs: Array<{ id: GarimparTab; label: string }> = [
@@ -188,86 +188,124 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
     );
   }
 
+  const dateLine = (() => {
+    const raw = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(new Date());
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  })();
+  const activeFilterLabel = filters.find((filter) => filter.id === activeFilter)?.label || 'Relevância';
+  const activeCategoryLabel = categories.find(([id]) => id === activeCategory)?.[1] || '';
+
+  // "Boas ofertas hoje" aplica o filtro real de mais vendidos e leva até a lista.
+  const showBestOffers = () => {
+    onSelectGarimparTab('buscar');
+    onSelectFilter('top_sales');
+    requestAnimationFrame(() => document.getElementById('produtos')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  const filterChips = (
+    <div className="garimpar-filters flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+      {filters.map((filter) => {
+        const active = activeFilter === filter.id;
+        const chip = (
+          <button
+            key={filter.id}
+            type="button"
+            onClick={() => onSelectFilter(filter.id)}
+            aria-pressed={active}
+            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${active ? 'border-[var(--border-brand)] bg-[var(--surface-active)] text-[var(--text-title)]' : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-title)]'}`}
+          >
+            <span className={filter.color}>{filter.icon}</span>
+            {filter.label}
+          </button>
+        );
+        return filter.id === 'nacionais' ? (
+          <Tooltip key={filter.id}>
+            <TooltipTrigger asChild>{chip}</TooltipTrigger>
+            <TooltipContent>{NACIONAIS_FILTER_HINT}</TooltipContent>
+          </Tooltip>
+        ) : chip;
+      })}
+    </div>
+  );
+
   return (
     <section className="garimpar-page space-y-5 pb-8">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="garimpar-eyebrow">DESCOBERTA DE OFERTAS</p>
-          <h1 className="mt-1 text-3xl font-black leading-tight tracking-tight text-foreground sm:text-4xl">Garimpar</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p>
+          <p className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]"><Sun className="h-4 w-4" /> {dateLine}</p>
+          <h1 className="mt-1.5 text-3xl font-extrabold leading-tight tracking-[-0.02em] text-[var(--text-title)] sm:text-[34px]">Garimpar</h1>
+          <p className="mt-1 text-[15px] text-[var(--text-body)]">Encontre ofertas e jogue na fila. Escolha a plataforma pra começar.</p>
         </div>
+        <button type="button" onClick={showBestOffers} className="panel flex items-center gap-4 p-4 text-left transition-colors hover:border-[var(--border-brand)] lg:min-w-[330px]">
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--surface-brand-soft)] text-[var(--brand-500)]"><Target className="h-7 w-7" /></span>
+          <span className="flex-1">
+            <span className="block text-[15px] font-semibold text-[var(--text-title)]">Boas ofertas hoje</span>
+            <span className="block text-[13px] text-[var(--text-secondary)]">Ver os mais vendidos agora.</span>
+          </span>
+          <ChevronRight className="h-5 w-5 text-[var(--text-secondary)]" />
+        </button>
       </div>
 
-      <div className="garimpar-platforms flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-        {platforms.map((platform) => (
-          <Button
-            key={platform.id}
-            type="button"
-            variant={selectedPlatform === platform.id ? 'default' : 'outline'}
-            onClick={() => onSelectPlatform(platform.id)}
-            data-active={selectedPlatform === platform.id}
-            className="garimpar-platform h-11 shrink-0 gap-2 rounded-xl px-3 text-sm font-bold transition-all"
-          >
-            <span className="text-base font-black">{platform.icon}</span>
-            <span className="hidden sm:inline">{platform.label}</span>
-          </Button>
-        ))}
+      <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1">
+        {platforms.map((platform) => {
+          const active = selectedPlatform === platform.id;
+          return (
+            <button
+              key={platform.id}
+              type="button"
+              onClick={() => onSelectPlatform(platform.id)}
+              aria-pressed={active}
+              className={`inline-flex h-12 shrink-0 items-center gap-2.5 rounded-xl border px-4 text-[15px] font-semibold transition-colors ${active ? 'border-[var(--border-brand)] bg-[var(--surface-active)] text-[var(--text-title)]' : 'border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-body)] hover:border-[var(--border-strong)]'}`}
+            >
+              <img src={platform.logo} alt="" className="h-7 w-7 rounded-md object-contain" />
+              {platform.label}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="garimpar-tabs flex gap-1 overflow-x-auto border-b border-border pb-0 scrollbar-thin">
-        {tabs.map((tab) => (
-          <Button
-            key={tab.id}
-            type="button"
-            variant={garimparTab === tab.id ? 'default' : 'ghost'}
-            onClick={() => onSelectGarimparTab(tab.id)}
-            data-active={garimparTab === tab.id}
-            className="garimpar-tab whitespace-nowrap border-b-2 px-3 pb-3 pt-2 text-sm font-bold"
-          >
-            {tab.label}
-          </Button>
-        ))}
+      <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
+        {tabs.map((tab) => {
+          const active = garimparTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onSelectGarimparTab(tab.id)}
+              aria-current={active ? 'page' : undefined}
+              className={`-mb-px whitespace-nowrap border-b-2 px-3.5 pb-3 pt-1 text-[15px] transition-colors ${active ? 'border-[var(--brand-500)] font-semibold text-[var(--text-title)]' : 'border-transparent font-medium text-[var(--text-secondary)] hover:text-[var(--text-title)]'}`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {garimparTab === 'buscar' && (
-        <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="garimpar-search-panel pressable-card">
-          <CardContent className="p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-1">
-              <Search className="h-5 w-5 text-primary" />
-              <h2 className="text-base font-black text-foreground">Buscar produtos</h2>
+        <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="panel p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <Search className="mt-0.5 h-6 w-6 shrink-0 text-[var(--brand-500)]" />
+            <div>
+              <h2 className="text-base font-bold text-[var(--text-title)]">Buscar produtos</h2>
+              <p className="text-[13px] text-[var(--text-secondary)]">Pesquise por produtos, marcas ou nichos (ex.: air fryer)</p>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">Pesquise por produtos, marcas ou nichos (ex.: air fryer)</p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange(e.target.value)}
-                  placeholder="Digite o produto que você procura..."
-                className="h-12 rounded-xl pl-10 pr-9 text-sm"
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={searching}
-                className="h-12 gap-2 rounded-xl px-5"
-              >
-                {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                <span className="hidden sm:inline">{searching ? 'Carregando…' : 'Garimpar'}</span>
-              </Button>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Digite o produto que você procura..."
+                className="h-12 w-full rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] pl-11 pr-4 text-sm text-[var(--text-title)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--border-focus)]"
+              />
             </div>
-            <div className="mt-4 flex items-center justify-between gap-2 text-xs">
-              <span className="flex items-center gap-1.5 font-bold text-foreground">
-                <Grid2X2 className="h-4 w-4 text-primary" />
-                {products.length} produtos
-              </span>
-              {products.length > 0 && (
-                <Button type="button" size="sm" onClick={adicionarOfertasExibidasNaFila} className="h-8 gap-1.5 text-[11px]">
-                  <Plus className="h-3.5 w-3.5" /> Adicionar à fila
-                </Button>
-              )}
-            </div>
-          </CardContent>
+            <button type="submit" disabled={searching} className="btn-brand inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold sm:px-6">
+              {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              <span className="hidden sm:inline">{searching ? 'Carregando…' : 'Garimpar'}</span>
+            </button>
+          </div>
+          <div className="mt-4">{filterChips}</div>
         </form>
       )}
 
@@ -441,74 +479,70 @@ export const GarimparPage: React.FC<GarimparPageProps> = ({
       )}
 
       {garimparTab !== 'links' && (<>
-      <ScrollArea className="garimpar-filters flex flex-nowrap gap-2 overflow-x-auto scrollbar-thin pb-1 sm:flex-wrap sm:overflow-visible">
-        {filters.map((filter) => {
-          const button = (
-            <Button
-              key={filter.id}
-              type="button"
-              variant={activeFilter === filter.id ? 'default' : 'outline'}
-              onClick={() => onSelectFilter(filter.id)}
-              data-active={activeFilter === filter.id}
-              className="garimpar-filter h-8 gap-1.5 rounded-lg px-3 text-xs font-semibold"
-            >
-              <span className={filter.color}>{filter.icon}</span>
-              {filter.label}
-            </Button>
-          );
-          return filter.id === 'nacionais' ? (
-            <Tooltip key={filter.id}>
-              <TooltipTrigger asChild>{button}</TooltipTrigger>
-              <TooltipContent>{NACIONAIS_FILTER_HINT}</TooltipContent>
-            </Tooltip>
-          ) : button;
-        })}
-      </ScrollArea>
+      {garimparTab !== 'buscar' && filterChips}
 
-      <Card className="garimpar-category-panel pressable-card">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Tag className="h-5 w-5 text-primary" />
-            <div>
-              <h2 className="text-sm font-bold text-foreground">Categoria / nicho</h2>
-              <p className="text-[10px] text-muted-foreground">Escolha uma categoria para filtrar as ofertas</p>
-            </div>
+      <div className="panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+        <div className="flex shrink-0 items-center gap-3 sm:w-[300px]">
+          <Tag className="h-6 w-6 shrink-0 text-[var(--brand-500)]" />
+          <div>
+            <h2 className="text-[15px] font-semibold text-[var(--text-title)]">Categoria / nicho</h2>
+            <p className="text-xs text-[var(--text-secondary)]">Escolha uma categoria para filtrar as ofertas</p>
           </div>
-          <div className="relative">
-            <Select value={activeCategory} onValueChange={onSelectCategory}>
-              <SelectTrigger className="h-11 w-full rounded-xl">
-                <Grid2X2 className="h-4 w-4 shrink-0 text-primary" />
-                <SelectValue placeholder={categories.find(([id]) => id === activeCategory)?.[1] || 'Todos os nichos'} />
-              </SelectTrigger>
-              <SelectContent className="scrollbar-thin max-h-48">
-                <SelectItem value="">Todos os nichos</SelectItem>
-                {categories.map(([id, label]) => (
-                  <SelectItem key={id} value={id}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        </div>
+        <Select value={activeCategory} onValueChange={onSelectCategory}>
+          <SelectTrigger className="h-11 w-full min-w-0 flex-1 rounded-xl">
+            <Grid2X2 className="h-4 w-4 shrink-0 text-[var(--brand-500)]" />
+            <SelectValue placeholder={activeCategoryLabel || 'Todas as categorias'} />
+          </SelectTrigger>
+          <SelectContent className="scrollbar-thin max-h-48">
+            <SelectItem value="">Todas as categorias</SelectItem>
+            {categories.map(([id, label]) => (
+              <SelectItem key={id} value={id}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {(loading || products.length > 0) && (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-title)]">
+              {loading ? 'Garimpando produtos…' : `${products.length.toLocaleString('pt-BR')} ${products.length === 1 ? 'produto carregado' : 'produtos carregados'}`}
+            </h2>
+            <p className="text-[13px] text-[var(--text-secondary)]">
+              Ordenados por {activeFilterLabel.toLowerCase()}{activeCategoryLabel ? ` · ${activeCategoryLabel}` : ''}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          {!loading && products.length > 0 && (
+            <button type="button" onClick={adicionarOfertasExibidasNaFila} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--border-default)] px-3.5 text-[13px] font-semibold text-[var(--text-title)] transition-colors hover:border-[var(--border-brand)]">
+              <Plus className="h-4 w-4 text-[var(--brand-500)]" /> Adicionar todos à fila
+            </button>
+          )}
+        </div>
+      )}
 
       {loading ? (
-        <div id="produtos" className="garimpar-grid grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4 max-[380px]:grid-cols-1">
+        <div id="produtos" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 min-[1700px]:grid-cols-5 max-[380px]:grid-cols-1">
           {[1, 2, 3, 4].map((item) => (
-            <Card key={item} className="animate-pulse p-2">
-              <div className="aspect-square rounded-lg bg-muted" />
-              <div className="mt-2 h-3 rounded bg-muted w-3/4" />
-              <div className="mt-2 h-6 rounded-lg bg-muted w-1/2" />
-            </Card>
+            <div key={item} className="panel animate-pulse overflow-hidden">
+              <div className="aspect-[4/3] bg-white/[.04]" />
+              <div className="space-y-2 p-3">
+                <div className="h-3 w-3/4 rounded bg-white/[.06]" />
+                <div className="h-5 w-1/2 rounded bg-white/[.06]" />
+                <div className="h-10 rounded-xl bg-white/[.06]" />
+              </div>
+            </div>
           ))}
         </div>
       ) : products.length > 0 ? (
-        <div id="produtos" className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 max-[380px]:grid-cols-1">
+        <div id="produtos" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 min-[1700px]:grid-cols-5 max-[380px]:grid-cols-1">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} onGenerateOffer={onGenerateOffer} onShare={onShare} onAddToQueue={onAddToQueue} onPreview={onPreview} onCopyLink={onCopyLink} compact />
           ))}
         </div>
       ) : null}
-      
+
+      {loadingMore && <p className="text-center text-[13px] text-[var(--text-secondary)]">Carregando mais produtos…</p>}
       <div ref={loadMoreRef} />
       </>)}
     </section>
