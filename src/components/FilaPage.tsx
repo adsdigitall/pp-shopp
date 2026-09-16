@@ -426,7 +426,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiCard icon={Clock} label="Pendentes" info="Ofertas completas esperando revisão na fila." display={readyItems.length.toLocaleString('pt-BR')} value={readyItems.length} previous={0} series={[]} comparison="" note="prontas pra disparar" />
         <KpiCard icon={CalendarDays} label="Agendadas" info="Disparos criados que ainda não terminaram (inclui a automação)." display={overview ? scheduledCount.toLocaleString('pt-BR') : '—'} value={scheduledCount} previous={0} series={[]} comparison="" note={overview ? 'aguardando envio' : 'carregando…'} />
         <KpiCard icon={Send} label="Enviadas hoje" info="Ofertas entregues aos grupos hoje (horário de Brasília)." display={overview ? overview.counts.sentToday.toLocaleString('pt-BR') : '—'} value={overview?.counts.sentToday ?? 0} previous={overview?.counts.sentYesterday ?? 0} series={overview?.series.sent ?? []} comparison="vs. ontem" unavailable={!overview} footnote={overview ? undefined : overviewError || 'carregando…'} />

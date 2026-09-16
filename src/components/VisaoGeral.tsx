@@ -124,7 +124,7 @@ export function VisaoGeral({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {showData ? (
           <>
             <KpiCard icon={DollarSign} label="Comissão" info="Comissão dos pedidos pagos e concluídos na Shopee no período. Não pagos e cancelados não contam." pending={unpaidCommission} display={formatBRL(data.kpis.commission.value)} {...data.kpis.commission} comparison={periodOption.comparison} unavailable={salesOff} footnote={salesOff ? 'Relatório da Shopee indisponível' : undefined} />
@@ -133,7 +133,7 @@ export function VisaoGeral({
             <KpiCard icon={Users} label="Grupos ativos" info={data.kpis.activeGroups.names.length ? `Receberam ofertas: ${data.kpis.activeGroups.names.join(', ')}` : 'Grupos que receberam ao menos uma oferta no período.'} display={data.kpis.activeGroups.value.toLocaleString('pt-BR')} value={data.kpis.activeGroups.value} previous={data.kpis.activeGroups.previous} series={data.kpis.activeGroups.series} comparison={periodOption.comparison} />
           </>
         ) : (
-          Array.from({ length: 4 }, (_, i) => <div key={i} className="panel h-[118px] animate-pulse" aria-hidden="true" />)
+          Array.from({ length: 4 }, (_, i) => <div key={i} className="panel h-[150px] animate-pulse sm:h-[118px]" aria-hidden="true" />)
         )}
       </div>
 

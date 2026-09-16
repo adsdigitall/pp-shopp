@@ -219,6 +219,10 @@ body {
   background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.03) 1px, transparent 0);
 }
 html { scroll-behavior: smooth; }
+/* Celular/PWA: nada pode alargar a página (evita faixa lateral e arrasto para o lado).
+   clip (e não hidden) para não quebrar o header sticky. */
+html, body { max-width: 100%; overflow-x: clip; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+@supports not (overflow: clip) { html, body { overflow-x: hidden; } }
 *:focus-visible { outline: none; ring: 2px; ring-color: var(--ring); ring-offset: 2px; ring-offset-color: var(--background); }
 ::selection { background-color: var(--brand-500); color: #fff; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -535,6 +539,7 @@ html { scroll-behavior: smooth; }
   margin-inline: auto;
 }
 .app-shell > header {
+  /* sticky precisa de overflow-x: clip no .app-shell (hidden quebra o sticky) */
   border-color: rgba(255,255,255,.06) !important;
   background: rgba(11,15,17,.84) !important;
   box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
@@ -606,7 +611,6 @@ html { scroll-behavior: smooth; }
 .product-card-media { background: var(--garimpar-surface-raised); }
 .product-card-primary { box-shadow: 0 6px 16px rgba(253,87,35,.16); }
 @media (max-width: 640px) {
-  .garimpar-page { margin-inline: -2px; }
   .garimpar-grid { gap: .65rem; }
 }
 
@@ -631,7 +635,11 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 640px) {
-  .app-shell main { padding-inline: .75rem !important; }
+  /* Regra do design system: 16px de margem lateral no celular. */
+  .app-shell main {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(1rem, env(safe-area-inset-right, 0px)) !important;
+  }
   .app-shell .product-card button { min-height: 2.75rem; min-width: 2.75rem; }
   .app-shell .product-card-primary { min-width: 0; }
   .app-shell .product-card-actions-compact .product-card-primary { flex-basis: 100%; }
@@ -656,9 +664,9 @@ html { scroll-behavior: smooth; }
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
-  width: calc(100% - 24px);
+  width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   max-width: 28rem;
-  z-index: 70;
+  z-index: 45;
 }
 .mobile-bottom-nav-pill {
   background: rgba(11, 15, 17, 0.86);

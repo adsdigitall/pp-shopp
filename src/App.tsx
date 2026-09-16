@@ -747,7 +747,7 @@ export function App() {
 
   return (
     <TooltipProvider>
-    <div className="app-shell min-h-screen min-w-0 overflow-x-hidden font-sans transition-colors duration-normal bg-gradient-to-br from-[var(--background)] via-[var(--surface)] to-[var(--background)]">
+    <div className="app-shell min-h-screen min-w-0 overflow-x-clip font-sans transition-colors duration-normal bg-gradient-to-br from-[var(--background)] via-[var(--surface)] to-[var(--background)]">
 
       <DesktopSidebar
         activeSection={activeSection}
@@ -766,12 +766,13 @@ export function App() {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenNotifications={() => setIsNotificationsModalOpen(true)}
         hasUnreadNotifications={hasUnreadAlerts}
+        onOpenMenu={() => setMobileSidebarOpen(true)}
         whatsappConnected={whatsappConnected}
         user={user}
         className="lg:ml-64"
       />
 
-      <main className="min-w-0 w-full max-w-none flex-1 space-y-5 px-3 pb-28 pt-4 sm:space-y-6 sm:px-6 sm:pb-10 sm:pt-6 lg:ml-64 lg:px-10 xl:px-12">
+      <main className="min-w-0 w-full max-w-none flex-1 space-y-5 px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-4 sm:space-y-6 sm:px-6 sm:pt-6 lg:ml-64 lg:px-10 lg:pb-10 xl:px-12">
         <div className={activeSection === 'visao-geral' ? '' : 'hidden'}><VisaoGeral
           isActive={activeSection === 'visao-geral'}
           onNavigateToGarimpar={() => { setActiveSection('garimpar'); setMobileSidebarOpen(false); }}

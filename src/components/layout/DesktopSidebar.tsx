@@ -159,21 +159,13 @@ export function DesktopSidebar({
   return (
     <>
       {mobileOpen && (
-        <button type="button" aria-label="Fechar navegação" onClick={onToggleMobile} className="fixed inset-0 z-40 bg-[var(--surface-scrim)] backdrop-blur-sm md:hidden" />
+        <button type="button" aria-label="Fechar navegação" onClick={onToggleMobile} className="fixed inset-0 z-[85] bg-[var(--surface-scrim)] backdrop-blur-sm lg:hidden" />
       )}
-      <button
-        type="button"
-        onClick={onToggleMobile}
-        aria-label="Abrir navegação"
-        className="fixed left-2 top-14 z-40 grid h-9 w-9 place-items-center rounded-xl border border-[var(--border-default)] bg-[var(--surface-card-raised)] text-[var(--text-title)] shadow-lg md:hidden"
-      >
-        ☰
-      </button>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 py-3 text-[var(--text-body)]",
+          "fixed inset-y-0 left-0 z-[90] w-[min(18rem,86vw)] flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(0.75rem+env(safe-area-inset-top,0px))] text-[var(--text-body)] shadow-[var(--shadow-modal)] lg:z-50 lg:w-64 lg:shadow-none",
           mobileOpen ? "flex" : "hidden",
-          "md:flex",
+          "lg:flex",
           className
         )}
       >

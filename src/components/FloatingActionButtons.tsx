@@ -23,7 +23,7 @@ export const FloatingActionButtons: React.FC<FloatingActionButtonsProps> = ({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
+    <div className="fixed bottom-6 right-6 z-40 hidden lg:block">
       {expanded && (
         <div className="absolute bottom-16 right-0 flex flex-col gap-3 mb-2">
           <Button variant="outline" size="icon" className="bg-[var(--surface)] border border-[var(--border)]" onClick={onOpenWhatsApp}>

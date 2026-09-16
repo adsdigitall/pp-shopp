@@ -38,9 +38,9 @@ const MARKETPLACE_INFO = {
     name: 'Shopee',
     icon: ShoppingBag,
     color: '#EE4D2D',
-    bgColor: 'bg-orange-100',
+    bgColor: 'bg-[var(--surface-brand-soft)]',
     textColor: 'text-[var(--primary)]',
-    borderColor: 'border-orange-200',
+    borderColor: 'border-[var(--border-brand)]',
   },
   mercado_livre: {
     name: 'Mercado Livre',
@@ -224,10 +224,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const getStatusIcon = (status: MarketplaceConnection['status']) => {
     switch (status) {
-      case 'connected': return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'token_expired': return <AlertCircle className="w-5 h-5 text-amber-500" />;
-      case 'connecting': return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
-      default: return <AlertCircle className="w-5 h-5 text-slate-400" />;
+      case 'connected': return <CheckCircle className="w-5 h-5 text-[var(--green-400)]" />;
+      case 'token_expired': return <AlertCircle className="w-5 h-5 text-[var(--amber-400)]" />;
+      case 'connecting': return <Loader2 className="w-5 h-5 text-[var(--blue-400)] animate-spin" />;
+      default: return <AlertCircle className="w-5 h-5 text-[var(--text-muted)]" />;
     }
   };
 
@@ -256,38 +256,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const showProviderConfigFields = selectedProvider?.requiresConfig;
 
     return (
-      <div className={`border-2 rounded-2xl p-4 transition-all ${status.connected ? info.borderColor : 'border-slate-200'} bg-white`}>
+      <div className={`border-2 rounded-2xl p-4 transition-all ${status.connected ? info.borderColor : 'border-[var(--border-default)]'} bg-[var(--surface-card)]`}>
         <div className="flex items-center gap-3 mb-4">
           <div className={`p-2 rounded-xl ${info.bgColor} ${info.textColor}`}>
             <Icon className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-extrabold text-slate-900">{info.name}</h3>
-            <p className="text-xs text-slate-500">Integração de afiliados</p>
+            <h3 className="font-extrabold text-[var(--text-title)]">{info.name}</h3>
+            <p className="text-xs text-[var(--text-muted)]">Integração de afiliados</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {getStatusIcon(status.status)}
-            <span className="text-xs font-bold text-slate-600">{getStatusText(status.status)}</span>
+            <span className="text-xs font-bold text-[var(--text-body)]">{getStatusText(status.status)}</span>
           </div>
         </div>
 
         {status.connected && status.account && (
-          <div className="mb-4 p-3 bg-slate-50 rounded-xl flex items-center justify-between">
+          <div className="mb-4 p-3 bg-[var(--surface-input)] rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-                <span className="text-xs font-bold text-slate-600">
+              <div className="w-8 h-8 rounded-full bg-[var(--surface-card-raised)] flex items-center justify-center">
+                <span className="text-xs font-bold text-[var(--text-body)]">
                   {status.account.nickname?.charAt(0).toUpperCase() || '?'}
                 </span>
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900">@{status.account.nickname}</p>
-                <p className="text-[11px] text-slate-500">ID: {status.account.id}</p>
+                <p className="text-sm font-semibold text-[var(--text-title)]">@{status.account.nickname}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">ID: {status.account.id}</p>
               </div>
             </div>
             <button
               onClick={marketplace === 'mercado_livre' ? handleDisconnectMercadoLivre : undefined}
               disabled={isLoading}
-              className="px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl border border-red-200 disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-bold text-[var(--text-negative)] hover:bg-[var(--surface-red-soft)] rounded-xl border border-[var(--red-900)] disabled:opacity-50"
             >
               Desconectar
             </button>
@@ -306,10 +306,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         )}
 
         {/* Affiliate Config */}
-        <div className={`mt-4 pt-4 border-t border-slate-100 ${isConfigOpen ? '' : 'hidden'}`}>
+        <div className={`mt-4 pt-4 border-t border-[var(--border-subtle)] ${isConfigOpen ? '' : 'hidden'}`}>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+              <label className="text-xs font-bold text-[var(--text-body)] uppercase tracking-wider block">
                 Tag / ID de Afiliado {info.name}
               </label>
               <input
@@ -317,9 +317,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={config.affiliateTag}
                 onChange={(e) => setAffiliateConfig(prev => ({ ...prev, [marketplace]: { ...prev[marketplace], affiliateTag: e.target.value } }))}
                 placeholder={marketplace === 'shopee' ? 'Ex: seu_id_afiliado' : 'Ex: matt:usuario:toolid ou tag_simples'}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium"
+                className="w-full px-3.5 py-2.5 text-sm bg-[var(--surface-input)] border border-[var(--border-default)] rounded-xl focus:bg-[var(--surface-input)] focus:border-[var(--primary)] outline-none font-medium"
               />
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-[var(--text-muted)]">
                 {marketplace === 'shopee' 
                   ? 'Esta tag será injetada nos links gerados automaticamente pela API oficial.'
                   : 'Formato: "tag_simples" ou "matt:usuario:toolid" (veja painel do ML).'
@@ -328,19 +328,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+              <label className="text-xs font-bold text-[var(--text-body)] uppercase tracking-wider block">
                 Provedor de Link Afiliado
               </label>
               <select
                 value={config.affiliateProvider}
                 onChange={(e) => setAffiliateConfig(prev => ({ ...prev, [marketplace]: { ...prev[marketplace], affiliateProvider: e.target.value } }))}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium text-slate-800"
+                className="w-full px-3.5 py-2.5 text-sm bg-[var(--surface-input)] border border-[var(--border-default)] rounded-xl focus:bg-[var(--surface-input)] focus:border-[var(--primary)] outline-none font-medium text-[var(--text-title)]"
               >
                 {providers.map(p => (
                   <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-[var(--text-muted)]">
                 {marketplace === 'mercado_livre' 
                   ? '⚠️ ML não tem API oficial pública. Provedores terceiros requerem conta paga.'
                   : 'A Shopee gera links automaticamente via API oficial.'
@@ -349,11 +349,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {showProviderConfigFields && (
-              <div className="space-y-1.5 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs font-bold text-amber-800">
+              <div className="space-y-1.5 p-3 bg-[var(--surface-amber-soft)] border border-[var(--amber-900)] rounded-xl">
+                <p className="text-xs font-bold text-[var(--amber-400)]">
                   ⚙️ Configuração adicional necessária para {selectedProvider?.label}
                 </p>
-                <p className="text-[11px] text-amber-700">
+                <p className="text-[11px] text-[var(--amber-400)]">
                   Configure as variáveis de ambiente no servidor (.env.local) ou insira as credenciais abaixo.
                 </p>
                 <textarea
@@ -367,16 +367,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }
                   }}
                   placeholder='{ "apiKey": "sua_chave_aqui" }'
-                  className="w-full px-3 py-2 text-xs font-mono bg-slate-100 border border-slate-200 rounded-lg focus:bg-white focus:border-amber-400 outline-none"
+                  className="w-full px-3 py-2 text-xs font-mono bg-[var(--surface-card-raised)] border border-[var(--border-default)] rounded-lg focus:bg-[var(--surface-input)] focus:border-[var(--border-focus)] outline-none"
                   rows={3}
                 />
               </div>
             )}
 
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+            <div className="flex items-center justify-between p-3 bg-[var(--surface-input)] rounded-xl">
               <div className="pr-3">
-                <span className="text-xs font-bold text-slate-900 block">Ativar integração de afiliado</span>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
+                <span className="text-xs font-bold text-[var(--text-title)] block">Ativar integração de afiliado</span>
+                <span className="text-[11px] text-[var(--text-muted)] block mt-0.5">
                   Habilita geração automática de links para este marketplace
                 </span>
               </div>
@@ -384,14 +384,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="checkbox"
                 checked={config.isEnabled}
                 onChange={(e) => setAffiliateConfig(prev => ({ ...prev, [marketplace]: { ...prev[marketplace], isEnabled: e.target.checked } }))}
-                className="w-4 h-4 text-[var(--primary)] rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
+                className="w-4 h-4 text-[var(--primary)] rounded border-[var(--border-input)] focus:ring-[var(--brand-500)] cursor-pointer"
               />
             </div>
 
             <button
               onClick={() => handleSaveAffiliateConfig(marketplace)}
               disabled={isSaving}
-              className="w-full py-2 px-3 bg-[var(--primary)] hover:bg-[var(--brand-600)] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 disabled:opacity-50 cursor-pointer"
+              className="w-full py-2 px-3 bg-[var(--primary)] hover:bg-[var(--brand-600)] text-[var(--text-on-brand)] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-[var(--brand-500)]/20 disabled:opacity-50 cursor-pointer"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               <span>{isSaving ? 'Salvando...' : 'Salvar configuração de afiliado'}</span>
@@ -402,7 +402,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {!isConfigOpen && (status.connected || marketplace === 'mercado_livre') && (
           <button
             onClick={() => setShowProviderConfig(marketplace)}
-            className="w-full mt-3 py-2 text-slate-600 hover:text-slate-900 text-xs font-medium flex items-center justify-center gap-1"
+            className="w-full mt-3 py-2 text-[var(--text-body)] hover:text-[var(--text-title)] text-xs font-medium flex items-center justify-center gap-1"
           >
             <Settings className="w-4 h-4" />
             <span>Configurar afiliado</span>
@@ -415,27 +415,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--surface-scrim)] backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-[var(--surface-card)] w-full max-w-2xl rounded-3xl shadow-2xl border border-[var(--border-default)] overflow-hidden animate-in zoom-in-95 duration-200 max-h-[calc(100dvh-2rem)] flex flex-col">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-3 bg-[var(--surface-card-raised)]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-slate-100 text-slate-700 rounded-xl">
+            <div className="p-2 bg-[var(--surface-card-raised)] text-[var(--text-body)] rounded-xl">
               <Sliders className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-extrabold text-base sm:text-lg text-slate-900">
+              <h2 className="font-extrabold text-base sm:text-lg text-[var(--text-title)]">
                 Configurações
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 Marketplaces, afiliado e preferências
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-xl cursor-pointer"
+            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-body)] hover:bg-[var(--surface-hover)] rounded-xl cursor-pointer"
             aria-label="Fechar"
           >
             <X className="w-5 h-5" />
@@ -443,13 +443,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-100 bg-slate-50">
+        <div className="flex border-b border-[var(--border-subtle)] bg-[var(--surface-input)]">
           <button
             onClick={() => setActiveTab('general')}
             className={`flex-1 py-3 px-4 text-sm font-bold border-b-2 transition-colors ${
               activeTab === 'general' 
                 ? 'border-[var(--primary)] text-[var(--primary)]' 
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-body)]'
             }`}
           >
             Geral
@@ -459,7 +459,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             className={`flex-1 py-3 px-4 text-sm font-bold border-b-2 transition-colors ${
               activeTab === 'marketplaces' 
                 ? 'border-[var(--primary)] text-[var(--primary)]' 
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-body)]'
             }`}
           >
             <Link2 className="w-4 h-4 inline mr-1" />
@@ -473,11 +473,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <form onSubmit={handleGeneralSubmit} className="space-y-4">
               {/* Affiliate Tag (Global/Default) */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                <label className="text-xs font-bold text-[var(--text-body)] uppercase tracking-wider block">
                   Tag / ID de Afiliado Padrão (Shopee)
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--text-muted)]">
                     <Key className="w-4 h-4" />
                   </div>
                   <input
@@ -485,23 +485,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={form.affiliateTag}
                     onChange={(e) => setForm({ ...form, affiliateTag: e.target.value })}
                     placeholder="Ex: seu_id_afiliado"
-                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] focus:ring-2 focus:ring-orange-500/20 outline-none font-medium"
+                    className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-[var(--surface-input)] border border-[var(--border-default)] rounded-xl focus:bg-[var(--surface-input)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--brand-500)]/20 outline-none font-medium"
                   />
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[var(--text-muted)]">
                   Tag padrão para links da Shopee. Cada marketplace pode ter sua própria configuração na aba Marketplaces.
                 </p>
               </div>
 
               {/* Default Format */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                <label className="text-xs font-bold text-[var(--text-body)] uppercase tracking-wider block">
                   Formato Padrão de Cópia
                 </label>
                 <select
                   value={form.defaultFormat}
                   onChange={(e) => setForm({ ...form, defaultFormat: e.target.value as any })}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium text-slate-800"
+                  className="w-full px-3.5 py-2.5 text-sm bg-[var(--surface-input)] border border-[var(--border-default)] rounded-xl focus:bg-[var(--surface-input)] focus:border-[var(--primary)] outline-none font-medium text-[var(--text-title)]"
                 >
                   <option value="standard">WhatsApp & Telegram (Completo com destaques)</option>
                   <option value="compact">Stories & Direct (Curto e direto)</option>
@@ -511,11 +511,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Theme */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">Tema do aplicativo</label>
+                <label className="text-xs font-bold text-[var(--text-body)] uppercase tracking-wider block">Tema do aplicativo</label>
                 <select
                   value={form.theme}
                   onChange={(e) => setForm({ ...form, theme: e.target.value as 'light' | 'dark' })}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[var(--primary)] outline-none font-medium text-slate-800"
+                  className="w-full px-3.5 py-2.5 text-sm bg-[var(--surface-input)] border border-[var(--border-default)] rounded-xl focus:bg-[var(--surface-input)] focus:border-[var(--primary)] outline-none font-medium text-[var(--text-title)]"
                 >
                   <option value="light">Claro</option>
                   <option value="dark">Escuro</option>
@@ -524,12 +524,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Privacy Toggle */}
               <div className="pt-2">
-                <label className="flex items-center justify-between p-3.5 bg-amber-50/70 border border-amber-200/70 rounded-2xl cursor-pointer">
+                <label className="flex items-center justify-between p-3.5 bg-[var(--surface-amber-soft)] border border-[var(--amber-900)] rounded-2xl cursor-pointer">
                   <div className="pr-3">
-                    <span className="text-xs font-bold text-slate-900 block">
+                    <span className="text-xs font-bold text-[var(--text-title)] block">
                       Exibir caixas de comissão privada nos cards
                     </span>
-                    <span className="text-[11px] text-slate-500 block mt-0.5">
+                    <span className="text-[11px] text-[var(--text-muted)] block mt-0.5">
                       Mostra a % de comissão e o ganho estimado em R$ no painel do afiliado.
                     </span>
                   </div>
@@ -537,23 +537,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="checkbox"
                     checked={form.showPrivateCommission}
                     onChange={(e) => setForm({ ...form, showPrivateCommission: e.target.checked })}
-                    className="w-4 h-4 text-[var(--primary)] rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
+                    className="w-4 h-4 text-[var(--primary)] rounded border-[var(--border-input)] focus:ring-[var(--brand-500)] cursor-pointer"
                   />
                 </label>
               </div>
 
               {/* Footer */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div className="pt-4 border-t border-[var(--border-subtle)] flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-[var(--border-input)] text-[var(--text-body)] font-semibold text-xs hover:bg-[var(--surface-hover)] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--brand-600)] text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-orange-500/20 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--brand-600)] text-[var(--text-on-brand)] font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[var(--brand-500)]/20 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>Salvar preferências</span>
@@ -565,8 +565,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'marketplaces' && (
             <div className="space-y-4">
               <div className="space-y-1">
-                <h3 className="font-extrabold text-sm text-slate-900">Marketplaces Conectados</h3>
-                <p className="text-xs text-slate-500">
+                <h3 className="font-extrabold text-sm text-[var(--text-title)]">Marketplaces Conectados</h3>
+                <p className="text-xs text-[var(--text-muted)]">
                   Conecte suas contas para buscar produtos e gerar links de afiliado automaticamente.
                 </p>
               </div>
@@ -579,17 +579,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Future marketplaces placeholder */}
               <div className="grid gap-4 sm:grid-cols-2">
                 {['amazon', 'tiktok_shop', 'shein', 'aliexpress'].map((mp) => (
-                  <div key={mp} className="border-2 border-dashed border-slate-200 rounded-2xl p-4 bg-slate-50/50">
+                  <div key={mp} className="border-2 border-dashed border-[var(--border-default)] rounded-2xl p-4 bg-[var(--surface-input)]">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-slate-100 text-slate-400">
+                      <div className="p-2 rounded-xl bg-[var(--surface-card-raised)] text-[var(--text-muted)]">
                         <ShoppingBag className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-slate-900">{mp.replace('_', ' ').toUpperCase()}</h3>
-                        <p className="text-xs text-slate-500">Em desenvolvimento</p>
+                        <h3 className="font-extrabold text-[var(--text-title)]">{mp.replace('_', ' ').toUpperCase()}</h3>
+                        <p className="text-xs text-[var(--text-muted)]">Em desenvolvimento</p>
                       </div>
                     </div>
-                    <p className="mt-3 text-[11px] text-slate-400 text-center">
+                    <p className="mt-3 text-[11px] text-[var(--text-muted)] text-center">
                       Arquitetura pronta para novos providers
                     </p>
                   </div>

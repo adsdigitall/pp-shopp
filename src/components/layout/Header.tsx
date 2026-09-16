@@ -8,13 +8,15 @@ import { Input } from "@/components/ui/Input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/DropdownMenu";
 import { Badge } from "@/components/ui/Badge";
-import { Search, Bell, Settings, User, LogOut, ChevronDown, Moon, Sun, Monitor, ChevronDown as ChevronDownIcon } from "lucide-react";
+import { Search, Bell, Settings, User, LogOut, ChevronDown, Moon, Sun, Monitor, Menu, ChevronDown as ChevronDownIcon } from "lucide-react";
 
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (val: string) => void;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
+  /** Abre o menu lateral no celular/tablet. */
+  onOpenMenu?: () => void;
   /** Há aviso de venda que a pessoa ainda não viu. */
   hasUnreadNotifications?: boolean;
   whatsappConnected?: boolean;
@@ -34,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchChange,
   onOpenSettings,
   onOpenNotifications,
+  onOpenMenu,
   hasUnreadNotifications = false,
   whatsappConnected = false,
   onOpenWhatsApp,
@@ -44,13 +47,19 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className={cn("sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--surface-app)]/90 backdrop-blur-xl", className)}>
-      <div className="mx-auto max-w-7xl px-3 sm:px-4 lg:px-6">
-        <div className="flex min-h-[56px] items-center justify-between gap-2 sm:min-h-[64px] sm:gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+    <>
+    <header className={cn("sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--surface-app)]/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-xl", className)}>
+      <div className="mx-auto max-w-7xl px-4 lg:px-6">
+        <div className="flex min-h-[60px] items-center justify-between gap-2 sm:min-h-[64px] sm:gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {onOpenMenu && (
+              <button type="button" onClick={onOpenMenu} aria-label="Abrir menu" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-title)] transition-colors hover:border-[var(--border-brand)] lg:hidden">
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
             <img src="/brand/logo-mark-alpha.png" alt="" className="h-9 w-9 shrink-0 object-contain lg:hidden" />
             <div className="min-w-0 lg:hidden">
-              <h1 className="truncate text-lg font-extrabold leading-tight text-[var(--text-title)]">
+              <h1 className="truncate text-base font-extrabold leading-tight text-[var(--text-title)] min-[375px]:text-lg">
                 <span className="text-[var(--brand-500)]">Radar</span> de Oferta
               </h1>
               <p className="truncate text-[11px] text-[var(--text-muted)]">
@@ -107,17 +116,18 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
         </div>
+      </div>
+    </header>
 
-        <div className={`${variant === 'garimpar' ? 'hidden' : 'pb-2 md:hidden'}`}>
+        <div className={cn(variant === 'garimpar' ? 'hidden' : 'px-4 pt-3 md:hidden', className)}>
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar produtos em alta..." className="w-full pl-9 pr-10 py-2.5 text-sm bg-muted text-foreground placeholder:text-muted-foreground rounded-xl border border-border focus:border-primary outline-none" />
+            <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar produtos em alta..." className="h-11 w-full rounded-xl border border-[var(--border-input)] bg-[var(--surface-input)] pl-9 pr-10 text-sm text-[var(--text-title)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-brand)]" />
             {searchQuery && <button onClick={() => onSearchChange('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>}
             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center border-l border-border pl-3 text-muted-foreground"><svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg></span>
           </div>
         </div>
-      </div>
-    </header>
+    </>
   );
 };
 

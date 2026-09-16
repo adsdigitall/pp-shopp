@@ -82,16 +82,16 @@ export const ExtensaoPage: React.FC<ExtensaoPageProps> = ({
           {steps.map((step, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-[var(--primary)]/10 font-black text-sm text-[var(--primary)]">{step.number}</div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--surface-elevated)] text-[var(--text-secondary)]">{step.icon}</span>
-                  <span className="font-bold text-[var(--foreground)]">{step.title}</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--surface-elevated)] text-[var(--text-secondary)]">{step.icon}</span>
+                  <span className="min-w-0 font-bold text-[var(--foreground)]">{step.title}</span>
                 </div>
-                <p className="ml-10 mt-1 text-xs text-[var(--text-secondary)]">{step.description}</p>
+                <p className="mt-1 sm:ml-10 text-xs text-[var(--text-secondary)]">{step.description}</p>
                 {step.code && (
-                  <div className="ml-10 mt-2 flex items-center gap-2">
-                    <code className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1 font-mono text-[11px] text-[var(--foreground)]">{step.code}</code>
-                    <Button onClick={() => copyToClipboard(step.code!, step.copyLabel || 'Código')} className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1.5 text-[11px] font-bold text-[var(--foreground)] hover:bg-[var(--surface-hover)]">{step.copyLabel}</Button>
+                  <div className="mt-2 flex min-w-0 sm:ml-10 items-center gap-2">
+                    <code className="min-w-0 flex-1 truncate rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1 font-mono text-[11px] text-[var(--foreground)]">{step.code}</code>
+                    <Button onClick={() => copyToClipboard(step.code!, step.copyLabel || 'Código')} className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1.5 text-[11px] font-bold text-[var(--foreground)] hover:bg-[var(--surface-hover)]">{step.copyLabel}</Button>
                   </div>
                 )}
               </div>
