@@ -223,6 +223,9 @@ html { scroll-behavior: smooth; }
    clip (e não hidden) para não quebrar o header sticky. */
 html, body { max-width: 100%; overflow-x: clip; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 @supports not (overflow: clip) { html, body { overflow-x: hidden; } }
+/* Campo nunca define a largura do container: input[type=time]/date tem largura
+   mínima grande no Chrome e empurrava o painel de automação para fora da tela. */
+input, select, textarea { min-width: 0; max-width: 100%; }
 *:focus-visible { outline: none; ring: 2px; ring-color: var(--ring); ring-offset: 2px; ring-offset-color: var(--background); }
 ::selection { background-color: var(--brand-500); color: #fff; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }

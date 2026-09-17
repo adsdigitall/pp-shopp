@@ -18,23 +18,10 @@ import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Separator } from '@/components/ui/Separator';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Icon3D } from '@/components/ui/Icon3D';
+import { AUTOMATION_CATEGORY_CATALOG, PRIORITIZED_AUTOMATION_CATEGORIES, categoryLabel, suggestCategoriesForSlot } from '@/services/automationCategories';
 
-// Ids = slugs do plano de descoberta do backend (AUTOMATION_CATEGORY_PLAN);
-// os rótulos exibidos continuam humanos. Não mudar os ids sem alinhar com
-// canonicalAutomationCategoryId no backend, senão o salvo não dá match.
-const PRIORITIZED_AUTOMATION_CATEGORIES = [
-  { id: 'essenciais-dia-a-dia', label: 'Essenciais do dia a dia (casa, limpeza, higiene, café)' },
-  { id: 'casa-cozinha', label: 'Casa e cozinha (50%)' },
-  { id: 'beleza-autocuidado', label: 'Beleza e autocuidado (20%)' },
-  { id: 'organizacao', label: 'Organização (15%)' },
-  { id: 'moda-feminina', label: 'Moda feminina barata (10%)' },
-  { id: 'utilidades', label: 'Utilidades do dia a dia (5%)' },
-  { id: 'maternidade-infantil', label: 'Maternidade e infantil' },
-  { id: 'cama-mesa-banho', label: 'Cama, mesa e banho' },
-  { id: 'banheiro', label: 'Banheiro' },
-  { id: 'acessorios-femininos', label: 'Acessórios femininos' },
-  { id: 'eletronicos-baratos', label: 'Eletrônicos baratos' },
-];
+// Catálogo e sugestões vivem em src/services/automationCategories.ts; os ids
+// são os slugs do plano de descoberta do backend (AUTOMATION_CATEGORY_PLAN).
 
 const DEFAULT_SLOT_CATEGORIES = [
   ['casa-cozinha'], ['organizacao'], ['utilidades', 'casa-cozinha'],
@@ -177,8 +164,17 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   const automationCapacity = getAutomationCapacity();
 
   const scheduleSlots = Array.isArray(automation.scheduleSlots) ? automation.scheduleSlots : [];
+  // Qual faixa está com a lista de categorias aberta (uma por vez, para caber no celular).
+  const [expandedSlotId, setExpandedSlotId] = useState<string | null>(null);
   const updateScheduleSlot = (index: number, patch: any) => setAutomation((prev: any) => ({ ...prev, scheduleSlots: (Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []).map((slot: any, i: number) => i === index ? { ...slot, ...patch } : slot) }));
-  const addScheduleSlot = () => setAutomation((prev: any) => ({ ...prev, scheduleSlots: [...(Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []), { id: `slot-${Date.now()}`, enabled: true, from: '08:00', until: '09:00', categories: ['casa-cozinha'] }] }));
+  // Faixa nova começa onde a última terminou e já vem com a sugestão do horário.
+  const addScheduleSlot = () => setAutomation((prev: any) => {
+    const current = Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : [];
+    const last = current[current.length - 1];
+    const from = /^([01]\d|2[0-3]):[0-5]\d$/.test(last?.until || '') ? last.until : '08:00';
+    const until = `${String((Number(from.slice(0, 2)) + 2) % 24).padStart(2, '0')}:${from.slice(3, 5)}`;
+    return { ...prev, scheduleSlots: [...current, { id: `slot-${Date.now()}`, enabled: true, from, until, categories: suggestCategoriesForSlot(from, until).categories }] };
+  });
   const removeScheduleSlot = (index: number) => setAutomation((prev: any) => ({ ...prev, scheduleSlots: (Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : []).filter((_: any, i: number) => i !== index) }));
   const moveScheduleSlot = (index: number, direction: -1 | 1) => setAutomation((prev: any) => { const next = [...(Array.isArray(prev.scheduleSlots) ? prev.scheduleSlots : [])]; const target = index + direction; if (target < 0 || target >= next.length) return prev; [next[index], next[target]] = [next[target], next[index]]; return { ...prev, scheduleSlots: next }; });
 
@@ -651,15 +647,72 @@ export const FilaPage: React.FC<FilaPageProps> = ({
 
                     <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3 sm:col-span-2">
                       <div className="flex items-center justify-between"><p className="text-xs font-semibold text-[var(--foreground)]">Faixas de horário e categorias</p><Button type="button" variant="outline" size="sm" onClick={addScheduleSlot}>Adicionar faixa</Button></div>
-                      {scheduleSlots.map((slot: any, index: number) => (
-                        <div key={slot.id || index} className="grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto] sm:items-center">
-                          <Switch checked={slot.enabled !== false} onCheckedChange={checked => updateScheduleSlot(index, { enabled: checked })} aria-label="Ativar faixa" />
-                          <Input type="time" value={slot.from || ''} onChange={e => updateScheduleSlot(index, { from: e.target.value })} className="h-8" />
-                          <Input type="time" value={slot.until || ''} onChange={e => updateScheduleSlot(index, { until: e.target.value })} className="h-8" />
-                          <Input value={Array.isArray(slot.categories) ? slot.categories.join(', ') : ''} onChange={e => updateScheduleSlot(index, { categories: e.target.value.split(',').map((item: string) => item.trim()).filter(Boolean) })} placeholder="categorias separadas por vírgula" className="h-8" />
-                          <div className="flex gap-1"><Button type="button" variant="ghost" size="icon-sm" onClick={() => moveScheduleSlot(index, -1)} aria-label="Mover faixa para cima">↑</Button><Button type="button" variant="ghost" size="icon-sm" onClick={() => moveScheduleSlot(index, 1)} aria-label="Mover faixa para baixo">↓</Button><Button type="button" variant="ghost" size="icon-sm" onClick={() => removeScheduleSlot(index)} aria-label="Excluir faixa"><X className="h-3.5 w-3.5" /></Button></div>
+                      {scheduleSlots.map((slot: any, index: number) => {
+                        const slotCategories: string[] = Array.isArray(slot.categories) ? slot.categories : [];
+                        const suggestion = suggestCategoriesForSlot(slot.from || '', slot.until || '');
+                        const suggestionApplied = suggestion.categories.length === slotCategories.length
+                          && suggestion.categories.every(id => slotCategories.includes(id));
+                        const expanded = expandedSlotId === (slot.id || String(index));
+                        return (
+                        <div key={slot.id || index} className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Switch checked={slot.enabled !== false} onCheckedChange={checked => updateScheduleSlot(index, { enabled: checked })} aria-label="Ativar faixa" />
+                            <Input type="time" value={slot.from || ''} onChange={e => updateScheduleSlot(index, { from: e.target.value })} className="h-9 w-[104px]" aria-label="Início da faixa" />
+                            <span className="text-xs text-[var(--text-secondary)]">até</span>
+                            <Input type="time" value={slot.until || ''} onChange={e => updateScheduleSlot(index, { until: e.target.value })} className="h-9 w-[104px]" aria-label="Fim da faixa" />
+                            <div className="ml-auto flex gap-1">
+                              <Button type="button" variant="ghost" size="icon-sm" onClick={() => moveScheduleSlot(index, -1)} aria-label="Mover faixa para cima">↑</Button>
+                              <Button type="button" variant="ghost" size="icon-sm" onClick={() => moveScheduleSlot(index, 1)} aria-label="Mover faixa para baixo">↓</Button>
+                              <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeScheduleSlot(index)} aria-label="Excluir faixa"><X className="h-3.5 w-3.5" /></Button>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {slotCategories.length
+                              ? slotCategories.map((id: string) => (
+                                  <span key={id} className="inline-flex items-center gap-1 rounded-lg bg-[var(--primary)]/12 px-2 py-1 text-[10px] font-bold text-[var(--foreground)]">
+                                    {categoryLabel(id)}
+                                    <button type="button" onClick={() => updateScheduleSlot(index, { categories: slotCategories.filter((item: string) => item !== id) })} aria-label={`Tirar ${categoryLabel(id)} desta faixa`} className="text-[var(--text-secondary)] hover:text-[var(--foreground)]">×</button>
+                                  </span>
+                                ))
+                              : <span className="text-[10px] text-[var(--text-secondary)]">Sem categoria: nesta faixa busca as categorias gerais marcadas acima.</span>}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button type="button" variant={suggestionApplied ? 'outline' : 'default'} size="sm" className="h-8 shrink-0 text-[10px] font-bold" onClick={() => updateScheduleSlot(index, { categories: suggestion.categories })} disabled={suggestionApplied}>
+                              {suggestionApplied ? '✓ Usando a sugestão' : 'Usar sugestão'}
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-[10px]" onClick={() => setExpandedSlotId(expanded ? null : (slot.id || String(index)))} aria-expanded={expanded}>
+                              {expanded ? 'Fechar categorias' : 'Escolher categorias'}
+                            </Button>
+                          </div>
+                          <p className="text-[9px] leading-3 text-[var(--text-secondary)]">
+                            <span className="font-bold text-[var(--foreground)]">Sugestão: {suggestion.categories.map(categoryLabel).join(' + ')}.</span> {suggestion.reason}
+                          </p>
+
+                          {expanded && (
+                            <div className="flex flex-wrap gap-1.5 border-t border-[var(--border)] pt-2">
+                              {AUTOMATION_CATEGORY_CATALOG.map(category => {
+                                const checked = slotCategories.includes(category.id);
+                                return (
+                                  <Button
+                                    key={category.id}
+                                    type="button"
+                                    variant={checked ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="h-auto whitespace-normal py-1.5 text-left text-[10px] font-bold leading-tight"
+                                    aria-pressed={checked}
+                                    onClick={() => updateScheduleSlot(index, { categories: checked ? slotCategories.filter((item: string) => item !== category.id) : [...slotCategories, category.id] })}
+                                  >
+                                    {checked && '✓ '}{category.label}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                       {!scheduleSlots.length && <p className="text-[10px] text-[var(--text-secondary)]">Nenhuma faixa personalizada. O sistema usará as faixas padrão.</p>}
                     </div>
                     

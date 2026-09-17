@@ -143,6 +143,8 @@ export const DEFAULT_AUTOMATION_SCHEDULE = [
   { from: '18:00', until: '20:00', categories: ['casa-cozinha', 'utilidades'] },
   { from: '20:00', until: '22:00', categories: ['melhores-ofertas'] },
   { from: '22:00', until: '23:00', categories: ['ofertas-fortes'] },
+  // Madrugada: quem está acordado só para em desconto forte.
+  { from: '23:00', until: '02:00', categories: ['ofertas-fortes', 'compra-por-impulso'] },
 ];
 
 export function normalizeAutomationSchedule(value) {
@@ -153,8 +155,10 @@ export function normalizeAutomationSchedule(value) {
     order: Number.isFinite(Number(slot?.order)) ? Number(slot.order) : index,
     from: isValidAutomationTime(slot?.from) ? String(slot.from) : '08:00',
     until: isValidAutomationTime(slot?.until) ? String(slot.until) : '23:00',
+    // Mesma canonicalização das categorias gerais: id antigo salvo na faixa
+    // (ou rótulo colado à mão) vira slug do plano, senão vira keyword solta.
     categories: Array.isArray(slot?.categories)
-      ? [...new Set(slot.categories.map(item => String(item).trim()).filter(Boolean))].slice(0, 8)
+      ? [...new Set(slot.categories.map(item => canonicalAutomationCategoryId(item)).filter(Boolean))].slice(0, 8)
       : [],
   }));
 }
