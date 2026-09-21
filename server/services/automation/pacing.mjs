@@ -40,11 +40,32 @@ export function lastAutomationSentAt(jobs = []) {
   return last;
 }
 
+// Envio no mesmo segundo exato, hora após hora, é assinatura de robô. Variação
+// de ±25% em torno do intervalo escolhido: a média continua sendo a do usuário
+// (5 min = 5 min), mas o relógio deixa de ser perfeito.
+export const PACE_JITTER_RATIO = 0.25;
+
+/**
+ * Intervalo efetivo deste envio, em ms. Derivado do horário do último envio —
+ * não é random por chamada: o ciclo roda de 15 em 15 s e o tempo de espera
+ * precisa ser o mesmo em todas as checagens, senão a oferta sairia no tick
+ * em que o sorteio desse um número baixo.
+ */
+export function pacedIntervalMs(interval, lastSentAt) {
+  const base = intervalToMs(interval);
+  if (!base || !lastSentAt) return base;
+  // Hash do segundo do último envio: usar só os milissegundos daria sempre o
+  // mesmo resultado para horário redondo (…:00.000), e o ritmo voltaria a ser fixo.
+  const seconds = Math.abs(Math.trunc(lastSentAt / 1000));
+  const fraction = ((seconds * 2654435761) % 4294967296) / 4294967296;
+  return Math.round(base * (1 + (fraction - 0.5) * 2 * PACE_JITTER_RATIO));
+}
+
 /** Quanto falta (ms) para a próxima oferta automática poder sair. */
 export function automationPaceWaitMs(jobs, interval, now = Date.now()) {
   const last = lastAutomationSentAt(jobs);
   if (!last) return 0;
-  return Math.max(0, last + intervalToMs(interval) - now);
+  return Math.max(0, last + pacedIntervalMs(interval, last) - now);
 }
 
 export function pendingAutomationJobs(jobs = []) {
