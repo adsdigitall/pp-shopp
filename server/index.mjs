@@ -3603,9 +3603,12 @@ async function resumeDispatchQueue() {
       }
       return;
     }
-    // Oferta automática só sai depois do delay da tela de Automação desde o último envio.
+    // Oferta automática só sai depois do delay da tela de Automação desde o
+    // último envio. O campo da tela ("Nova oferta a cada") é o offerInterval —
+    // usar interval primeiro fazia o grupo receber no ritmo antigo, ignorando
+    // o que o usuário escolheu. É a mesma cadência usada na descoberta.
     if (nextJob.source === 'queue_automation' && nextJob.status !== 'running'
-      && automationPaceWaitMs(jobs, automation?.interval || nextJob.destinations?.interval) > 0) return;
+      && automationPaceWaitMs(jobs, automation?.offerInterval || automation?.interval || nextJob.destinations?.interval) > 0) return;
     dispatchJobs.set(nextJob.id, nextJob);
     await processDispatchJob(nextJob.id);
   } catch (error) {

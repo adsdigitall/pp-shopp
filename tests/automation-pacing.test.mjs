@@ -55,7 +55,9 @@ test('fila e descoberta usam o ritmo da automação', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../server/index.mjs', import.meta.url), 'utf8');
   const resume = source.slice(source.indexOf('async function resumeDispatchQueue'), source.indexOf('\nfunction renderMessage'));
-  assert.match(resume, /nextJob\.source === 'queue_automation' && nextJob\.status !== 'running'\s*&& automationPaceWaitMs\(jobs, automation\?\.interval \|\| nextJob\.destinations\?\.interval\) > 0\) return;/);
+  // O grupo recebe no ritmo do campo "Nova oferta a cada" (offerInterval).
+  // Usar interval primeiro fazia 5 min na tela sair de 7 em 7 minutos.
+  assert.match(resume, /automationPaceWaitMs\(jobs, automation\?\.offerInterval \|\| automation\?\.interval \|\| nextJob\.destinations\?\.interval\) > 0\) return;/);
   const discovery = source.slice(source.indexOf('async function runAutomaticOfferDiscovery'), source.indexOf('\nlet dailyRhythmRunning'));
   assert.match(discovery, /const queueRoom = AUTOMATION_QUEUE_TARGET - pendingAutomationJobs\(/);
   assert.match(discovery, /if \(queueRoom <= 0\) continue;/);
