@@ -42,8 +42,8 @@ import { redactSensitive } from './lib/redactSensitive.mjs';
 import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
 import { authMode, isPublicApiRoute, sessionFromRequest, allowLoginAttempt, verifyPasswordLogin, createSessionToken, sessionCookieHeader, clearSessionCookieHeader } from './lib/auth.mjs';
 import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from './services/shopee/effectiveConfig.mjs';
-import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from './services/automation/scoring.mjs';
-import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, automationSlotAt, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
+import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch, DEFAULT_AUTOMATION_FILTERS } from './services/automation/scoring.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, normalizeMinCommissionRate, automationSlotAt, automationIsWithinSchedule, dispatchJobAllowedNow, isValidAutomationTime, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
 import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
@@ -2606,6 +2606,7 @@ async function handleClearQueue(req, res) {
 
 const dispatchJobs = new Map();
 let dispatchQueueRunning = false;
+let outsideWindowLoggedAt = 0;
 
 const DEFAULT_AUTOMATION_MESSAGE = "💛 OLHA ESSE ACHADINHO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\n👉 *APROVEITE A OFERTA:*\n{LINK}";
 const SAFE_HUMAN_MESSAGES = [
@@ -2707,9 +2708,16 @@ async function handleGetDispatchAutomation(req, res) {
     ? { ...config, categories: normalizeAutomationCategoryIds(config.categories) }
     : config;
   const withRhythm = out
-    ? { ...out, dailyRhythm: normalizeDailyRhythm(out.dailyRhythm), rhythmEnabled: out.rhythmEnabled !== false }
+    ? {
+      ...out,
+      dailyRhythm: normalizeDailyRhythm(out.dailyRhythm),
+      rhythmEnabled: out.rhythmEnabled !== false,
+      // Config salva antes do corte de comissão: a tela mostra o padrão que o
+      // gate já está aplicando, em vez de um campo vazio.
+      minCommissionRate: normalizeMinCommissionRate(out.minCommissionRate),
+    }
     : null;
-  sendJson(res, 200, { config: withRhythm || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, rhythmEnabled: true, dailyRhythm: normalizeDailyRhythm(undefined), scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE } });
+  sendJson(res, 200, { config: withRhythm || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, rhythmEnabled: true, dailyRhythm: normalizeDailyRhythm(undefined), scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE, minCommissionRate: DEFAULT_AUTOMATION_FILTERS.minCommissionRate } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -2761,6 +2769,7 @@ async function handleSaveDispatchAutomation(req, res) {
       rhythmEnabled: body.rhythmEnabled !== false,
       dailyRhythm: normalizeDailyRhythm(body.dailyRhythm),
       scheduleSlots: normalizeAutomationSchedule(body.scheduleSlots),
+      minCommissionRate: normalizeMinCommissionRate(body.minCommissionRate),
     });
     sendJson(res, 200, { config });
   } catch (err) {
@@ -2944,7 +2953,7 @@ async function runAutomaticOfferDiscovery() {
                 blocked.gate['Fora do tema da busca'] = (blocked.gate['Fora do tema da busca'] || 0) + 1;
                 return false;
               }
-              const evaluation = evaluateAutomationOffer(item, categoryRules.gate);
+              const evaluation = evaluateAutomationOffer(item, { ...categoryRules.gate, minCommissionRate: config.minCommissionRate });
               if (!evaluation.approved) {
                 const reason = evaluation.reasons[0] || 'rejeitada';
                 blocked.gate[reason] = (blocked.gate[reason] || 0) + 1;
@@ -2984,7 +2993,7 @@ async function runAutomaticOfferDiscovery() {
         }
         const queuedItems = [];
         for (const offer of offers) {
-          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer, { gate: categoryRules.gate });
+          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer, { gate: { ...categoryRules.gate, minCommissionRate: config.minCommissionRate } });
           if (queuedItem) queuedItems.push(queuedItem);
         }
         await DispatchAutomationStore.save(config.userId, {
@@ -3068,22 +3077,6 @@ async function runDailyRhythm(now = new Date()) {
   }
 }
 
-function automationIsWithinSchedule(config, now = new Date()) {
-  const days = normalizeActiveDays(config?.activeDays);
-  if (!days.includes(dispatchTimeParts(now).day)) return false;
-  const from = isValidAutomationTime(config?.activeFrom) ? String(config.activeFrom) : '08:00';
-  const until = isValidAutomationTime(config?.activeUntil) ? String(config.activeUntil) : '23:00';
-  if (from === until) return true;
-  const current = dispatchMinutesOfDay(now);
-  const parse = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  const start = parse(from);
-  const end = parse(until);
-  return start < end ? current >= start && current < end : current >= start || current < end;
-}
-
-function isValidAutomationTime(value) {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
-}
 
 async function evaluateOfferForAutomation(offer) {
   const apiKey = (process.env.OPENAI_API_KEY || '').trim();
@@ -3558,14 +3551,28 @@ async function resumeDispatchQueue() {
       .filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection' || item.status === 'paused')
       .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
     const automation = await DispatchAutomationStore.get('default_user').catch(() => null);
-    const nextJob = queued.find(item => item.status === 'running')
-      || queued.find(item => item.status === 'waiting_connection')
-      || (automation?.enabled ? queued.find(item => item.status === 'paused' && item.source === 'queue_automation') : null)
+    // "Parar de enviar" vale também para o que JÁ está na fila: sem isso, a
+    // descoberta parava no horário mas os disparos enfileirados continuavam
+    // saindo madrugada adentro. Disparo manual/agendado pelo usuário não entra
+    // nessa regra — ele mandou enviar.
+    const automationWindowOpen = automationIsWithinSchedule(automation);
+    const dispatchAllowed = item => dispatchJobAllowedNow(item, automation);
+    const nextJob = queued.find(item => item.status === 'running' && dispatchAllowed(item))
+      || queued.find(item => item.status === 'waiting_connection' && dispatchAllowed(item))
+      || (automation?.enabled && automationWindowOpen ? queued.find(item => item.status === 'paused' && item.source === 'queue_automation') : null)
       || queued.find(item => {
         const scheduledAt = item.destinations?.scheduledAt ? new Date(item.destinations.scheduledAt).getTime() : 0;
-        return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now());
+        return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now()) && dispatchAllowed(item);
       });
-    if (!nextJob) return;
+    if (!nextJob) {
+      // Log a cada 10 min no máximo: o ciclo roda de 15 em 15 segundos.
+      if (!automationWindowOpen && queued.some(item => item.source === 'queue_automation')
+        && Date.now() - outsideWindowLoggedAt > 600_000) {
+        outsideWindowLoggedAt = Date.now();
+        logLine(`[DISPATCH QUEUE] Fora do horário (${automation?.activeFrom || '08:00'}–${automation?.activeUntil || '23:00'}); ${queued.filter(item => item.source === 'queue_automation').length} disparo(s) automático(s) aguardando a próxima janela.`);
+      }
+      return;
+    }
     // Oferta automática só sai depois do delay da tela de Automação desde o último envio.
     if (nextJob.source === 'queue_automation' && nextJob.status !== 'running'
       && automationPaceWaitMs(jobs, automation?.interval || nextJob.destinations?.interval) > 0) return;

@@ -4,7 +4,7 @@
  * e devolve score/motivos para o orquestrador decidir o que enfileirar.
  */
 
-const DEFAULT_AUTOMATION_FILTERS = Object.freeze({
+export const DEFAULT_AUTOMATION_FILTERS = Object.freeze({
   minSales: 10,
   minRating: 4.5,
   minReviews: 0,
@@ -12,7 +12,12 @@ const DEFAULT_AUTOMATION_FILTERS = Object.freeze({
   preferredMaxPrice: 120,
   preferredMinDiscount: 20,
   minScore: 70,
+  // Comissão em % (commissionRate do normalizer: 15 = 15%). Produto que paga
+  // pouco não compensa o disparo; 0 desliga o corte.
+  minCommissionRate: 15,
 });
+
+
 
 function finiteNumber(value, fallback = 0) {
   const parsed = Number(value);
@@ -53,7 +58,10 @@ export function classifyAutomationScore(score) {
 }
 
 export function evaluateAutomationOffer(offer, overrides = {}) {
-  const filters = { ...DEFAULT_AUTOMATION_FILTERS, ...overrides };
+  // undefined na configuração salva não pode apagar o padrão (config antiga
+  // não tem minCommissionRate e voltaria a aceitar comissão baixa).
+  const defined = Object.fromEntries(Object.entries(overrides || {}).filter(([, value]) => value !== undefined && value !== null));
+  const filters = { ...DEFAULT_AUTOMATION_FILTERS, ...defined };
   const sales = Math.max(0, finiteNumber(offer?.salesCount ?? offer?.soldCount));
   const rating = finiteNumber(offer?.rating ?? offer?.ratingStar, 0);
   const reviews = Math.max(0, finiteNumber(offer?.reviewsCount ?? offer?.reviewCount));
@@ -63,6 +71,14 @@ export function evaluateAutomationOffer(offer, overrides = {}) {
   const score = scoreAutomationOffer(offer);
   const reasons = [];
 
+  const commissionRate = finiteNumber(offer?.commissionRate ?? offer?.commissionPercentage, NaN);
+  const minCommission = Math.max(0, finiteNumber(filters.minCommissionRate));
+
+  if (minCommission > 0) {
+    // Sem comissão informada não dá para saber se compensa: fica de fora.
+    if (!Number.isFinite(commissionRate)) reasons.push('Comissão desconhecida');
+    else if (commissionRate < minCommission) reasons.push(`Comissão baixa (abaixo de ${minCommission}%)`);
+  }
   if (sales <= 0) reasons.push('0 vendas');
   else if (sales < filters.minSales) reasons.push('Poucas vendas');
   if (rating > 0 && rating < filters.minRating) reasons.push('Avaliação baixa');
@@ -95,4 +111,4 @@ export function validateAutomationOfferForDispatch(offer) {
   return { valid: errors.length === 0, errors };
 }
 
-export { DEFAULT_AUTOMATION_FILTERS };
+

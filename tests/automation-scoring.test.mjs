@@ -2,12 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch } from '../server/services/automation/scoring.mjs';
 
+// Desde 21/09/2026 o gate exige comissão mínima (padrão 15%): produto ótimo
+// que paga pouco não compensa o disparo. Ver automation-commission-window.test.mjs.
 test('scores strong offers and classifies them as approved', () => {
-  const offer = { salesCount: 5000, rating: 4.8, reviewsCount: 1200, discountPercentage: 35, currentPrice: 39.9, commissionRate: 12, stock: 100 };
+  const offer = { salesCount: 5000, rating: 4.8, reviewsCount: 1200, discountPercentage: 35, currentPrice: 39.9, commissionRate: 20, stock: 100 };
   const result = evaluateAutomationOffer(offer);
   assert.equal(result.approved, true);
   assert.ok(result.score >= 70);
   assert.ok(scoreAutomationOffer(offer) <= 100);
+
+  const mesmoProdutoComissaoBaixa = evaluateAutomationOffer({ ...offer, commissionRate: 12 });
+  assert.equal(mesmoProdutoComissaoBaixa.approved, false, '12% está abaixo do corte de 15%');
 });
 
 test('rejects automatic offers with zero or few sales', () => {

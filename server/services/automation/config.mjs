@@ -7,7 +7,7 @@
  * "sumir" ao voltar para a tela — bug já ocorrido com `groups: []` fixo.
  */
 
-import { dispatchMinutesOfDay } from '../../lib/timezone.mjs';
+import { dispatchMinutesOfDay, dispatchTimeParts } from '../../lib/timezone.mjs';
 
 /** Dias ativos da automação (0 = domingo ... 6 = sábado). Ausente = todos. */
 export function normalizeActiveDays(value) {
@@ -180,4 +180,45 @@ export function automationSlotAt(config, now = new Date()) {
 export function activeAutomationSchedule(config, now = new Date()) {
   const slot = automationSlotAt(config, now);
   return slot && slot.enabled !== false ? slot : null;
+}
+
+/**
+ * Comissão mínima aceita no garimpo, em % (15 = 15%).
+ * Fora da faixa 0–50 volta para o padrão; 0 desliga o corte.
+ */
+export function normalizeMinCommissionRate(value, fallback = 15) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 50) return fallback;
+  return Math.round(parsed * 10) / 10;
+}
+
+/**
+ * A automação pode enviar agora?
+ *
+ * Vale para a descoberta E para a fila já montada: "Parar de enviar às 01:00"
+ * precisa parar o disparo do que já está enfileirado, senão a automação
+ * continuava mandando madrugada adentro. Janela que vira o dia
+ * (23:00 → 02:00) é suportada. Dia é o dia da data atual em Brasília —
+ * depois da meia-noite já conta como o dia seguinte.
+ */
+export function automationIsWithinSchedule(config, now = new Date()) {
+  const days = normalizeActiveDays(config?.activeDays);
+  if (!days.includes(dispatchTimeParts(now).day)) return false;
+  const from = isValidAutomationTime(config?.activeFrom) ? String(config.activeFrom) : '08:00';
+  const until = isValidAutomationTime(config?.activeUntil) ? String(config.activeUntil) : '23:00';
+  if (from === until) return true;
+  const current = dispatchMinutesOfDay(now);
+  const parse = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  const start = parse(from);
+  const end = parse(until);
+  return start < end ? current >= start && current < end : current >= start || current < end;
+}
+
+/**
+ * Disparo da fila permitido agora. Só a automação respeita a janela: o que o
+ * usuário mandou enviar (ou agendou na mão) sai na hora marcada.
+ */
+export function dispatchJobAllowedNow(job, config, now = new Date()) {
+  if (job?.source !== 'queue_automation') return true;
+  return automationIsWithinSchedule(config, now);
 }
