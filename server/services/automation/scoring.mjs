@@ -12,9 +12,9 @@ export const DEFAULT_AUTOMATION_FILTERS = Object.freeze({
   preferredMaxPrice: 120,
   preferredMinDiscount: 20,
   minScore: 70,
-  // Comissão em % (commissionRate do normalizer: 15 = 15%). Produto que paga
+  // Comissão em % (commissionRate do normalizer: 10 = 10%). Produto que paga
   // pouco não compensa o disparo; 0 desliga o corte.
-  minCommissionRate: 15,
+  minCommissionRate: 10,
 });
 
 

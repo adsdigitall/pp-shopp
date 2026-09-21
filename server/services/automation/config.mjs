@@ -183,10 +183,10 @@ export function activeAutomationSchedule(config, now = new Date()) {
 }
 
 /**
- * Comissão mínima aceita no garimpo, em % (15 = 15%).
+ * Comissão mínima aceita no garimpo, em % (10 = 10%).
  * Fora da faixa 0–50 volta para o padrão; 0 desliga o corte.
  */
-export function normalizeMinCommissionRate(value, fallback = 15) {
+export function normalizeMinCommissionRate(value, fallback = 10) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 50) return fallback;
   return Math.round(parsed * 10) / 10;

@@ -3332,6 +3332,29 @@ async function processDispatchJob(jobId) {
   const scheduledAt = job.destinations?.scheduledAt ? new Date(job.destinations.scheduledAt).getTime() : 0;
   if (scheduledAt && scheduledAt > Date.now()) return;
 
+  // Comissão conferida de novo na hora de enviar: a oferta pode ter entrado na
+  // fila antes do corte atual (ou com o corte mais frouxo). Sem isso, baixar o
+  // corte hoje só valeria para o que fosse garimpado depois.
+  if (job.source === 'queue_automation') {
+    const automationConfig = await DispatchAutomationStore.get(job.userId).catch(() => null);
+    const minCommission = normalizeMinCommissionRate(automationConfig?.minCommissionRate);
+    const reprovada = (job.offers || []).find(offer => {
+      if (minCommission <= 0) return false;
+      const rate = Number(offer?.commissionRate);
+      return !Number.isFinite(rate) || rate < minCommission;
+    });
+    if (reprovada) {
+      job.status = 'cancelled';
+      job.completedAt = new Date().toISOString();
+      job.stats.cancelled = (job.stats.cancelled || 0) + 1;
+      job.stats.pending = 0;
+      dispatchJobs.set(jobId, job);
+      await DispatchStore.save(job);
+      logLine(`[AUTOMATION] ${reprovada.id} descartada da fila: comissão ${reprovada?.commissionRate ?? 'desconhecida'}% abaixo do corte de ${minCommission}%.`);
+      return;
+    }
+  }
+
   job.status = 'running';
   job.startedAt = new Date().toISOString();
   dispatchJobs.set(jobId, job);

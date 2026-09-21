@@ -35,7 +35,7 @@ test('sem comissão informada não entra (não dá para saber se compensa)', () 
   assert.ok(decisao.reasons.includes('Comissão desconhecida'));
 });
 
-test('config antiga sem o campo continua usando o corte padrão de 15%', () => {
+test('config antiga sem o campo continua usando o corte padrão de 10%', () => {
   const decisao = evaluateAutomationOffer({ ...ofertaBase, commissionRate: 8 }, { minCommissionRate: undefined });
   assert.equal(decisao.approved, false, 'undefined não pode apagar o padrão e liberar comissão baixa');
   assert.equal(decisao.filters.minCommissionRate, DEFAULT_AUTOMATION_FILTERS.minCommissionRate);
@@ -49,10 +49,10 @@ test('corte configurável: 0 desliga, 25 aperta', () => {
 test('comissão mínima salva: valor inválido ou absurdo volta para o padrão', () => {
   assert.equal(normalizeMinCommissionRate(20), 20);
   assert.equal(normalizeMinCommissionRate(0), 0);
-  assert.equal(normalizeMinCommissionRate('abc'), 15);
-  assert.equal(normalizeMinCommissionRate(-5), 15);
-  assert.equal(normalizeMinCommissionRate(90), 15);
-  assert.equal(normalizeMinCommissionRate(undefined), 15);
+  assert.equal(normalizeMinCommissionRate('abc'), 10);
+  assert.equal(normalizeMinCommissionRate(-5), 10);
+  assert.equal(normalizeMinCommissionRate(90), 10);
+  assert.equal(normalizeMinCommissionRate(undefined), 10);
 });
 
 // ---- "Parar de enviar" também para a fila já montada ----
@@ -85,4 +85,22 @@ test('dia desligado não envia nem o que já está na fila', () => {
   const soDiaDeSemana = { ...config, activeDays: [1, 2, 3, 4, 5] };
   const domingo = brt('2026-09-20T15:00:00Z'); // domingo 12:00 BRT
   assert.equal(dispatchJobAllowedNow(jobAutomatico, soDiaDeSemana, domingo), false);
+});
+
+// ---- O corte vale também para o que JÁ está na fila ----
+// Regra aplicada em processDispatchJob (server/index.mjs): a oferta pode ter
+// entrado na fila antes do corte atual. Aqui travamos a decisão em si.
+const jobDaFila = (commissionRate) => ({ source: 'queue_automation', offers: [{ id: 'x1', commissionRate }] });
+const reprovaNaHoraDoEnvio = (job, minCommission) => (job.offers || []).some((offer) => {
+  if (minCommission <= 0) return false;
+  const rate = Number(offer?.commissionRate);
+  return !Number.isFinite(rate) || rate < minCommission;
+});
+
+test('oferta de comissão baixa que já estava na fila é descartada no envio', () => {
+  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(4), 10), true, 'comissão de 4% não pode sair com corte de 10%');
+  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(null), 10), true, 'sem comissão informada também não sai');
+  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(10), 10), false, 'no corte, sai');
+  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(27), 10), false, 'acima do corte, sai');
+  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(2), 0), false, 'corte 0 desligado: não descarta nada');
 });
