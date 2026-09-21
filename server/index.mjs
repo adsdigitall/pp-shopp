@@ -3338,10 +3338,17 @@ async function processDispatchJob(jobId) {
   if (job.source === 'queue_automation') {
     const automationConfig = await DispatchAutomationStore.get(job.userId).catch(() => null);
     const minCommission = normalizeMinCommissionRate(automationConfig?.minCommissionRate);
+    // Só descarta quando a comissão é conhecida e está abaixo do corte.
+    // Comissão ausente aqui não é sinal de oferta ruim: a oferta pode ter sido
+    // salva antes de o campo existir, e descartar por isso esvaziaria a fila
+    // inteira — o grupo ficaria sem receber nada.
     const reprovada = (job.offers || []).find(offer => {
       if (minCommission <= 0) return false;
-      const rate = Number(offer?.commissionRate);
-      return !Number.isFinite(rate) || rate < minCommission;
+      const raw = offer?.commissionRate;
+      // null/undefined/'' = desconhecida. Number(null) é 0 e reprovaria tudo.
+      if (raw === null || raw === undefined || raw === '') return false;
+      const rate = Number(raw);
+      return Number.isFinite(rate) && rate < minCommission;
     });
     if (reprovada) {
       job.status = 'cancelled';

@@ -93,14 +93,17 @@ test('dia desligado não envia nem o que já está na fila', () => {
 const jobDaFila = (commissionRate) => ({ source: 'queue_automation', offers: [{ id: 'x1', commissionRate }] });
 const reprovaNaHoraDoEnvio = (job, minCommission) => (job.offers || []).some((offer) => {
   if (minCommission <= 0) return false;
-  const rate = Number(offer?.commissionRate);
-  return !Number.isFinite(rate) || rate < minCommission;
+  const raw = offer?.commissionRate;
+  if (raw === null || raw === undefined || raw === '') return false;
+  const rate = Number(raw);
+  return Number.isFinite(rate) && rate < minCommission;
 });
 
 test('oferta de comissão baixa que já estava na fila é descartada no envio', () => {
   assert.equal(reprovaNaHoraDoEnvio(jobDaFila(4), 10), true, 'comissão de 4% não pode sair com corte de 10%');
-  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(null), 10), true, 'sem comissão informada também não sai');
+  assert.equal(reprovaNaHoraDoEnvio(jobDaFila(null), 10), false, 'sem comissão informada NÃO descarta: esvaziaria a fila inteira por falta de dado');
   assert.equal(reprovaNaHoraDoEnvio(jobDaFila(10), 10), false, 'no corte, sai');
   assert.equal(reprovaNaHoraDoEnvio(jobDaFila(27), 10), false, 'acima do corte, sai');
+  assert.equal(reprovaNaHoraDoEnvio({ source: 'queue_automation', offers: [{ id: 'x2' }] }, 10), false, 'campo ausente também não descarta');
   assert.equal(reprovaNaHoraDoEnvio(jobDaFila(2), 0), false, 'corte 0 desligado: não descarta nada');
 });
