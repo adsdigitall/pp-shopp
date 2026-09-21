@@ -377,7 +377,11 @@ function isAuthorized(req) {
   return authorization === `Bearer ${RADAR_API_TOKEN}` || req.headers['x-radar-token'] === RADAR_API_TOKEN;
 }
 
-function rateLimit(req, limit = 120) {
+// 120/min era pouco para o próprio app: abrir a tela dispara dezenas de
+// chamadas (status, fila, dashboard, grupos) e, com o celular e o navegador
+// abertos juntos, o usuário se bloqueava sozinho — a lista de grupos vinha
+// vazia e parecia que os grupos tinham sumido.
+function rateLimit(req, limit = 600) {
   const key = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0];
   const now = Date.now();
   const bucket = apiRateBuckets.get(key) || { start: now, count: 0 };
@@ -3738,9 +3742,16 @@ async function handleSyncGroups(req, res) {
     if (fresh.length) await WhatsAppGroupsStore.save(userId, fresh);
     const stored = await WhatsAppGroupsStore.get(userId).catch(() => []);
     const merged = mergeGroupLists(stored, fresh);
+    // Selo honesto: `live` diz se o grupo veio do WhatsApp AGORA. Antes a tela
+    // recebia salvos e ao vivo misturados e mostrava todos como conectados —
+    // com a sessão caída, grupo que já saiu continuava aparecendo como ativo.
+    const liveIds = new Set(fresh.map((group) => String(group?.id ?? '')).filter(Boolean));
+    const withLiveFlag = merged.map((group) => ({ ...group, live: liveIds.has(String(group?.id ?? '')) }));
     sendJson(res, 200, {
-      groups: onlySession ? merged.filter((group) => group.sessionId === onlySession) : merged,
-      synced: true,
+      groups: onlySession ? withLiveFlag.filter((group) => group.sessionId === onlySession) : withLiveFlag,
+      // synced só é verdade quando o WhatsApp respondeu com grupos.
+      synced: fresh.length > 0,
+      liveCount: liveIds.size,
       sessions: sessionNames,
     });
   } catch (err) {

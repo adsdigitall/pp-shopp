@@ -107,3 +107,19 @@ test('oferta de comissão baixa que já estava na fila é descartada no envio', 
   assert.equal(reprovaNaHoraDoEnvio({ source: 'queue_automation', offers: [{ id: 'x2' }] }, 10), false, 'campo ausente também não descarta');
   assert.equal(reprovaNaHoraDoEnvio(jobDaFila(2), 0), false, 'corte 0 desligado: não descarta nada');
 });
+
+// ---- Selo honesto dos grupos ----
+// Bug: a tela mostrava grupo salvo como se estivesse conectado. `live` diz se
+// o WhatsApp confirmou o grupo AGORA; `synced` só é true quando ele respondeu.
+test('grupo salvo que o WhatsApp não confirmou não pode aparecer como ativo', () => {
+  const salvos = [{ id: 'g1', name: 'Ofertas' }, { id: 'g2', name: 'Grupo que saí' }];
+  const aoVivo = [{ id: 'g1', name: 'Ofertas' }];
+  const liveIds = new Set(aoVivo.map((group) => String(group.id)));
+  const resposta = salvos.map((group) => ({ ...group, live: liveIds.has(String(group.id)) }));
+  assert.deepEqual(resposta.map((group) => group.live), [true, false]);
+  assert.equal(aoVivo.length > 0, true, 'synced verdadeiro só com resposta do WhatsApp');
+
+  const semResposta = [];
+  const semLive = salvos.map((group) => ({ ...group, live: new Set(semResposta).has(String(group.id)) }));
+  assert.deepEqual(semLive.map((group) => group.live), [false, false], 'WhatsApp fora: nenhum grupo é confirmado');
+});

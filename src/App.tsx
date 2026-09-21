@@ -228,6 +228,8 @@ export function App() {
   // Lista real vem de GET /api/whatsapp/groups (efeito abaixo).
   // Estado inicial neutro [] usa o empty-state já aprovado ("Nenhum grupo conectado").
   const [groups, setGroups] = useState<Group[]>([]);
+  // O WhatsApp respondeu com a lista de grupos na última checagem?
+  const [groupsLiveSync, setGroupsLiveSync] = useState(true);
   const [mirroringConfigs, setMirroringConfigs] = useState<any[]>([
     { id: 'mirror-demo', name: 'Ofertas TOP Brasil', sourceGroupId: '1', destinationGroupIds: ['2', '3'], type: 'instant', status: 'active', onlyOffers: true, templateIds: [], mirroredMessages: 128, failedMessages: 2, createdAt: '2026-09-04' },
   ]);
@@ -342,8 +344,14 @@ export function App() {
   // Recarrega a lista completa de grupos do WhatsApp (todas as sessões).
   // Extraído como callback para as telas oferecerem "Atualizar".
   const groupsRefreshingRef = useRef(false);
-  const refreshGroups = useCallback(async () => {
+  const lastGroupsRefreshRef = useRef(0);
+  // Cada chamada varre todas as sessões no WAHA. Telas diferentes pediam a
+  // lista ao abrir e o app batia no próprio limite de requisições (429) —
+  // aí a lista vinha vazia e "sumiam" os grupos. Só repete depois de 20s,
+  // ou na hora quando a pessoa toca em "Atualizar lista" (force).
+  const refreshGroups = useCallback(async (force = false) => {
     if (groupsRefreshingRef.current) return;
+    if (!force && Date.now() - lastGroupsRefreshRef.current < 20_000) return;
     groupsRefreshingRef.current = true;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 15000);
@@ -352,11 +360,27 @@ export function App() {
       const liveBody = await liveResponse?.json().catch(() => null);
       const savedResponse = await fetch('/api/groups', { cache: 'no-store' }).catch(() => null);
       const savedBody = await savedResponse?.json().catch(() => null);
+      lastGroupsRefreshRef.current = Date.now();
       const liveGroups = liveResponse?.ok && Array.isArray(liveBody?.groups) ? liveBody.groups : [];
       const savedGroups = savedResponse?.ok && Array.isArray(savedBody?.groups) ? savedBody.groups : [];
       const mergedGroups = Array.from(new Map([...savedGroups, ...liveGroups].filter((group: any) => group?.id).map((group: any) => [String(group.id), group])).values());
-      if (!mergedGroups.length) throw new Error('sync failed');
-      setGroups(mergedGroups.map((group: any) => ({ ...group, status: group.status || 'active', isAdmin: Boolean(group.isAdmin) })));
+      // Resposta vazia (queda do WAHA, 429) não pode apagar a lista da tela:
+      // mantém o que já estava e avisa que não deu para confirmar agora.
+      if (!mergedGroups.length) {
+        setGroupsLiveSync(false);
+        return;
+      }
+      // Selo honesto: só é "ativo" o grupo que o WhatsApp confirmou agora.
+      // Grupo que ficou só na lista salva (sessão caída, ou saímos do grupo)
+      // aparece como pendente, em vez de fingir que está conectado.
+      setGroups(mergedGroups.map((group: any) => ({
+        ...group,
+        live: group.live === true,
+        status: group.live === true ? 'active' : 'stale',
+        isAdmin: Boolean(group.isAdmin),
+      })));
+      // A lista ao vivo falhou por completo? A tela precisa dizer isso.
+      setGroupsLiveSync(Boolean(liveResponse?.ok && liveBody?.synced));
     } finally {
       window.clearTimeout(timeout);
       groupsRefreshingRef.current = false;
@@ -848,6 +872,7 @@ export function App() {
           onOpenGroups={() => setActiveSection('grupos')}
           showToast={showToast}
           onRefreshGroups={refreshGroups}
+          groupsLiveSync={groupsLiveSync}
         /></div>
 
         <div className={activeSection === 'paginas' || activeSection === 'templates' ? '' : 'hidden'}><PaginasPage

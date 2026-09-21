@@ -49,7 +49,9 @@ interface FilaPageProps {
   onOpenGroups: () => void;
   showToast: (title: string, description?: string, type?: 'success' | 'info' | 'error') => void;
   /** Puxa a lista completa de grupos em silêncio ao abrir a Automação. */
-  onRefreshGroups?: () => Promise<void> | void;
+  onRefreshGroups?: (force?: boolean) => Promise<void> | void;
+  /** O WhatsApp respondeu com a lista de grupos na última checagem. */
+  groupsLiveSync?: boolean;
   /** Remove várias ofertas com um único aviso. */
   onRemoveManyFromQueue: (queueIds: string[]) => void;
   /** Tela visível: só então consulta os disparos. */
@@ -101,6 +103,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   onOpenGroups,
   showToast,
   onRefreshGroups,
+  groupsLiveSync = true,
   onRemoveManyFromQueue,
   isActive,
 }) => {
@@ -148,6 +151,10 @@ export const FilaPage: React.FC<FilaPageProps> = ({
   }, []);
 
   const selectedAutomationIds = Array.isArray(automation.groups) ? automation.groups.map((group: any) => String(group.id)) : [];
+  // Selo honesto: separa o que o WhatsApp confirmou na última checagem do que
+  // está só na lista salva (sessão caída, ou grupo do qual já saímos).
+  const gruposNoWhatsApp = groups.filter((group: any) => group?.live === true);
+  const gruposForaDoWhatsApp = groups.filter((group: any) => group?.live !== true);
   const selectedAutomationCategoryIds = Array.isArray(automation.categories) ? automation.categories.map(String) : [];
 
   const getAutomationCapacity = () => {
@@ -728,12 +735,24 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                   
                   <div className="space-y-3">
                     <div className="flex justify-end"><Button type="button" variant="outline" size="sm" onClick={() => setAutomation((prev: any) => ({ ...prev, groups: groups.map(group => ({ id: group.id, name: group.name, sessionId: (group as any).sessionId })) }))}>Selecionar todos os grupos</Button></div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-[var(--text-secondary)]">Grupos que receberão as próximas ofertas ({groups.length})</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                        Grupos que receberão as próximas ofertas
+                        {' '}({gruposNoWhatsApp.length} no WhatsApp{gruposForaDoWhatsApp.length ? ` · ${gruposForaDoWhatsApp.length} sem confirmação` : ''})
+                      </p>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => { void onRefreshGroups?.(true); }}>
+                        <RotateCw className="mr-1 h-3 w-3" /> Atualizar lista
+                      </Button>
                     </div>
+                    {!groupsLiveSync && (
+                      <p className="rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-2 text-[10px] font-semibold leading-3 text-[var(--foreground)]">
+                        Não consegui falar com o WhatsApp agora, então esta é a última lista salva. Reconecte o WhatsApp para ver os grupos de verdade.
+                      </p>
+                    )}
                     <ScrollArea className="grid h-64 max-h-[45vh] gap-1.5 pr-1 sm:grid-cols-2">
-                      {groups.map(group => { 
-                        const checked = selectedAutomationIds.includes(String(group.id)); 
+                      {groups.map(group => {
+                        const checked = selectedAutomationIds.includes(String(group.id));
+                        const confirmadoNoWhatsApp = (group as any).live === true;
                         return (
                           <Button key={group.id} type="button" variant={checked ? 'default' : 'outline'} className="flex items-center justify-start gap-2 text-left" onClick={() => setAutomation((prev: any) => {
                             const current = Array.isArray(prev.groups) ? prev.groups : [];
@@ -743,6 +762,13 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                               {checked && <Check className="h-3 w-3" />}
                             </span>
                             <span className="truncate">{group.name}</span>
+                            {/* Selo honesto: bolinha só fica verde para grupo que o WhatsApp confirmou agora. */}
+                            <span
+                              aria-hidden="true"
+                              title={confirmadoNoWhatsApp ? 'Confirmado no WhatsApp agora' : 'Não confirmado na última checagem'}
+                              className={`ml-auto h-2 w-2 shrink-0 rounded-full ${confirmadoNoWhatsApp ? 'bg-[var(--success)]' : 'bg-[var(--text-disabled)]'}`}
+                            />
+                            <span className="sr-only">{confirmadoNoWhatsApp ? 'confirmado no WhatsApp' : 'não confirmado na última checagem'}</span>
                           </Button>
                         );
                       })}

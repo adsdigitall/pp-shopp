@@ -169,7 +169,9 @@ export interface Group {
   name: string;
   memberCount: number;
   isAdmin: boolean;
-  status: 'active' | 'healthy' | 'warning';
+  status: 'active' | 'healthy' | 'warning' | 'stale';
+  /** Grupo confirmado pelo WhatsApp na última checagem (selo honesto). */
+  live?: boolean;
   messagesSent30d: number;
   messagesReceived30d: number;
   lastActivity: string;
