@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/Separator';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Icon3D } from '@/components/ui/Icon3D';
 import { AUTOMATION_CATEGORY_CATALOG, PRIORITIZED_AUTOMATION_CATEGORIES, categoryLabel, suggestCategoriesForSlot } from '@/services/automationCategories';
+import { fetchAutomationStatus, statusPrecisaDeAcao, desde, type AutomationStatus } from '@/services/automationStatus';
 
 // Catálogo e sugestões vivem em src/services/automationCategories.ts; os ids
 // são os slugs do plano de descoberta do backend (AUTOMATION_CATEGORY_PLAN).
@@ -138,6 +139,17 @@ export const FilaPage: React.FC<FilaPageProps> = ({
     if (view !== 'automacao' || !onRefreshGroups) return;
     Promise.resolve(onRefreshGroups()).catch(() => undefined);
   }, [view, onRefreshGroups]);
+
+  // Estado da automação enquanto a tela estiver aberta (30s, como a fila).
+  const [automationStatus, setAutomationStatus] = useState<AutomationStatus | null>(null);
+  useEffect(() => {
+    if (view !== 'automacao' || !isActive) return;
+    let cancelado = false;
+    const ler = () => { fetchAutomationStatus().then(estado => { if (!cancelado) setAutomationStatus(estado); }).catch(() => undefined); };
+    ler();
+    const id = window.setInterval(ler, 30_000);
+    return () => { cancelado = true; window.clearInterval(id); };
+  }, [view, isActive]);
 
   useEffect(() => {
     fetch('/api/dispatch/automation', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(body => {
@@ -530,6 +542,32 @@ export const FilaPage: React.FC<FilaPageProps> = ({
             
             {automation.enabled && (
               <CardContent className="space-y-4 pt-0">
+                {/* Por que está (ou não está) enviando agora: o grupo parar de
+                    receber sem explicação já custou horas de adivinhação. */}
+                {automationStatus && (
+                  <div className={`rounded-xl border p-3 ${statusPrecisaDeAcao(automationStatus.status) ? 'border-[var(--danger)]/40 bg-[var(--danger)]/10' : 'border-[var(--border)] bg-[var(--surface-elevated)]'}`}>
+                    <div className="flex items-start gap-2">
+                      <span aria-hidden="true" className={`mt-1 h-2 w-2 shrink-0 rounded-full ${statusPrecisaDeAcao(automationStatus.status) ? 'bg-[var(--danger)]' : automationStatus.status === 'enviando' ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-xs font-bold text-[var(--foreground)]">{automationStatus.mensagem}</p>
+                        <p className="text-[10px] leading-3 text-[var(--text-secondary)]">
+                          Último envio: {desde(automationStatus.ultimoEnvio)}
+                          {' · '}{automationStatus.ofertasNaFila} na fila automática
+                          {automationStatus.proximaEmMinutos > 0 ? ` · próxima em ~${automationStatus.proximaEmMinutos} min` : ''}
+                          {' · '}horário {automationStatus.janela.de}–{automationStatus.janela.ate}
+                        </p>
+                        {automationStatus.ultimoGarimpo && (
+                          <p className="text-[10px] leading-3 text-[var(--text-secondary)]">
+                            Último garimpo ({automationStatus.ultimoGarimpo.categoria || 'sem categoria'}): {automationStatus.ultimoGarimpo.vistas} produtos vistos, {automationStatus.ultimoGarimpo.aprovadas} aprovados
+                            {automationStatus.ultimoGarimpo.motivos.length
+                              ? `. Barrados por: ${automationStatus.ultimoGarimpo.motivos.map(item => `${item.motivo} (${item.quantas})`).join(', ')}`
+                              : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-3">
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
                     <div className="flex items-center justify-between">

@@ -48,6 +48,7 @@ import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } 
 import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
+import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
 import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
 import { summarizeDispatchJob } from './services/analytics/dispatchSummary.mjs';
@@ -1381,6 +1382,12 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
       }
 
       // ========== DISPATCH (DISPAROS) ENDPOINTS ==========
+      // Precisa vir antes da rota sem sufixo (comparação exata, mas mantém a
+      // leitura óbvia de que /status é uma rota própria).
+      if (req.method === 'GET' && pathOnly === '/api/dispatch/automation/status') {
+        await handleAutomationStatus(req, res);
+        return;
+      }
       if (req.method === 'GET' && pathOnly === '/api/dispatch/automation') {
         await handleGetDispatchAutomation(req, res);
         return;
@@ -2702,6 +2709,31 @@ async function handleSendQueueItemNow(req, res, pathOnly) {
     if (PROCESS_DISPATCH_INLINE) void resumeDispatchQueue();
     sendJson(res, 202, { jobId, status: job.status });
   } catch { sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Erro ao enviar oferta agora.' } }); }
+}
+
+/**
+ * Diagnóstico da automação: por que está (ou não está) enviando agora.
+ * A tela mostra isso em vez de ficar muda quando o grupo para de receber.
+ */
+async function handleAutomationStatus(req, res) {
+  try {
+    const userId = requestUserId(req);
+    const config = await DispatchAutomationStore.get(userId).catch(() => null);
+    const jobs = await DispatchStore.list(userId, 200).catch(() => []);
+    const sessionName = config?.sessionId
+      || (Array.isArray(config?.groups) ? config.groups.find((group) => group?.sessionId)?.sessionId : null)
+      || WAHA_SESSION;
+    const session = await wahaGetSession(sessionName).catch(() => null);
+    const diagnostico = diagnoseAutomation({
+      config,
+      jobs,
+      whatsappConectado: session?.status === 'WORKING',
+      agora: new Date(),
+    });
+    sendJson(res, 200, { ...diagnostico, sessao: sessionName });
+  } catch (err) {
+    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível ler o estado da automação.' } });
+  }
 }
 
 async function handleGetDispatchAutomation(req, res) {
