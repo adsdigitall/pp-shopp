@@ -32,6 +32,7 @@ const STORAGE_FILES = {
   pushSubscriptions: 'push_subscriptions.json',
   appSecrets: 'app_secrets.json',
   saleAlertState: 'sale_alert_state.json',
+  automationHealthState: 'automation_health_state.json',
   saleAlertHistory: 'sale_alert_history.json',
 };
 

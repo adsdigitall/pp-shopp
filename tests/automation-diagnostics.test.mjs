@@ -7,6 +7,7 @@ const DENTRO_DO_HORARIO = new Date('2026-09-22T13:00:00Z');
 const MADRUGADA = new Date('2026-09-22T06:00:00Z'); // 03:00 BRT
 
 const configBase = {
+  mode: 'auto',
   enabled: true,
   groups: [{ id: '120363001@g.us' }],
   activeFrom: '08:00',
@@ -98,4 +99,21 @@ test('sem configuração nenhuma não quebra e diz que está desligada', () => {
   assert.equal(resultado.status, AUTOMATION_STATUS.DESLIGADA);
   assert.equal(resultado.ofertasNaFila, 0);
   assert.equal(resultado.ultimoGarimpo, null);
+});
+
+// "Mandou 1 oferta e parou": modo manual não envia sozinho — a oferta fica
+// esperando aprovação na fila e a tela precisa dizer isso.
+test('modo manual aparece como motivo, antes de qualquer outro', () => {
+  const resultado = diagnostico({ config: { mode: 'manual' } });
+  assert.equal(resultado.status, AUTOMATION_STATUS.MODO_MANUAL);
+  assert.match(resultado.mensagem, /não são enviadas sozinhas/i);
+  assert.equal(resultado.modo, 'manual');
+});
+
+test('oferta travada esperando conexão explica o garimpo parado', () => {
+  const resultado = diagnostico({
+    jobs: [{ source: 'queue_automation', status: 'waiting_connection', attempts: [] }],
+  });
+  assert.equal(resultado.status, AUTOMATION_STATUS.AGUARDANDO_CONEXAO);
+  assert.equal(resultado.aguardandoConexao, 1);
 });

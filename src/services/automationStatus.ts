@@ -1,7 +1,7 @@
 /** Estado da automação: por que está (ou não está) enviando agora. */
 
 export interface AutomationStatus {
-  status: 'desligada' | 'sem-grupo' | 'fora-do-horario' | 'whatsapp-fora' | 'sem-oferta-aprovada' | 'aguardando-intervalo' | 'enviando';
+  status: 'desligada' | 'modo-manual' | 'sem-grupo' | 'aguardando-conexao' | 'fora-do-horario' | 'whatsapp-fora' | 'sem-oferta-aprovada' | 'aguardando-intervalo' | 'enviando';
   mensagem: string;
   ligada: boolean;
   dentroDoHorario: boolean;
@@ -24,7 +24,7 @@ export interface AutomationStatus {
 
 /** Vermelho = parado por algo que precisa de ação; verde = trabalhando. */
 export const statusPrecisaDeAcao = (status: AutomationStatus['status']) =>
-  status === 'desligada' || status === 'sem-grupo' || status === 'whatsapp-fora';
+  status === 'desligada' || status === 'sem-grupo' || status === 'whatsapp-fora' || status === 'modo-manual' || status === 'aguardando-conexao';
 
 export async function fetchAutomationStatus(): Promise<AutomationStatus> {
   const response = await fetch('/api/dispatch/automation/status', { cache: 'no-store' });

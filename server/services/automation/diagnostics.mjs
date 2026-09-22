@@ -12,7 +12,9 @@ import { automationPaceWaitMs, pendingAutomationJobs, lastAutomationSentAt } fro
 /** Motivos em ordem de prioridade: o primeiro que bate é o que a tela mostra. */
 export const AUTOMATION_STATUS = {
   DESLIGADA: 'desligada',
+  MODO_MANUAL: 'modo-manual',
   SEM_GRUPO: 'sem-grupo',
+  AGUARDANDO_CONEXAO: 'aguardando-conexao',
   FORA_DO_HORARIO: 'fora-do-horario',
   WHATSAPP_FORA: 'whatsapp-fora',
   SEM_OFERTA_APROVADA: 'sem-oferta-aprovada',
@@ -22,7 +24,9 @@ export const AUTOMATION_STATUS = {
 
 const MENSAGENS = {
   [AUTOMATION_STATUS.DESLIGADA]: 'A automação está desligada. Ligue a chave acima para o Radar voltar a enviar.',
+  [AUTOMATION_STATUS.MODO_MANUAL]: 'Modo Manual: as ofertas entram na fila para você aprovar e NÃO são enviadas sozinhas. Troque para "Automático" se quiser envio sem aprovação.',
   [AUTOMATION_STATUS.SEM_GRUPO]: 'Nenhum grupo selecionado: escolha pelo menos um grupo para receber as ofertas.',
+  [AUTOMATION_STATUS.AGUARDANDO_CONEXAO]: 'Tem oferta esperando conexão com o WhatsApp. Enquanto isso, o garimpo fica parado.',
   [AUTOMATION_STATUS.FORA_DO_HORARIO]: 'Fora do horário de envio. Volta a enviar no próximo horário configurado.',
   [AUTOMATION_STATUS.WHATSAPP_FORA]: 'O WhatsApp está desconectado. Reconecte para os envios voltarem.',
   [AUTOMATION_STATUS.SEM_OFERTA_APROVADA]: 'Nenhuma oferta passou nos filtros no último garimpo. Nada foi enviado para não mandar produto ruim.',
@@ -53,8 +57,12 @@ export function diagnoseAutomation({ config, jobs = [], whatsappConectado, agora
     ? Object.entries(ultimoGarimpo.blocked.gate).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([motivo, quantas]) => ({ motivo, quantas }))
     : [];
 
+  const aguardandoConexao = jobs.filter((job) => job?.source === 'queue_automation' && job?.status === 'waiting_connection').length;
+
   const base = {
     ligada: config?.enabled === true,
+    modo: config?.mode === 'auto' ? 'auto' : 'manual',
+    aguardandoConexao,
     dentroDoHorario: automationIsWithinSchedule(config, agora),
     whatsappConectado: whatsappConectado === true,
     grupos: grupos.length,
@@ -77,9 +85,14 @@ export function diagnoseAutomation({ config, jobs = [], whatsappConectado, agora
 
   const status = (() => {
     if (!base.ligada) return AUTOMATION_STATUS.DESLIGADA;
+    // Modo manual não dispara nada sozinho: a oferta fica esperando aprovação.
+    // Sem dizer isso, parece que a automação quebrou.
+    if (config?.mode !== 'auto') return AUTOMATION_STATUS.MODO_MANUAL;
     if (!grupos.length) return AUTOMATION_STATUS.SEM_GRUPO;
     if (!base.dentroDoHorario) return AUTOMATION_STATUS.FORA_DO_HORARIO;
     if (!base.whatsappConectado) return AUTOMATION_STATUS.WHATSAPP_FORA;
+    // Job travado esperando o WhatsApp ocupa a fila e trava o garimpo.
+    if (base.aguardandoConexao > 0) return AUTOMATION_STATUS.AGUARDANDO_CONEXAO;
     // Fila vazia + último garimpo sem nada aprovado = filtro segurando tudo.
     if (!naFila && ultimoGarimpo && Number(ultimoGarimpo.kept) === 0) return AUTOMATION_STATUS.SEM_OFERTA_APROVADA;
     if (esperaMs > 0) return AUTOMATION_STATUS.AGUARDANDO_INTERVALO;

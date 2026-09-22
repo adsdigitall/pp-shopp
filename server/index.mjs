@@ -49,6 +49,7 @@ import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchT
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
+import { planHealthAlerts } from './services/notifications/healthAlerts.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
 import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
 import { summarizeDispatchJob } from './services/analytics/dispatchSummary.mjs';
@@ -533,6 +534,46 @@ async function runSaleAlerts({ force = false } = {}) {
     return { error: error?.message || 'erro' };
   } finally {
     saleAlertRunning = false;
+  }
+}
+
+let healthAlertRunning = false;
+let lastHealthAlertRun = 0;
+
+/**
+ * Avisa no celular quando a automação para por um problema (WhatsApp caído,
+ * sem grupo, parada longa dentro do horário) e quando volta ao normal.
+ * Roda junto do loop de 15s; quem decide avisar é planHealthAlerts.
+ */
+async function runAutomationHealthAlerts(agora = new Date()) {
+  if (healthAlertRunning) return;
+  // O loop roda de 15 em 15s; checar a saúde uma vez por minuto basta.
+  if (agora.getTime() - lastHealthAlertRun < 60_000) return;
+  lastHealthAlertRun = agora.getTime();
+  healthAlertRunning = true;
+  try {
+    const userId = 'default_user';
+    const config = await DispatchAutomationStore.get(userId).catch(() => null);
+    if (!config?.enabled) return;
+    const jobs = await DispatchStore.list(userId, 200).catch(() => []);
+    const sessionName = config.sessionId
+      || (Array.isArray(config.groups) ? config.groups.find((group) => group?.sessionId)?.sessionId : null)
+      || WAHA_SESSION;
+    const session = await wahaGetSession(sessionName).catch(() => null);
+    const diagnostico = diagnoseAutomation({ config, jobs, whatsappConectado: session?.status === 'WORKING', agora });
+    const anterior = await dataStore.findById('automationHealthState', userId).catch(() => null);
+    const { alerts, state } = planHealthAlerts({ diagnostico, previous: anterior, agora });
+    for (const alerta of alerts) {
+      const entregue = await notifySubscribers({ title: alerta.title, body: alerta.body, url: '/#fila', tag: alerta.id });
+      logLine(`[SAUDE] ${alerta.title} — ${entregue.sent} aparelho(s).`);
+    }
+    const proximo = { id: userId, userId, ...state };
+    if (anterior) await dataStore.update('automationHealthState', userId, proximo);
+    else await dataStore.add('automationHealthState', proximo);
+  } catch (error) {
+    logLine(`[SAUDE] falhou: ${error?.message || error}`);
+  } finally {
+    healthAlertRunning = false;
   }
 }
 
@@ -4685,7 +4726,7 @@ if (isDirectRun) {
         void resumeDispatchQueue();
         void runAutomaticOfferDiscovery();
         void runDailyRhythm();
-        setInterval(() => { void resumeDispatchQueue(); void runAutomaticOfferDiscovery(); void runDailyRhythm(); }, 15_000);
+        setInterval(() => { void resumeDispatchQueue(); void runAutomaticOfferDiscovery(); void runDailyRhythm(); void runAutomationHealthAlerts(); }, 15_000);
       }
   }).catch(err => {
     logLine(`AVISO: Erro ao inicializar data store: ${err.message}`);
@@ -4709,4 +4750,4 @@ if (isDirectRun) {
   });
 }
 
-export { resumeDispatchQueue, runAutomaticOfferDiscovery, runDailyRhythm, runSaleAlerts };
+export { resumeDispatchQueue, runAutomaticOfferDiscovery, runDailyRhythm, runSaleAlerts, runAutomationHealthAlerts };
