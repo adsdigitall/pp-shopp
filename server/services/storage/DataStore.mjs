@@ -11,6 +11,9 @@ const DATA_DIR = join(process.cwd(), 'data');
 const IS_SERVERLESS = Boolean(process.env.VERCEL);
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
+// Sem timeout, uma chamada pendurada no banco trava o ciclo de disparo para
+// sempre (aconteceu em 22/09/2026: fila parada ate reiniciar o processo).
+const SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.SUPABASE_TIMEOUT_MS || 15000) || 15000);
 const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const STORAGE_FILES = {
   credentials: 'marketplace_credentials.json',
@@ -249,8 +252,12 @@ class DataStore {
   }
 
   async supabaseRequest(path, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SUPABASE_TIMEOUT_MS);
+    try {
     const response = await fetch(`${SUPABASE_URL}${path}`, {
       ...options,
+      signal: controller.signal,
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
@@ -262,6 +269,9 @@ class DataStore {
     if (response.status === 204) return [];
     const text = await response.text();
     return text ? JSON.parse(text) : [];
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

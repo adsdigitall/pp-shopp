@@ -50,6 +50,7 @@ import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } 
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
 import { planHealthAlerts } from './services/notifications/healthAlerts.mjs';
+import { planQueueMaintenance } from './services/automation/queueHealth.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
 import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
 import { summarizeDispatchJob } from './services/analytics/dispatchSummary.mjs';
@@ -2659,6 +2660,9 @@ async function handleClearQueue(req, res) {
 const dispatchJobs = new Map();
 let dispatchQueueRunning = false;
 let outsideWindowLoggedAt = 0;
+let dispatchQueueStartedAt = 0;
+// Ciclo de disparo que passa disso esta preso em alguma chamada externa.
+const DISPATCH_QUEUE_MAX_MS = 10 * 60_000;
 
 const DEFAULT_AUTOMATION_MESSAGE = "💛 OLHA ESSE ACHADINHO!\n\n📦 *{TITULO}*\n\n{PRECO_ANTIGO}\n✅ *Por apenas {PRECO}*\n{DESCONTO}\n\n{BENEFICIOS}\n{VENDAS}\n{AVALIACAO}\n\n⚠️ Aproveite enquanto ainda está disponível.\n\n👉 *APROVEITE A OFERTA:*\n{LINK}";
 const SAFE_HUMAN_MESSAGES = [
@@ -3650,10 +3654,41 @@ function sleep(ms) {
 }
 
 async function resumeDispatchQueue() {
-  if (dispatchQueueRunning) return;
+  // Antes era só um booleano: uma chamada externa pendurada deixava a trava
+  // ligada para sempre e o grupo parava de receber até reiniciar o processo.
+  if (dispatchQueueRunning) {
+    if (Date.now() - dispatchQueueStartedAt < DISPATCH_QUEUE_MAX_MS) return;
+    logLine(`[DISPATCH QUEUE] Ciclo preso há ${Math.round((Date.now() - dispatchQueueStartedAt) / 60_000)} min; liberando a fila.`);
+  }
   dispatchQueueRunning = true;
+  dispatchQueueStartedAt = Date.now();
   try {
     const jobs = await DispatchStore.list('default_user', 200);
+    // Job travado em "running" volta para a fila; oferta automática velha é
+    // cancelada em vez de cair no grupo com preço de dias atrás.
+    const manutencao = planQueueMaintenance({ jobs });
+    for (const id of manutencao.destravar) {
+      const travado = jobs.find((item) => item.id === id);
+      if (!travado) continue;
+      travado.status = 'pending';
+      travado.startedAt = null;
+      dispatchJobs.delete(id);
+      await DispatchStore.save(travado);
+      logLine(`[DISPATCH QUEUE] ${id} estava travado em execução; devolvido para a fila.`);
+    }
+    if (manutencao.expirar.length) {
+      for (const id of manutencao.expirar) {
+        const vencido = jobs.find((item) => item.id === id);
+        if (!vencido) continue;
+        vencido.status = 'cancelled';
+        vencido.completedAt = new Date().toISOString();
+        vencido.error = 'Oferta vencida: ficou tempo demais na fila.';
+        vencido.stats = { ...(vencido.stats || {}), pending: 0, cancelled: (vencido.stats?.cancelled || 0) + 1 };
+        dispatchJobs.delete(id);
+        await DispatchStore.save(vencido);
+      }
+      logLine(`[DISPATCH QUEUE] ${manutencao.expirar.length} oferta(s) vencida(s) descartada(s) da fila automática.`);
+    }
     const queued = jobs
       .filter(item => item.status === 'pending' || item.status === 'running' || item.status === 'waiting_connection' || item.status === 'paused')
       .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
