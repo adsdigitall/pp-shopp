@@ -28,7 +28,9 @@ function instante(valor) {
  * @param {Date} [entrada.agora]
  * @returns {{ destravar: string[], expirar: string[] }} ids por ação
  */
-export function planQueueMaintenance({ jobs = [], agora = new Date() }) {
+export const MAX_POR_CICLO = 50;
+
+export function planQueueMaintenance({ jobs = [], agora = new Date(), limite = MAX_POR_CICLO }) {
   const t = agora.getTime();
   const destravar = [];
   const expirar = [];
@@ -52,5 +54,7 @@ export function planQueueMaintenance({ jobs = [], agora = new Date() }) {
     if (criado !== null && t - criado >= OFERTA_VENCE_EM_MS) expirar.push(job.id);
   }
 
-  return { destravar, expirar };
+  // Fila acumulada de mil ofertas nao pode virar mil escritas num ciclo so:
+  // o ciclo seguinte continua de onde parou.
+  return { destravar, expirar: expirar.slice(0, limite) };
 }

@@ -51,11 +51,18 @@ test('fila grande: só o que venceu sai, o resto continua', () => {
     ...Array.from({ length: 4 }, (_, i) => job({ id: `recente-${i}`, createdAt: atras(i * 60_000) })),
   ];
   const plano = planQueueMaintenance({ jobs, agora: AGORA });
-  assert.equal(plano.expirar.length, 900);
+  assert.equal(plano.expirar.length, 50, 'limite por ciclo');
   assert.ok(!plano.expirar.some((id) => id.startsWith('recente')), 'oferta fresca continua na fila');
 });
 
 test('job sem horário de início não é destravado às cegas', () => {
   const plano = planQueueMaintenance({ jobs: [{ id: 'sem-inicio', source: 'queue_automation', status: 'running' }], agora: AGORA });
   assert.deepEqual(plano.destravar, []);
+});
+
+test('expira no máximo 50 por ciclo: mil escritas de uma vez travariam o ciclo', async () => {
+  const { MAX_POR_CICLO } = await import('../server/services/automation/queueHealth.mjs');
+  const jobs = Array.from({ length: 900 }, (_, i) => job({ id: `antiga-${i}`, createdAt: atras(OFERTA_VENCE_EM_MS + i * 1000) }));
+  const plano = planQueueMaintenance({ jobs, agora: AGORA });
+  assert.equal(plano.expirar.length, MAX_POR_CICLO);
 });

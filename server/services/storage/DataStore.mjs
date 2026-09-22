@@ -14,6 +14,8 @@ const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY |
 // Sem timeout, uma chamada pendurada no banco trava o ciclo de disparo para
 // sempre (aconteceu em 22/09/2026: fila parada ate reiniciar o processo).
 const SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.SUPABASE_TIMEOUT_MS || 15000) || 15000);
+// Trava de segurança: mais que isso indica dado acumulado sem limpeza.
+const SUPABASE_MAX_ROWS = Math.max(1000, Number(process.env.SUPABASE_MAX_ROWS || 50000) || 50000);
 const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const STORAGE_FILES = {
   credentials: 'marketplace_credentials.json',
@@ -87,8 +89,11 @@ class DataStore {
     }
 
     if (USE_SUPABASE) {
-      const response = await this.supabaseRequest(`/rest/v1/radar_store?collection=eq.${encodeURIComponent(collection)}&select=data`);
-      return response.map(row => row.data);
+      // Sem paginação, o PostgREST devolve no máximo 1000 linhas: com 2330
+      // disparos o app enxergava só um pedaço da fila (e qual pedaço variava).
+      // Resultado em produção: ofertas paradas em "pending" para sempre.
+      const rows = await this.supabaseSelectAll(`/rest/v1/radar_store?collection=eq.${encodeURIComponent(collection)}&select=data`);
+      return rows.map(row => row.data);
     }
     
     if (IS_SERVERLESS) return this.cache.get(collection) || [];
@@ -249,6 +254,22 @@ class DataStore {
   toRow(collection, item) {
     const itemId = item.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     return { id: this.rowId(collection, itemId), collection, user_id: item.userId || item.user_id || null, data: { ...item, id: itemId }, updated_at: new Date().toISOString() };
+  }
+
+  /**
+   * Busca TODAS as linhas, de mil em mil. Ordem estável (id) para nenhuma
+   * página repetir ou pular linha enquanto o app escreve.
+   */
+  async supabaseSelectAll(path) {
+    const pageSize = 1000;
+    const todas = [];
+    for (let offset = 0; offset < SUPABASE_MAX_ROWS; offset += pageSize) {
+      const pagina = await this.supabaseRequest(`${path}&order=id.asc&limit=${pageSize}&offset=${offset}`);
+      if (!Array.isArray(pagina) || !pagina.length) break;
+      todas.push(...pagina);
+      if (pagina.length < pageSize) break;
+    }
+    return todas;
   }
 
   async supabaseRequest(path, options = {}) {
