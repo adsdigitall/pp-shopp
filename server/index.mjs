@@ -50,8 +50,9 @@ import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } 
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
 import { planHealthAlerts } from './services/notifications/healthAlerts.mjs';
-import { planQueueMaintenance } from './services/automation/queueHealth.mjs';
+import { planQueueMaintenance, OFERTA_VENCE_EM_MS } from './services/automation/queueHealth.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
+import { categoryFallbackChain } from './services/automation/fallback.mjs';
 import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
 import { summarizeDispatchJob } from './services/analytics/dispatchSummary.mjs';
 
@@ -3000,9 +3001,21 @@ async function runAutomaticOfferDiscovery() {
         let scanned = 0;
         let offers = [];
         let searchedTerm = rawCategory;
+        // Categoria da faixa não pode deixar o grupo mudo: se nada passar, o
+        // mesmo ciclo tenta as gerais e, por último, as de oferta forte.
+        const cadeiaDeCategorias = categoryFallbackChain({
+          slotCategories: scheduledCategories,
+          userCategories: categories,
+          cursor: categoryCursor,
+        });
+        let categoriaUsada = rawCategory;
+        let regrasDaCategoria = categoryRules;
+        for (const categoriaDaVez of cadeiaDeCategorias) {
+        categoriaUsada = categoriaDaVez;
+        regrasDaCategoria = automationCategoryRules(categoriaDaVez);
         // Busca curta por ciclo; se nada passar no gate, tenta a próxima busca da
         // categoria no mesmo ciclo em vez de ficar 1 intervalo inteiro sem disparo.
-        for (const term of automationSearchTerms(rawCategory, categoryCursor).slice(0, 3)) {
+        for (const term of automationSearchTerms(categoriaDaVez, categoryCursor).slice(0, 3)) {
           searchedTerm = term;
           const numericCategoryId = /^\d+$/.test(term) ? Number.parseInt(term, 10) : NaN;
           const rawNodes = [];
@@ -3030,11 +3043,11 @@ async function runAutomaticOfferDiscovery() {
             .filter(item => {
               if (!isBrazilianOffer(item)) { blocked.other += 1; return false; }
               if (!String(item?.title || '').trim()) { blocked.other += 1; return false; }
-              if (categoryRules.requireTitleMatch && !offerMatchesSearchTerm(item.title || item.name, term)) {
+              if (regrasDaCategoria.requireTitleMatch && !offerMatchesSearchTerm(item.title || item.name, term)) {
                 blocked.gate['Fora do tema da busca'] = (blocked.gate['Fora do tema da busca'] || 0) + 1;
                 return false;
               }
-              const evaluation = evaluateAutomationOffer(item, { ...categoryRules.gate, minCommissionRate: config.minCommissionRate });
+              const evaluation = evaluateAutomationOffer(item, { ...regrasDaCategoria.gate, minCommissionRate: config.minCommissionRate });
               if (!evaluation.approved) {
                 const reason = evaluation.reasons[0] || 'rejeitada';
                 blocked.gate[reason] = (blocked.gate[reason] || 0) + 1;
@@ -3052,15 +3065,24 @@ async function runAutomaticOfferDiscovery() {
             // Categorias de preço baixo priorizam desconto maior (até +15 pontos).
             .sort((a, b) => {
               const rank = (offer) => scoreAutomationOffer(offer)
-                + (categoryRules.preferDiscount ? Math.min(60, Math.max(0, Number(offer?.discountPercentage) || 0)) / 4 : 0);
+                + (regrasDaCategoria.preferDiscount ? Math.min(60, Math.max(0, Number(offer?.discountPercentage) || 0)) / 4 : 0);
               return rank(b) - rank(a);
             })
             .slice(0, Math.min(batchSize, queueRoom));
           if (offers.length) break;
         }
+        if (offers.length) {
+          if (categoriaUsada !== rawCategory) {
+            logLine(`[AUTOMATION] "${rawCategory}" não rendeu nada; ${offers.length} oferta(s) vieram de "${categoriaUsada}".`);
+          }
+          break;
+        }
+        }
         const lastDiscovery = {
           at: new Date().toISOString(),
-          category: searchedTerm || rawCategory,
+          category: searchedTerm || categoriaUsada || rawCategory,
+          categoriaTentada: rawCategory,
+          categoriaUsada,
           filter: AUTOMATION_DISCOVERY_FILTER,
           scanned,
           kept: offers.length,
@@ -3704,7 +3726,12 @@ async function resumeDispatchQueue() {
       || (automation?.enabled && automationWindowOpen ? queued.find(item => item.status === 'paused' && item.source === 'queue_automation') : null)
       || queued.find(item => {
         const scheduledAt = item.destinations?.scheduledAt ? new Date(item.destinations.scheduledAt).getTime() : 0;
-        return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now()) && dispatchAllowed(item);
+        // Oferta vencida ainda na fila (a limpeza vai de 50 em 50) não pode
+        // furar a fila e cair no grupo com preço de dias atrás.
+        const vencida = item.source === 'queue_automation'
+          && !scheduledAt
+          && Date.now() - Date.parse(String(item.createdAt || '')) >= OFERTA_VENCE_EM_MS;
+        return item.status === 'pending' && (!scheduledAt || scheduledAt <= Date.now()) && !vencida && dispatchAllowed(item);
       });
     if (!nextJob) {
       // Log a cada 10 min no máximo: o ciclo roda de 15 em 15 segundos.
