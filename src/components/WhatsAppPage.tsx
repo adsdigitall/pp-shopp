@@ -288,6 +288,11 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
   };
 
   const statusConfig = getStatusConfig();
+  const qrImageSrc = session?.qrCode
+    ? session.qrCode.startsWith('data:')
+      ? session.qrCode
+      : `data:image/png;base64,${session.qrCode}`
+    : null;
 
   return (
     <div className="space-y-6">
@@ -301,6 +306,16 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusConfig.color}`}>
             <span className="flex items-center gap-1">{statusConfig.icon} {statusConfig.label}</span>
           </span>
+          {session?.status !== 'working' && (
+            <Button
+              type="button"
+              onClick={handleConnect}
+              disabled={loading}
+              className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"
+            >
+              <QrCode className="w-4 h-4" /> {loading ? 'Gerando QR...' : 'Gerar QR Code'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -335,11 +350,11 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
 
       {/* Connection Card */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-        {session?.status === 'qr_code' && session.qrCode && (
+        {session?.status === 'qr_code' && qrImageSrc && (
           <div className="text-center space-y-4">
             <div className="grid h-64 w-64 place-items-center rounded-xl bg-[var(--surface-elevated)] mx-auto border border-[var(--border)]">
               <img 
-                src={`data:image/png;base64,${session.qrCode}`} 
+                src={qrImageSrc}
                 alt="QR Code WhatsApp" 
                 className="w-56 h-56"
               />
@@ -420,7 +435,7 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
               disabled={loading}
               className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-black text-white hover:bg-[var(--primary-hover)] mx-auto"
             >
-              Tentar novamente
+              <QrCode className="w-4 h-4" /> Gerar QR Code
             </Button>
           </div>
         )}
@@ -439,7 +454,7 @@ const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
               disabled={loading}
               className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-black text-white hover:bg-[var(--primary-hover)] mx-auto"
             >
-              <Smartphone className="w-4 h-4" /> Conectar WhatsApp
+              <QrCode className="w-4 h-4" /> Gerar QR Code e conectar
             </Button>
             <p className="text-[10px] text-[var(--text-secondary)]">Vamos abrir o WhatsApp Web pra você escanear o QR Code</p>
           </div>

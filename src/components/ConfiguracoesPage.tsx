@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Users, Globe, Tag, Shield, User, Bell, Lock, Key, CreditCard, LogOut, Save, Check, X, AlertCircle, Eye, EyeOff, Copy, Edit, Trash2, Plus, Wifi, Smartphone, Mail, Lock as LockIcon, Shield as ShieldIcon, FileText, Send } from 'lucide-react';
+import { Settings, Users, Globe, Tag, Shield, User, Bell, Lock, Key, CreditCard, LogOut, Save, Check, X, AlertCircle, Eye, EyeOff, Copy, Edit, Trash2, Plus, Wifi, Smartphone, Mail, Lock as LockIcon, Shield as ShieldIcon, FileText, Send, QrCode } from 'lucide-react';
 import { Template, Coupon, Settings as SettingsType } from '../types/product';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -406,7 +406,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                     )}
                   </div>
                 </div>
-                {whatsappConnected && (
+                {whatsappConnected ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button variant="destructive" onClick={onDisconnectWhatsApp} className="border-[var(--error)]/20 bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20 flex items-center gap-1.5">
@@ -415,6 +415,13 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                     </TooltipTrigger>
                     <TooltipContent>Desconectar WhatsApp</TooltipContent>
                   </Tooltip>
+                ) : (
+                  <Button
+                    onClick={() => { window.location.hash = 'whatsapp'; }}
+                    className="bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] flex items-center gap-1.5"
+                  >
+                    <QrCode className="w-3.5 h-3.5" /> Gerar QR Code
+                  </Button>
                 )}
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 flex items-center justify-between opacity-50">
