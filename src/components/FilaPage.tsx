@@ -91,6 +91,16 @@ const RHYTHM_DEFAULTS = [
   { id: 'boa-noite', label: 'Boa noite', time: '22:50', enabled: true },
 ];
 
+// O backend salva em 24 horas (HH:mm), mas esta leitura deixa a programação
+// mais fácil de conferir para quem prefere AM/PM.
+const formatTimeAmPm = (time?: string) => {
+  const match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(time || '');
+  if (!match || !time) return '—';
+  const [hoursText, minutes] = time.split(':');
+  const hours = Number(hoursText);
+  return `${hours % 12 || 12}:${minutes} ${hours >= 12 ? 'PM' : 'AM'}`;
+};
+
 export const FilaPage: React.FC<FilaPageProps> = ({
   queueItems,
   groups,
@@ -588,14 +598,14 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[var(--text-secondary)]">Começar a enviar</label>
+                      <label className="text-xs font-semibold text-[var(--text-secondary)]">Começar a enviar · {formatTimeAmPm(automation.activeFrom)}</label>
                       <Input type="time" value={automation.activeFrom || ''} onChange={e => setAutomation((prev: any) => ({ ...prev, activeFrom: e.target.value }))} className="h-8 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)]" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[var(--text-secondary)]">Parar de enviar</label>
+                      <label className="text-xs font-semibold text-[var(--text-secondary)]">Parar de enviar · {formatTimeAmPm(automation.activeUntil)}</label>
                       <Input type="time" value={automation.activeUntil || ''} onChange={e => setAutomation((prev: any) => ({ ...prev, activeUntil: e.target.value }))} className="h-8 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)]" />
                     </div>
-                    <p className="text-[9px] leading-3 text-[var(--text-secondary)] sm:col-span-2">Deixe os dois horários vazios para enviar o dia todo. Fora do horário, a oferta fica na fila manual.</p>
+                    <p className="text-[9px] leading-3 text-[var(--text-secondary)] sm:col-span-2">Janela atual: {formatTimeAmPm(automation.activeFrom)} até {formatTimeAmPm(automation.activeUntil)}. Deixe os dois horários vazios para enviar o dia todo. Fora do horário, a oferta fica na fila manual.</p>
                     <div className="space-y-1 sm:col-span-2">
                       <label className="text-xs font-semibold text-[var(--text-secondary)]">Dias de envio</label>
                       <div className="flex flex-wrap gap-1.5">
@@ -641,7 +651,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                                 const base = Array.isArray(prev.dailyRhythm) && prev.dailyRhythm.length ? prev.dailyRhythm : RHYTHM_DEFAULTS;
                                 return { ...prev, dailyRhythm: base.map((s: any) => (s.id === slot.id ? { ...s, time: e.target.value } : s)) };
                               })} className="h-7 w-24 rounded-lg border-[var(--border)] bg-[var(--surface-elevated)] text-xs" />
-                              <span className="text-[11px] font-semibold text-[var(--text-primary)]">{slot.label || slot.id}</span>
+                              <span className="text-[11px] font-semibold text-[var(--text-primary)]">{slot.label || slot.id} · {formatTimeAmPm(slot.time)}</span>
                             </div>
                           ))}
                         </div>
@@ -712,6 +722,7 @@ export const FilaPage: React.FC<FilaPageProps> = ({
                             <Input type="time" value={slot.from || ''} onChange={e => updateScheduleSlot(index, { from: e.target.value })} className="h-9 w-[104px]" aria-label="Início da faixa" />
                             <span className="text-xs text-[var(--text-secondary)]">até</span>
                             <Input type="time" value={slot.until || ''} onChange={e => updateScheduleSlot(index, { until: e.target.value })} className="h-9 w-[104px]" aria-label="Fim da faixa" />
+                            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">{formatTimeAmPm(slot.from)} – {formatTimeAmPm(slot.until)}</span>
                             <div className="ml-auto flex gap-1">
                               <Button type="button" variant="ghost" size="icon-sm" onClick={() => moveScheduleSlot(index, -1)} aria-label="Mover faixa para cima">↑</Button>
                               <Button type="button" variant="ghost" size="icon-sm" onClick={() => moveScheduleSlot(index, 1)} aria-label="Mover faixa para baixo">↓</Button>
