@@ -30,7 +30,26 @@ export const AUTOMATION_CATEGORY_PLAN = [
   { id: 'compra-por-impulso', terms: ['gadget', 'kit', 'presente criativo'] },
   { id: 'melhores-ofertas', terms: ['promoção', 'kit', 'casa', 'oferta'] },
   { id: 'ofertas-fortes', terms: ['cozinha', 'organizador', 'oferta relâmpago', 'desconto'] },
+  // Campanhas sazonais: entram na rotação apenas dentro da janela comercial.
+  // As buscas permanecem curtas porque a API da Shopee zera resultados com
+  // frases longas. A régua de desconto e comissão fica em CATEGORY_RULES.
+  { id: 'black-friday', terms: ['black friday', 'oferta relâmpago', 'super oferta', 'cupom desconto'] },
+  { id: 'natal-presentes', terms: ['presente natal', 'kit presente', 'pisca pisca', 'árvore natal', 'brinquedo'] },
 ];
+
+/** Campanhas recorrentes no calendário brasileiro (horário de São Paulo). */
+export function isAutomationCategoryActive(category, now = new Date()) {
+  const id = String(category || '').trim().toLowerCase();
+  if (id !== 'black-friday' && id !== 'natal-presentes') return true;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', month: 'numeric', day: 'numeric',
+  }).formatToParts(now);
+  const valueOf = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+  const month = valueOf('month');
+  const day = valueOf('day');
+  if (id === 'black-friday') return month === 11;
+  return month === 11 || (month === 12 && day <= 25);
+}
 
 function rotate(list, start) {
   const offset = ((Math.trunc(start) % list.length) + list.length) % list.length;
@@ -59,6 +78,18 @@ const CATEGORY_RULES = {
   'essenciais-dia-a-dia': {
     gate: { preferredMinPrice: 8, preferredMaxPrice: 120, minSales: 500 },
     requireTitleMatch: true,
+    preferDiscount: true,
+  },
+  // Campanha não pode virar liquidação de comissão baixa: exige comissão
+  // mínima própria, desconto real e uma pontuação mais alta que a normal.
+  'black-friday': {
+    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 75, minCommissionRate: 12 },
+    requireTitleMatch: false,
+    preferDiscount: true,
+  },
+  'natal-presentes': {
+    gate: { minSales: 20, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    requireTitleMatch: false,
     preferDiscount: true,
   },
 };

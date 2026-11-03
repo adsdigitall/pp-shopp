@@ -29,6 +29,8 @@ export const AUTOMATION_CATEGORY_CATALOG: AutomationCategory[] = [
   { id: 'compra-por-impulso', label: 'Compra por impulso (gadget, kit, presente)', prioritized: false },
   { id: 'melhores-ofertas', label: 'Melhores ofertas do dia', prioritized: false },
   { id: 'ofertas-fortes', label: 'Ofertas fortes (relâmpago e desconto alto)', prioritized: false },
+  { id: 'black-friday', label: 'Black Friday (campanha de novembro)', prioritized: true },
+  { id: 'natal-presentes', label: 'Natal e presentes (campanha até 25/12)', prioritized: true },
 ];
 
 const LABEL_BY_ID = new Map(AUTOMATION_CATEGORY_CATALOG.map((item) => [item.id, item.label]));

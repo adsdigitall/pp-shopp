@@ -45,7 +45,7 @@ import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from '
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch, DEFAULT_AUTOMATION_FILTERS } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, normalizeMinCommissionRate, automationSlotAt, automationIsWithinSchedule, dispatchJobAllowedNow, isValidAutomationTime, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
-import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm } from './services/automation/categories.mjs';
+import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm, isAutomationCategoryActive } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
@@ -2985,6 +2985,12 @@ async function runAutomaticOfferDiscovery() {
         const categoryPool = scheduledCategories.length ? scheduledCategories : categories;
         const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
         const categoryRules = automationCategoryRules(rawCategory);
+        // A campanha sazonal pede ao menos 12% de comissão; se a pessoa já
+        // escolheu um corte maior na tela, o valor maior sempre vence.
+        const gateWithCommissionFloor = (rules) => ({
+          ...rules.gate,
+          minCommissionRate: Math.max(Number(config.minCommissionRate) || 0, Number(rules.gate?.minCommissionRate) || 0),
+        });
         const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
         const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
         const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
@@ -3007,7 +3013,7 @@ async function runAutomaticOfferDiscovery() {
           slotCategories: scheduledCategories,
           userCategories: categories,
           cursor: categoryCursor,
-        });
+        }).filter(category => isAutomationCategoryActive(category));
         let categoriaUsada = rawCategory;
         let regrasDaCategoria = categoryRules;
         for (const categoriaDaVez of cadeiaDeCategorias) {
@@ -3047,7 +3053,7 @@ async function runAutomaticOfferDiscovery() {
                 blocked.gate['Fora do tema da busca'] = (blocked.gate['Fora do tema da busca'] || 0) + 1;
                 return false;
               }
-              const evaluation = evaluateAutomationOffer(item, { ...regrasDaCategoria.gate, minCommissionRate: config.minCommissionRate });
+              const evaluation = evaluateAutomationOffer(item, gateWithCommissionFloor(regrasDaCategoria));
               if (!evaluation.approved) {
                 const reason = evaluation.reasons[0] || 'rejeitada';
                 blocked.gate[reason] = (blocked.gate[reason] || 0) + 1;
@@ -3096,7 +3102,7 @@ async function runAutomaticOfferDiscovery() {
         }
         const queuedItems = [];
         for (const offer of offers) {
-          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer, { gate: { ...categoryRules.gate, minCommissionRate: config.minCommissionRate } });
+          const queuedItem = await enqueueAutomaticOfferForReview(config.userId, offer, { gate: gateWithCommissionFloor(regrasDaCategoria) });
           if (queuedItem) queuedItems.push(queuedItem);
         }
         await DispatchAutomationStore.save(config.userId, {

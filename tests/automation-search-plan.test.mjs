@@ -45,6 +45,20 @@ test('descoberta ordena por mais vendidos (trending traz produtos com 0 vendas)'
   assert.equal(AUTOMATION_DISCOVERY_FILTER, 'top_sales');
 });
 
+test('campanhas de Black Friday e Natal têm buscas curtas e régua forte', async () => {
+  const { automationCategoryRules, isAutomationCategoryActive } = await import('../server/services/automation/categories.mjs');
+  const blackFriday = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'black-friday');
+  const natal = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'natal-presentes');
+  assert.ok(blackFriday && natal, 'as duas campanhas sazonais devem existir');
+  assert.equal(automationCategoryRules('black-friday').gate.minCommissionRate, 12);
+  assert.equal(automationCategoryRules('black-friday').gate.minDiscount, 25);
+  assert.equal(automationCategoryRules('natal-presentes').gate.minCommissionRate, 12);
+  assert.equal(isAutomationCategoryActive('black-friday', new Date('2026-11-20T15:00:00Z')), true);
+  assert.equal(isAutomationCategoryActive('black-friday', new Date('2026-12-02T15:00:00Z')), false);
+  assert.equal(isAutomationCategoryActive('natal-presentes', new Date('2026-12-25T15:00:00Z')), true);
+  assert.equal(isAutomationCategoryActive('natal-presentes', new Date('2026-12-26T15:00:00Z')), false);
+});
+
 test('essenciais do dia a dia: buscas validadas, regras próprias e só produto com o nome buscado', async () => {
   const { automationCategoryRules, offerMatchesSearchTerm } = await import('../server/services/automation/categories.mjs');
   const plan = AUTOMATION_CATEGORY_PLAN.find(c => c.id === 'essenciais-dia-a-dia');

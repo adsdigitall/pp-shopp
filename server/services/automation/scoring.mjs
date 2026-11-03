@@ -31,6 +31,7 @@ export function scoreAutomationOffer(offer) {
   const reviews = Math.max(0, finiteNumber(offer?.reviewsCount ?? offer?.reviewCount));
   const discount = Math.max(0, Math.min(100, finiteNumber(offer?.discountPercentage)));
   const price = finiteNumber(offer?.currentPrice, NaN);
+  const discount = Math.max(0, finiteNumber(offer?.discountPercentage));
   const commission = Math.max(0, finiteNumber(offer?.commissionRate ?? offer?.commissionPercentage));
   const stockRaw = offer?.stock;
   const stock = stockRaw === null || stockRaw === undefined || stockRaw === '' ? NaN : finiteNumber(stockRaw, NaN);
@@ -86,6 +87,7 @@ export function evaluateAutomationOffer(offer, overrides = {}) {
   if (Number.isFinite(stock) && stock <= 0) reasons.push('Produto sem estoque');
   if (!Number.isFinite(price)) reasons.push('Preço ausente');
   else if (price < filters.preferredMinPrice || price > filters.preferredMaxPrice) reasons.push('Preço fora da faixa');
+  if (Number.isFinite(Number(filters.minDiscount)) && discount < Number(filters.minDiscount)) reasons.push(`Desconto baixo (abaixo de ${filters.minDiscount}%)`);
   if (score < filters.minScore) reasons.push('Score abaixo do mínimo');
 
   return {
@@ -110,5 +112,4 @@ export function validateAutomationOfferForDispatch(offer) {
   if (Number.isFinite(stock) && stock <= 0) errors.push('produto sem estoque');
   return { valid: errors.length === 0, errors };
 }
-
 
