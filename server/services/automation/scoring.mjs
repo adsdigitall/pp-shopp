@@ -31,7 +31,6 @@ export function scoreAutomationOffer(offer) {
   const reviews = Math.max(0, finiteNumber(offer?.reviewsCount ?? offer?.reviewCount));
   const discount = Math.max(0, Math.min(100, finiteNumber(offer?.discountPercentage)));
   const price = finiteNumber(offer?.currentPrice, NaN);
-  const discount = Math.max(0, finiteNumber(offer?.discountPercentage));
   const commission = Math.max(0, finiteNumber(offer?.commissionRate ?? offer?.commissionPercentage));
   const stockRaw = offer?.stock;
   const stock = stockRaw === null || stockRaw === undefined || stockRaw === '' ? NaN : finiteNumber(stockRaw, NaN);
@@ -67,6 +66,7 @@ export function evaluateAutomationOffer(offer, overrides = {}) {
   const rating = finiteNumber(offer?.rating ?? offer?.ratingStar, 0);
   const reviews = Math.max(0, finiteNumber(offer?.reviewsCount ?? offer?.reviewCount));
   const price = finiteNumber(offer?.currentPrice, NaN);
+  const discount = Math.max(0, finiteNumber(offer?.discountPercentage));
   const stockRaw = offer?.stock;
   const stock = stockRaw === null || stockRaw === undefined || stockRaw === '' ? NaN : finiteNumber(stockRaw, NaN);
   const score = scoreAutomationOffer(offer);
@@ -112,4 +112,3 @@ export function validateAutomationOfferForDispatch(offer) {
   if (Number.isFinite(stock) && stock <= 0) errors.push('produto sem estoque');
   return { valid: errors.length === 0, errors };
 }
-
