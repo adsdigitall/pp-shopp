@@ -1435,6 +1435,12 @@ if (req.method === 'POST' && pathOnly === '/api/offer-copy') {
         await handleGetDispatchAutomation(req, res);
         return;
       }
+      // Recuperação manual autenticada: útil se o worker externo foi
+      // reiniciado no meio de um ciclo e deixou a descoberta sem renovar.
+      if (req.method === 'POST' && pathOnly === '/api/dispatch/automation/run') {
+        await handleRunDispatchAutomation(req, res);
+        return;
+      }
       if (req.method === 'PUT' && pathOnly === '/api/dispatch/automation') {
         await handleSaveDispatchAutomation(req, res);
         return;
@@ -2856,6 +2862,35 @@ async function handleSaveDispatchAutomation(req, res) {
     sendJson(res, 200, { config });
   } catch (err) {
     sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Não foi possível salvar a automação.' } });
+  }
+}
+
+async function handleRunDispatchAutomation(req, res) {
+  try {
+    const userId = requestUserId(req);
+    const config = await DispatchAutomationStore.get(userId);
+    if (!config?.enabled) {
+      sendJson(res, 409, { error: { code: 'AUTOMATION_DISABLED', message: 'A automação está pausada.' } });
+      return;
+    }
+    if (!automationIsWithinSchedule(config)) {
+      sendJson(res, 409, { error: { code: 'OUTSIDE_SCHEDULE', message: 'A automação está fora do horário configurado.' } });
+      return;
+    }
+    // Torna o ciclo imediatamente elegível sem alterar grupos, horários ou
+    // qualquer outro ajuste salvo pelo usuário.
+    await DispatchAutomationStore.save(userId, { nextDiscoveryAt: new Date(0).toISOString() });
+    await runAutomaticOfferDiscovery();
+    await resumeDispatchQueue();
+    const refreshed = await DispatchAutomationStore.get(userId);
+    sendJson(res, 200, {
+      ok: true,
+      lastDiscovery: refreshed?.lastDiscovery || null,
+      nextDiscoveryAt: refreshed?.nextDiscoveryAt || null,
+    });
+  } catch (error) {
+    logLine(`[AUTOMATION] Recuperação manual falhou: ${error.message}`);
+    sendJson(res, 500, { error: { code: 'AUTOMATION_RUN_FAILED', message: 'Não foi possível rodar o garimpo agora.' } });
   }
 }
 
