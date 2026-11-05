@@ -52,7 +52,7 @@ function isAbortLike(err) {
  * }} p
  * @returns {Promise<any>} campo `data` da resposta GraphQL
  */
-export async function shopeeGraphqlRequest({ query, variables = null, config }) {
+async function shopeeGraphqlRequestOnce({ query, variables = null, config }) {
   // O payload precisa ser idêntico byte a byte entre assinatura e body.
   const payload = JSON.stringify(
     variables ? { query, variables } : { query }
@@ -142,4 +142,31 @@ export async function shopeeGraphqlRequest({ query, variables = null, config }) 
   }
 
   return json.data;
+}
+
+const RETRYABLE_KINDS = new Set(['TIMEOUT', 'NETWORK', 'UPSTREAM', 'RATE_LIMIT']);
+const MAX_TRANSIENT_ATTEMPTS = 3;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * A Shopee ocasionalmente responde "System Error" (código 10000) mesmo com
+ * credenciais e requisição válidas. Repetir poucas vezes evita que um erro
+ * transitório esvazie um ciclo inteiro de automação, sem repetir erros de
+ * autenticação, acesso ou parâmetros inválidos.
+ */
+export async function shopeeGraphqlRequest(args) {
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_TRANSIENT_ATTEMPTS; attempt += 1) {
+    try {
+      return await shopeeGraphqlRequestOnce(args);
+    } catch (error) {
+      lastError = error;
+      const retryable = error instanceof ShopeeApiError && RETRYABLE_KINDS.has(error.kind);
+      if (!retryable || attempt === MAX_TRANSIENT_ATTEMPTS) throw error;
+      // Pequeno backoff, com teto baixo para não atrasar a fila de ofertas.
+      await wait(300 * attempt);
+    }
+  }
+  throw lastError;
 }
