@@ -2935,7 +2935,10 @@ async function enqueueAutomaticOfferForReview(userId, offer, { gate = {} } = {})
   const job = {
     id: jobId, userId, source: 'queue_automation', status: 'pending', step: 3, offers: [offer],
     message: { whatsapp: { enabled: true, customMessage: config.template || DEFAULT_AUTOMATION_MESSAGE, showImage: true, rotatingCTAs: config.rotatingCTAs !== false } },
-    destinations: { groups, sessionId: config.sessionId, interval: config.interval || { value: 30, unit: 'seconds' }, humanMessageInterval: config.humanMessageInterval, humanMessageAfter, nightPause: true, weekendPause: false, expirePause: true },
+    // A janela da automação já determina quando pode enviar. Manter a pausa
+    // fixa depois das 23h fazia ofertas válidas para 23:00–02:00 vencerem na
+    // fila, mesmo com a automação explicitamente liberada nesse horário.
+    destinations: { groups, sessionId: config.sessionId, interval: config.interval || { value: 30, unit: 'seconds' }, humanMessageInterval: config.humanMessageInterval, humanMessageAfter, nightPause: false, weekendPause: false, expirePause: true },
     createdAt: new Date().toISOString(), startedAt: null, completedAt: null,
     stats: { sent: 0, failed: 0, deduplicated: 0, cancelled: 0, pending: config.groups.length }, currentGroupIndex: 0, attempts: [], idempotencyKey: `auto:${dispatchProductKey(offer)}:${Date.now()}`,
   };
@@ -2953,10 +2956,23 @@ async function enqueueAutomaticOfferForReview(userId, offer, { gate = {} } = {})
 }
 
 let automaticDiscoveryRunning = false;
+let automaticDiscoveryStartedAt = 0;
+let automaticDiscoveryRunId = 0;
+// A consulta à Shopee já tem timeout por request, mas o ciclo percorre várias
+// páginas e categorias. Este guarda impede uma chamada excepcionalmente presa
+// de bloquear todos os próximos garimpos enquanto o worker continua vivo.
+const AUTOMATION_DISCOVERY_MAX_RUN_MS = 2 * 60_000;
 
 async function runAutomaticOfferDiscovery() {
-  if (automaticDiscoveryRunning) return;
+  if (automaticDiscoveryRunning) {
+    const elapsed = Date.now() - automaticDiscoveryStartedAt;
+    if (elapsed < AUTOMATION_DISCOVERY_MAX_RUN_MS) return;
+    logLine(`[AUTOMATION] Garimpo anterior preso há ${Math.round(elapsed / 1000)}s; liberando novo ciclo.`);
+    automaticDiscoveryRunning = false;
+  }
+  const runId = ++automaticDiscoveryRunId;
   automaticDiscoveryRunning = true;
+  automaticDiscoveryStartedAt = Date.now();
   try {
     const configs = await DispatchAutomationStore.list();
     for (const config of configs.filter(item => item?.enabled)) {
@@ -3121,7 +3137,12 @@ async function runAutomaticOfferDiscovery() {
       }
     }
   } finally {
-    automaticDiscoveryRunning = false;
+    // Um ciclo velho liberado pelo watchdog não pode desligar a trava do
+    // ciclo mais novo quando finalmente terminar.
+    if (runId === automaticDiscoveryRunId) {
+      automaticDiscoveryRunning = false;
+      automaticDiscoveryStartedAt = 0;
+    }
   }
 }
 
