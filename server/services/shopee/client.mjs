@@ -145,7 +145,9 @@ async function shopeeGraphqlRequestOnce({ query, variables = null, config }) {
 }
 
 const RETRYABLE_KINDS = new Set(['TIMEOUT', 'NETWORK', 'UPSTREAM', 'RATE_LIMIT']);
-const MAX_TRANSIENT_ATTEMPTS = 3;
+// Duas tentativas bastam para o erro 10000 transitório. Mais do que isso
+// pode prender todo o ciclo de automação quando a Shopee fica lenta.
+const MAX_TRANSIENT_ATTEMPTS = 2;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

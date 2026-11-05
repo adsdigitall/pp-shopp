@@ -3042,7 +3042,13 @@ async function runAutomaticOfferDiscovery() {
           ...rules.gate,
           minCommissionRate: Math.max(Number(config.minCommissionRate) || 0, Number(rules.gate?.minCommissionRate) || 0),
         });
-        const discoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
+        const savedDiscoveryConfig = await loadShopeeConfigForUser(config.userId || 'default_user');
+        // Um ciclo não pode ficar vários minutos preso em uma única busca da
+        // Shopee. A próxima rodada volta a tentar no intervalo configurado.
+        const discoveryConfig = {
+          ...savedDiscoveryConfig,
+          timeoutMs: Math.min(4_000, Math.max(1_000, Number(savedDiscoveryConfig.timeoutMs) || 4_000)),
+        };
         const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
         const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
         const sentKeys = await recentlySentProductKeys(config.userId);
