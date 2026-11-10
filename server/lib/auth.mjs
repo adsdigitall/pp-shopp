@@ -22,6 +22,18 @@ function supabaseConfig(env = process.env) {
   return url && key ? { url, key } : null;
 }
 
+/**
+ * Instalação própria (VPS): mantém o painel protegido sem depender do
+ * Supabase Auth. Nunca é ativado por padrão; os dois valores precisam estar
+ * presentes somente no ambiente do servidor.
+ */
+function localAdminConfig(env = process.env) {
+  const email = String(env.LOCAL_ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = String(env.LOCAL_ADMIN_PASSWORD || '');
+  const id = String(env.LOCAL_ADMIN_USER_ID || 'default_user').trim() || 'default_user';
+  return email && password ? { email, password, id } : null;
+}
+
 function sessionSecret(env = process.env) {
   const explicit = String(env.AUTH_SESSION_SECRET || '').trim();
   if (explicit) return explicit;
@@ -40,7 +52,7 @@ function isProductionRuntime(env = process.env) {
  */
 export function authMode(env = process.env) {
   if (String(env.RADAR_AUTH_DISABLED || '') === '1') return { enforced: false, available: false };
-  const available = Boolean(supabaseConfig(env) && sessionSecret(env));
+  const available = Boolean((supabaseConfig(env) || localAdminConfig(env)) && sessionSecret(env));
   return { enforced: available || isProductionRuntime(env), available };
 }
 
@@ -105,6 +117,8 @@ export function sessionFromRequest(req, env = process.env) {
 }
 
 function isSecureRequest(req, env) {
+  if (String(env.AUTH_COOKIE_SECURE || '').toLowerCase() === 'false') return false;
+  if (String(env.AUTH_COOKIE_SECURE || '').toLowerCase() === 'true') return true;
   return isProductionRuntime(env) || String(req.headers['x-forwarded-proto'] || '').includes('https');
 }
 
@@ -138,6 +152,18 @@ export function allowLoginAttempt(req, now = Date.now()) {
  * credencial errada e usuário sem permissão devolvem o mesmo código (sem enumeração).
  */
 export async function verifyPasswordLogin(email, password, { env = process.env, fetchImpl = fetch } = {}) {
+  const localAdmin = localAdminConfig(env);
+  if (localAdmin) {
+    const submittedEmail = String(email || '').trim().toLowerCase();
+    const submittedPassword = String(password || '');
+    const sameEmail = submittedEmail === localAdmin.email;
+    const expected = Buffer.from(localAdmin.password);
+    const received = Buffer.from(submittedPassword);
+    const samePassword = expected.length === received.length && timingSafeEqual(expected, received);
+    return sameEmail && samePassword
+      ? { user: { id: localAdmin.id, email: localAdmin.email } }
+      : { error: 'INVALID_CREDENTIALS' };
+  }
   const supabase = supabaseConfig(env);
   if (!supabase) return { error: 'AUTH_NOT_CONFIGURED' };
   let response;

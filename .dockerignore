@@ -1,9 +1,8 @@
 node_modules
 dist
-.git
-.env*
 data
-tests
-src
-public
-*.log
+.git
+.env
+.env.*
+!.env.example
+supabase/.temp

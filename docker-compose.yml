@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      target: backend
+    env_file: .env
+    environment:
+      PORT: "8787"
+      DISPATCH_WORKER: "inline"
+    volumes:
+      - radar_data:/app/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: frontend
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  radar_data:
