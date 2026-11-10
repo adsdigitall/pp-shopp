@@ -1,3 +1,5 @@
+import { activeDoubleDateCampaign } from './campaigns.mjs';
+
 /**
  * Buscas da descoberta automática por categoria.
  *
@@ -35,11 +37,13 @@ export const AUTOMATION_CATEGORY_PLAN = [
   // frases longas. A régua de desconto e comissão fica em CATEGORY_RULES.
   { id: 'black-friday', terms: ['black friday', 'oferta relâmpago', 'super oferta', 'cupom desconto'] },
   { id: 'natal-presentes', terms: ['presente natal', 'kit presente', 'pisca pisca', 'árvore natal', 'brinquedo'] },
+  { id: 'datas-duplas', terms: ['oferta relâmpago', 'cupom desconto', 'super oferta', 'promoção'] },
 ];
 
 /** Campanhas recorrentes no calendário brasileiro (horário de São Paulo). */
 export function isAutomationCategoryActive(category, now = new Date()) {
   const id = String(category || '').trim().toLowerCase();
+  if (id === 'datas-duplas') return Boolean(activeDoubleDateCampaign(now));
   if (id !== 'black-friday' && id !== 'natal-presentes') return true;
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo', month: 'numeric', day: 'numeric',
@@ -89,6 +93,11 @@ const CATEGORY_RULES = {
   },
   'natal-presentes': {
     gate: { minSales: 20, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    requireTitleMatch: false,
+    preferDiscount: true,
+  },
+  'datas-duplas': {
+    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
     requireTitleMatch: false,
     preferDiscount: true,
   },

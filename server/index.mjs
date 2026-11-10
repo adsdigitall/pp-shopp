@@ -53,6 +53,7 @@ import { planHealthAlerts } from './services/notifications/healthAlerts.mjs';
 import { planQueueMaintenance, OFERTA_VENCE_EM_MS } from './services/automation/queueHealth.mjs';
 import { buildDashboard } from './services/analytics/dashboard.mjs';
 import { categoryFallbackChain } from './services/automation/fallback.mjs';
+import { activeDoubleDateCampaign, doubleDateUrgencyPrefix } from './services/automation/campaigns.mjs';
 import { buildQueueOverview } from './services/analytics/queueOverview.mjs';
 import { summarizeDispatchJob } from './services/analytics/dispatchSummary.mjs';
 
@@ -2969,7 +2970,7 @@ async function enqueueAutomaticOfferForReview(userId, offer, { gate = {} } = {})
   const jobId = `dispatch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const job = {
     id: jobId, userId, source: 'queue_automation', status: 'pending', step: 3, offers: [offer],
-    message: { whatsapp: { enabled: true, customMessage: config.template || DEFAULT_AUTOMATION_MESSAGE, showImage: true, rotatingCTAs: config.rotatingCTAs !== false } },
+    message: { whatsapp: { enabled: true, customMessage: [doubleDateUrgencyPrefix(), config.template || DEFAULT_AUTOMATION_MESSAGE].filter(Boolean).join('\n\n'), showImage: true, rotatingCTAs: config.rotatingCTAs !== false } },
     // A janela da automação já determina quando pode enviar. Manter a pausa
     // fixa depois das 23h fazia ofertas válidas para 23:00–02:00 vencerem na
     // fila, mesmo com a automação explicitamente liberada nesse horário.
@@ -3066,11 +3067,15 @@ async function runAutomaticOfferDiscovery() {
         let searchedTerm = rawCategory;
         // Categoria da faixa não pode deixar o grupo mudo: se nada passar, o
         // mesmo ciclo tenta as gerais e, por último, as de oferta forte.
-        const cadeiaDeCategorias = categoryFallbackChain({
+        const cadeiaDeCategorias = [
+          ...(activeDoubleDateCampaign() ? ['datas-duplas'] : []),
+          ...categoryFallbackChain({
           slotCategories: scheduledCategories,
           userCategories: categories,
           cursor: categoryCursor,
-        }).filter(category => isAutomationCategoryActive(category));
+          }),
+        ].filter((category, index, list) => list.indexOf(category) === index)
+          .filter(category => isAutomationCategoryActive(category));
         let categoriaUsada = rawCategory;
         let regrasDaCategoria = categoryRules;
         for (const categoriaDaVez of cadeiaDeCategorias) {
@@ -3173,7 +3178,15 @@ async function runAutomaticOfferDiscovery() {
         });
         logLine(`[AUTOMATION] ${queuedItems.length} oferta(s) do lote adicionada(s) à fila para revisão manual.`);
       } catch (error) {
-        await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt });
+        await DispatchAutomationStore.save(config.userId, {
+          nextDiscoveryAt,
+          lastDiscovery: {
+            at: new Date().toISOString(),
+            category: 'indisponível', categoriaTentada: rawCategory,
+            scanned: 0, kept: 0, blocked: { repeats: 0, gate: {}, other: 0 },
+            error: error instanceof ShopeeApiError ? error.kind : 'UPSTREAM',
+          },
+        });
         logLine(`[AUTOMATION ERROR] Busca automática falhou: ${error.message}`);
       }
     }
