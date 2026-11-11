@@ -36,6 +36,13 @@ test('group ids are trimmed, deduped and capped', () => {
   assert.ok(result.every((group) => typeof group.id === 'string' && group.id.length > 0));
 });
 
+test('group ids accept saved objects but discard malformed placeholders', () => {
+  assert.deepEqual(
+    normalizeAutomationGroupIds([{ id: 'a@g.us' }, { groupId: 'b@g.us' }, {}, '[object Object]']),
+    [{ id: 'a@g.us' }, { id: 'b@g.us' }],
+  );
+});
+
 test('category ids are preserved for discovery', () => {
   assert.deepEqual(
     normalizeAutomationCategoryIds(['banheiro', '  ']),

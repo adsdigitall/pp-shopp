@@ -105,7 +105,12 @@ export function canonicalAutomationCategoryId(value) {
  * aqui garantimos apenas ids válidos, únicos e limitados.
  */
 export function normalizeAutomationGroupIds(value, max = 50) {
-  return normalizeIdList(value, { max }).map((id) => ({ id }));
+  if (!Array.isArray(value)) return [];
+  const ids = value
+    .map((item) => typeof item === 'string' ? item : item?.id ?? item?.groupId ?? '')
+    .map((item) => String(item ?? '').trim())
+    .filter((id) => id && id !== '[object Object]' && id.length <= 120);
+  return [...new Set(ids)].slice(0, max).map((id) => ({ id }));
 }
 
 /**
