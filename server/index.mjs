@@ -45,7 +45,7 @@ import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from '
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch, DEFAULT_AUTOMATION_FILTERS } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, normalizeMinCommissionRate, automationSlotAt, automationCadence, automationIsWithinSchedule, dispatchJobAllowedNow, isValidAutomationTime, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
-import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm, isAutomationCategoryActive, seasonalAutomationCategories } from './services/automation/categories.mjs';
+import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationDiscoveryFilter, automationSearchTerms, offerMatchesSearchTerm, isAutomationCategoryActive, seasonalAutomationCategories } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
@@ -3072,6 +3072,7 @@ async function runAutomaticOfferDiscovery() {
         let offers = [];
         let lastSourceError = null;
         let searchedTerm = rawCategory;
+        let discoveryFilter = AUTOMATION_DISCOVERY_FILTER;
         // Categoria da faixa não pode deixar o grupo mudo: se nada passar, o
         // mesmo ciclo tenta as gerais e, por último, as de oferta forte.
         const cadeiaDeCategorias = [
@@ -3091,6 +3092,7 @@ async function runAutomaticOfferDiscovery() {
         for (const categoriaDaVez of cadeiaDeCategorias) {
         categoriaUsada = categoriaDaVez;
         regrasDaCategoria = automationCategoryRules(categoriaDaVez);
+        discoveryFilter = automationDiscoveryFilter(categoriaDaVez);
         // Busca curta por ciclo; se nada passar no gate, tenta a próxima busca da
         // categoria no mesmo ciclo em vez de ficar 1 intervalo inteiro sem disparo.
         for (const term of automationSearchTerms(categoriaDaVez, categoryCursor).slice(0, 3)) {
@@ -3102,7 +3104,7 @@ async function runAutomaticOfferDiscovery() {
             for (const discoveryPage of [1, 2, 3]) {
               const { nodes: pageNodes } = await searchProductOffers({
                 keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : term,
-                filter: AUTOMATION_DISCOVERY_FILTER, page: discoveryPage, limit: 50,
+                filter: discoveryFilter, page: discoveryPage, limit: 50,
                 categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
                 config: discoveryConfig,
               });
@@ -3167,7 +3169,7 @@ async function runAutomaticOfferDiscovery() {
           category: searchedTerm || categoriaUsada || rawCategory,
           categoriaTentada: rawCategory,
           categoriaUsada,
-          filter: AUTOMATION_DISCOVERY_FILTER,
+          filter: discoveryFilter,
           scanned,
           kept: offers.length,
           blocked,

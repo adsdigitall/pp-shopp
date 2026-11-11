@@ -46,6 +46,14 @@ test('descoberta ordena por mais vendidos (trending traz produtos com 0 vendas)'
   assert.equal(AUTOMATION_DISCOVERY_FILTER, 'top_sales');
 });
 
+test('campanhas, limpeza e ofertas fortes pedem maior comissão sem abrir mão do gate', async () => {
+  const { automationDiscoveryFilter } = await import('../server/services/automation/categories.mjs');
+  for (const category of ['natal-presentes', 'roupas-natal', 'limpeza-casa', 'ofertas-fortes', 'datas-duplas']) {
+    assert.equal(automationDiscoveryFilter(category), 'high_commission', category);
+  }
+  assert.equal(automationDiscoveryFilter('casa-cozinha'), 'top_sales');
+});
+
 test('campanhas sazonais têm buscas curtas, régua forte e só entram na época certa', async () => {
   const { automationCategoryRules, isAutomationCategoryActive, seasonalAutomationCategories } = await import('../server/services/automation/categories.mjs');
   const blackFriday = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'black-friday');

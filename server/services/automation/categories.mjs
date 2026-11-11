@@ -12,6 +12,20 @@ import { activeDoubleDateCampaign } from './campaigns.mjs';
 // "trending" devolve lançamentos sem vendas/avaliação e nunca passa no gate.
 export const AUTOMATION_DISCOVERY_FILTER = 'top_sales';
 
+// Campanhas e itens de limpeza precisam conciliar saída com retorno de
+// afiliado. A API oficial permite pedir primeiro os de maior comissão; o gate
+// abaixo ainda exige vendas, nota, desconto e score antes de enfileirar.
+const HIGH_COMMISSION_DISCOVERY_CATEGORIES = new Set([
+  'black-friday', 'natal-presentes', 'roupas-natal', 'ano-novo', 'datas-duplas',
+  'limpeza-casa', 'ofertas-fortes', 'melhores-ofertas', 'compra-por-impulso',
+]);
+
+export function automationDiscoveryFilter(category) {
+  return HIGH_COMMISSION_DISCOVERY_CATEGORIES.has(String(category || '').trim().toLowerCase())
+    ? 'high_commission'
+    : AUTOMATION_DISCOVERY_FILTER;
+}
+
 export const AUTOMATION_CATEGORY_PLAN = [
   // O que a massa compra no dia a dia e vende bem na Shopee (validado com o gate em 14/09/2026).
   // Mercearia (arroz, óleo, feijão, leite) ficou de fora: quase não vende na Shopee e paga 3%.
