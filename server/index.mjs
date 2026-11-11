@@ -3068,6 +3068,7 @@ async function runAutomaticOfferDiscovery() {
         const blocked = { repeats: 0, gate: {}, other: 0 };
         let scanned = 0;
         let offers = [];
+        let lastSourceError = null;
         let searchedTerm = rawCategory;
         // Categoria da faixa não pode deixar o grupo mudo: se nada passar, o
         // mesmo ciclo tenta as gerais e, por último, as de oferta forte.
@@ -3092,22 +3093,28 @@ async function runAutomaticOfferDiscovery() {
           const numericCategoryId = /^\d+$/.test(term) ? Number.parseInt(term, 10) : NaN;
           const rawNodes = [];
           const seenNodeIds = new Set();
-          for (const discoveryPage of [1, 2, 3]) {
-            const { nodes: pageNodes } = await searchProductOffers({
-              keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : term,
-              filter: AUTOMATION_DISCOVERY_FILTER, page: discoveryPage, limit: 50,
-              categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
-              config: discoveryConfig,
-            });
-            if (!Array.isArray(pageNodes) || !pageNodes.length) break;
-            for (const node of pageNodes) {
-              const nodeId = String(node?.itemId ?? '');
-              if (nodeId && !seenNodeIds.has(nodeId)) {
-                seenNodeIds.add(nodeId);
-                rawNodes.push(node);
+          try {
+            for (const discoveryPage of [1, 2, 3]) {
+              const { nodes: pageNodes } = await searchProductOffers({
+                keyword: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? '' : term,
+                filter: AUTOMATION_DISCOVERY_FILTER, page: discoveryPage, limit: 50,
+                categoryId: Number.isInteger(numericCategoryId) && numericCategoryId > 0 ? numericCategoryId : null,
+                config: discoveryConfig,
+              });
+              if (!Array.isArray(pageNodes) || !pageNodes.length) break;
+              for (const node of pageNodes) {
+                const nodeId = String(node?.itemId ?? '');
+                if (nodeId && !seenNodeIds.has(nodeId)) {
+                  seenNodeIds.add(nodeId);
+                  rawNodes.push(node);
+                }
               }
+              if (pageNodes.length < 50) break;
             }
-            if (pageNodes.length < 50) break;
+          } catch (sourceError) {
+            lastSourceError = sourceError;
+            logLine(`[AUTOMATION] Busca "${term}" falhou (${sourceError?.message || 'fonte indisponível'}); tentando alternativa.`);
+            continue;
           }
           const normalized = normalizeProductOffers(rawNodes, 'trending');
           scanned += normalized.length;
@@ -3159,6 +3166,7 @@ async function runAutomaticOfferDiscovery() {
           scanned,
           kept: offers.length,
           blocked,
+          ...(scanned === 0 && lastSourceError ? { error: lastSourceError instanceof ShopeeApiError ? lastSourceError.kind : 'UPSTREAM' } : {}),
         };
         if (!offers.length) {
           await DispatchAutomationStore.save(config.userId, { nextDiscoveryAt, categoryCursor: categoryCursor + 1, lastDiscovery });
