@@ -3182,7 +3182,7 @@ async function runAutomaticOfferDiscovery() {
           nextDiscoveryAt,
           lastDiscovery: {
             at: new Date().toISOString(),
-            category: 'indisponível', categoriaTentada: rawCategory,
+            category: 'indisponível', categoriaTentada: null,
             scanned: 0, kept: 0, blocked: { repeats: 0, gate: {}, other: 0 },
             error: error instanceof ShopeeApiError ? error.kind : 'UPSTREAM',
           },
