@@ -155,6 +155,15 @@ export const DEFAULT_AUTOMATION_SCHEDULE = [
   { from: '23:00', until: '02:00', categories: ['ofertas-fortes', 'compra-por-impulso'] },
 ];
 
+function normalizeSlotOfferInterval(value) {
+  if (!value || typeof value !== 'object') return null;
+  const unit = ['seconds', 'minutes', 'hours'].includes(value.unit) ? value.unit : null;
+  if (!unit) return null;
+  const minimum = unit === 'seconds' ? 10 : 1;
+  const amount = Math.min(1440, Math.max(minimum, Number(value.value) || 0));
+  return amount ? { value: amount, unit } : null;
+}
+
 export function normalizeAutomationSchedule(value) {
   if (!Array.isArray(value) || !value.length) return DEFAULT_AUTOMATION_SCHEDULE;
   return value.slice(0, 12).map((slot, index) => ({
@@ -168,6 +177,9 @@ export function normalizeAutomationSchedule(value) {
     categories: Array.isArray(slot?.categories)
       ? [...new Set(slot.categories.map(item => canonicalAutomationCategoryId(item)).filter(Boolean))].slice(0, 8)
       : [],
+    // Uma faixa pode ter uma cadência diferente sem alterar o ritmo do dia
+    // inteiro — por exemplo, 3 minutos no pico da manhã.
+    offerInterval: normalizeSlotOfferInterval(slot?.offerInterval),
   }));
 }
 
@@ -182,6 +194,12 @@ export function automationSlotAt(config, now = new Date()) {
     const until = parse(slot.until);
     return from < until ? current >= from && current < until : current >= from || current < until;
   }) || null;
+}
+
+/** Cadência da faixa atual; se ela não tiver regra própria, usa a geral. */
+export function automationCadence(config, now = new Date()) {
+  const slot = automationSlotAt(config, now);
+  return slot?.offerInterval || config?.offerInterval || config?.interval || { value: 30, unit: 'seconds' };
 }
 
 /** Faixa ativa: cobre o instante E está ligada. Null = sem garimpo agora. */

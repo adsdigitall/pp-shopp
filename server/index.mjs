@@ -43,7 +43,7 @@ import { dispatchTimeParts, dispatchMinutesOfDay } from './lib/timezone.mjs';
 import { authMode, isPublicApiRoute, sessionFromRequest, allowLoginAttempt, verifyPasswordLogin, createSessionToken, sessionCookieHeader, clearSessionCookieHeader } from './lib/auth.mjs';
 import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from './services/shopee/effectiveConfig.mjs';
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch, DEFAULT_AUTOMATION_FILTERS } from './services/automation/scoring.mjs';
-import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, normalizeMinCommissionRate, automationSlotAt, automationIsWithinSchedule, dispatchJobAllowedNow, isValidAutomationTime, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
+import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, normalizeMinCommissionRate, automationSlotAt, automationCadence, automationIsWithinSchedule, dispatchJobAllowedNow, isValidAutomationTime, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
 import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm, isAutomationCategoryActive } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
@@ -2708,7 +2708,9 @@ const SAFE_HUMAN_MESSAGES = [
 
 function getSafeHumanMessage(index = 0, human = true) {
   const pool = human && HUMAN_INTERSTITIALS.length ? HUMAN_INTERSTITIALS : SAFE_HUMAN_MESSAGES;
-  return pool[Math.max(0, Number(index) || 0) % pool.length];
+  const message = pool[Math.max(0, Number(index) || 0) % pool.length];
+  const campaign = doubleDateUrgencyPrefix();
+  return campaign ? `${campaign}\n\n${message}` : message;
 }
 
 // Prévia do texto que "Disparar agora" manda: mesmo template e mesma renderização do
@@ -3016,7 +3018,7 @@ async function runAutomaticOfferDiscovery() {
       const dueAt = Date.parse(String(config.nextDiscoveryAt || ''));
       if (Number.isFinite(dueAt) && dueAt > Date.now()) continue;
 
-      const cadence = config.offerInterval || config.interval || { value: 30, unit: 'seconds' };
+      const cadence = automationCadence(config);
       const nextDiscoveryAt = new Date(Date.now() + Math.max(10_000, getIntervalMs(cadence))).toISOString();
       try {
         // Fila já abastecida: não garimpa, senão ofertas envelhecem e saem na
@@ -3840,7 +3842,7 @@ async function resumeDispatchQueue() {
     // usar interval primeiro fazia o grupo receber no ritmo antigo, ignorando
     // o que o usuário escolheu. É a mesma cadência usada na descoberta.
     if (nextJob.source === 'queue_automation' && nextJob.status !== 'running'
-      && automationPaceWaitMs(jobs, automation?.offerInterval || automation?.interval || nextJob.destinations?.interval) > 0) return;
+      && automationPaceWaitMs(jobs, automationCadence(automation) || nextJob.destinations?.interval) > 0) return;
     dispatchJobs.set(nextJob.id, nextJob);
     await processDispatchJob(nextJob.id);
   } catch (error) {

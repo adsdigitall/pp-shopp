@@ -28,5 +28,5 @@ export function activeDoubleDateCampaign(now = new Date()) {
 export function doubleDateUrgencyPrefix(now = new Date()) {
   const campaign = activeDoubleDateCampaign(now);
   if (!campaign) return '';
-  return `🚨 *HOJE É ${campaign.label} NA SHOPEE!*\n\nVambora aproveitar: promoções e cupons podem acabar a qualquer momento.`;
+  return `🚨 *BORA, MENINAS! HOJE É ${campaign.label} NA SHOPEE!*\n\nBora aproveitar: promoções e cupons podem acabar a qualquer momento.`;
 }
