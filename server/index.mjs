@@ -3048,7 +3048,11 @@ async function runAutomaticOfferDiscovery() {
         // Shopee. A próxima rodada volta a tentar no intervalo configurado.
         const discoveryConfig = {
           ...savedDiscoveryConfig,
-          timeoutMs: Math.min(4_000, Math.max(1_000, Number(savedDiscoveryConfig.timeoutMs) || 4_000)),
+          // A Shopee costuma responder consultas válidas entre 5 e 7 segundos.
+          // O teto anterior de 4 s transformava respostas lentas em timeout e
+          // deixava os grupos sem ofertas. Ainda há teto para uma fonte lenta
+          // não prender o ciclo inteiro.
+          timeoutMs: Math.min(10_000, Math.max(6_000, Number(savedDiscoveryConfig.timeoutMs) || 10_000)),
         };
         const currentQueue = await PublicationHistoryStore.getByUser(config.userId, 500);
         const queuedKeys = new Set(currentQueue.map(item => dispatchProductKey(item)));
