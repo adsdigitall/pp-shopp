@@ -17,6 +17,7 @@ export const AUTOMATION_STATUS = {
   AGUARDANDO_CONEXAO: 'aguardando-conexao',
   FORA_DO_HORARIO: 'fora-do-horario',
   WHATSAPP_FORA: 'whatsapp-fora',
+  FONTE_INDISPONIVEL: 'fonte-indisponivel',
   SEM_OFERTA_APROVADA: 'sem-oferta-aprovada',
   AGUARDANDO_INTERVALO: 'aguardando-intervalo',
   ENVIANDO: 'enviando',
@@ -29,6 +30,7 @@ const MENSAGENS = {
   [AUTOMATION_STATUS.AGUARDANDO_CONEXAO]: 'Tem oferta esperando conexão com o WhatsApp. Enquanto isso, o garimpo fica parado.',
   [AUTOMATION_STATUS.FORA_DO_HORARIO]: 'Fora do horário de envio. Volta a enviar no próximo horário configurado.',
   [AUTOMATION_STATUS.WHATSAPP_FORA]: 'O WhatsApp está desconectado. Reconecte para os envios voltarem.',
+  [AUTOMATION_STATUS.FONTE_INDISPONIVEL]: 'A Shopee não respondeu ao último garimpo. A automação continua ligada e tentará novamente no próximo ciclo.',
   [AUTOMATION_STATUS.SEM_OFERTA_APROVADA]: 'Nenhuma oferta passou nos filtros no último garimpo. Nada foi enviado para não mandar produto ruim.',
   [AUTOMATION_STATUS.AGUARDANDO_INTERVALO]: 'Tudo certo: aguardando o intervalo entre ofertas.',
   [AUTOMATION_STATUS.ENVIANDO]: 'Enviando normalmente.',
@@ -93,6 +95,7 @@ export function diagnoseAutomation({ config, jobs = [], whatsappConectado, agora
     if (!base.whatsappConectado) return AUTOMATION_STATUS.WHATSAPP_FORA;
     // Job travado esperando o WhatsApp ocupa a fila e trava o garimpo.
     if (base.aguardandoConexao > 0) return AUTOMATION_STATUS.AGUARDANDO_CONEXAO;
+    if (ultimoGarimpo?.error) return AUTOMATION_STATUS.FONTE_INDISPONIVEL;
     // Fila vazia + último garimpo sem nada aprovado = filtro segurando tudo.
     if (!naFila && ultimoGarimpo && Number(ultimoGarimpo.kept) === 0) return AUTOMATION_STATUS.SEM_OFERTA_APROVADA;
     if (esperaMs > 0) return AUTOMATION_STATUS.AGUARDANDO_INTERVALO;
