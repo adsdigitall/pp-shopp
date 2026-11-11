@@ -19,10 +19,10 @@ export const AUTOMATION_CATEGORY_PLAN = [
     id: 'essenciais-dia-a-dia',
     terms: ['café', 'amaciante', 'shampoo', 'papel higiênico', 'desodorante', 'pote hermético', 'garrafa térmica', 'pano de prato', 'esponja', 'ventilador', 'sabonete', 'creme dental', 'detergente', 'tapete banheiro'],
   },
-  { id: 'casa-cozinha', terms: ['casa e cozinha', 'cozinha', 'utensílios cozinha', 'potes'] },
+  { id: 'casa-cozinha', terms: ['air fryer', 'potes herméticos', 'utensílios cozinha', 'panela'] },
   { id: 'beleza-autocuidado', terms: ['beleza', 'skincare', 'maquiagem', 'cabelo'] },
   { id: 'organizacao', terms: ['organizadores', 'organizador', 'caixa organizadora', 'colmeia organizadora'] },
-  { id: 'moda-feminina', terms: ['legging', 'blusa feminina', 'bolsa feminina', 'chinelo feminino', 'pijama feminino'] },
+  { id: 'moda-feminina', terms: ['vestido feminino', 'blusa feminina', 'pijama feminino', 'look feminino', 'bolsa feminina'] },
   { id: 'utilidades', terms: ['carregador', 'luminária', 'suporte celular', 'mini ventilador'] },
   { id: 'maternidade-infantil', terms: ['infantil', 'brinquedo', 'bebê'] },
   { id: 'cama-mesa-banho', terms: ['toalha', 'jogo de lençol', 'tapete'] },
@@ -37,6 +37,8 @@ export const AUTOMATION_CATEGORY_PLAN = [
   // frases longas. A régua de desconto e comissão fica em CATEGORY_RULES.
   { id: 'black-friday', terms: ['black friday', 'oferta relâmpago', 'super oferta', 'cupom desconto'] },
   { id: 'natal-presentes', terms: ['presente natal', 'kit presente', 'pisca pisca', 'árvore natal', 'brinquedo'] },
+  { id: 'roupas-natal', terms: ['roupa natal', 'vestido natal', 'pijama natal', 'look natal', 'camiseta natal'] },
+  { id: 'ano-novo', terms: ['roupa branca', 'vestido branco', 'mesa ano novo', 'taça champanhe', 'decoração ano novo'] },
   { id: 'datas-duplas', terms: ['oferta relâmpago', 'cupom desconto', 'super oferta', 'promoção'] },
 ];
 
@@ -44,7 +46,7 @@ export const AUTOMATION_CATEGORY_PLAN = [
 export function isAutomationCategoryActive(category, now = new Date()) {
   const id = String(category || '').trim().toLowerCase();
   if (id === 'datas-duplas') return Boolean(activeDoubleDateCampaign(now));
-  if (id !== 'black-friday' && id !== 'natal-presentes') return true;
+  if (!['black-friday', 'natal-presentes', 'roupas-natal', 'ano-novo'].includes(id)) return true;
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo', month: 'numeric', day: 'numeric',
   }).formatToParts(now);
@@ -52,7 +54,23 @@ export function isAutomationCategoryActive(category, now = new Date()) {
   const month = valueOf('month');
   const day = valueOf('day');
   if (id === 'black-friday') return month === 11;
-  return month === 11 || (month === 12 && day <= 25);
+  if (id === 'natal-presentes' || id === 'roupas-natal') return month === 11 || (month === 12 && day <= 25);
+  return (month === 12 && day >= 26) || (month === 1 && day <= 7);
+}
+
+/**
+ * Campanhas que passam à frente da faixa horária quando estão na temporada.
+ * Assim, em novembro/dezembro o grupo recebe primeiro o que as pessoas estão
+ * procurando agora, sem depender de alguém trocar o agendamento manualmente.
+ */
+export function seasonalAutomationCategories(now = new Date(), cursor = 0) {
+  const seasonal = ['black-friday', 'natal-presentes', 'roupas-natal', 'ano-novo']
+    .filter((category) => isAutomationCategoryActive(category, now));
+  const offset = seasonal.length ? ((Math.trunc(cursor) % seasonal.length) + seasonal.length) % seasonal.length : 0;
+  const rotated = [...seasonal.slice(offset), ...seasonal.slice(0, offset)];
+  // Em data dupla ela continua na frente em todo ciclo; o segundo tema gira
+  // entre Black Friday, Natal e roupas para a descoberta não ficar repetitiva.
+  return activeDoubleDateCampaign(now) ? ['datas-duplas', ...rotated] : rotated;
 }
 
 function rotate(list, start) {
@@ -92,12 +110,47 @@ const CATEGORY_RULES = {
     preferDiscount: true,
   },
   'natal-presentes': {
-    gate: { minSales: 20, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
-    requireTitleMatch: false,
+    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    requireTitleMatch: true,
+    preferDiscount: true,
+  },
+  'roupas-natal': {
+    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 500, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    requireTitleMatch: true,
+    preferDiscount: true,
+  },
+  'ano-novo': {
+    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 600, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    requireTitleMatch: true,
     preferDiscount: true,
   },
   'datas-duplas': {
-    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    requireTitleMatch: false,
+    preferDiscount: true,
+  },
+  'casa-cozinha': {
+    gate: { minSales: 40, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 600, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    requireTitleMatch: true,
+    preferDiscount: true,
+  },
+  'moda-feminina': {
+    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    requireTitleMatch: true,
+    preferDiscount: true,
+  },
+  'ofertas-fortes': {
+    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    requireTitleMatch: false,
+    preferDiscount: true,
+  },
+  'melhores-ofertas': {
+    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    requireTitleMatch: false,
+    preferDiscount: true,
+  },
+  'compra-por-impulso': {
+    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
     requireTitleMatch: false,
     preferDiscount: true,
   },

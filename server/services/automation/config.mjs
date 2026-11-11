@@ -77,6 +77,11 @@ const CATEGORY_CANONICAL = new Map([
   ['natal', 'natal-presentes'],
   ['natal e presentes', 'natal-presentes'],
   ['natal-presentes', 'natal-presentes'],
+  ['roupa natal', 'roupas-natal'],
+  ['roupas natal', 'roupas-natal'],
+  ['roupas-natal', 'roupas-natal'],
+  ['ano novo', 'ano-novo'],
+  ['ano-novo', 'ano-novo'],
   ['datas duplas', 'datas-duplas'],
   ['data dupla', 'datas-duplas'],
   ['datas-duplas', 'datas-duplas'],
@@ -132,7 +137,7 @@ export function resolveDispatchIntervals(destinations = {}, body = {}, automatio
       minOffers: Number.isFinite(min) ? Math.min(1000, Math.max(1, min)) : 8,
       maxOffers: Number.isFinite(max) ? Math.min(1000, Math.max(Number.isFinite(min) ? min : 1, max)) : 12,
     },
-    repeatCooldownHours: Number.isFinite(repeat) ? Math.min(720, Math.max(1, repeat)) : 4,
+    repeatCooldownHours: Number.isFinite(repeat) ? Math.min(720, Math.max(72, repeat)) : 72,
   };
 }
 

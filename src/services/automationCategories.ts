@@ -31,6 +31,8 @@ export const AUTOMATION_CATEGORY_CATALOG: AutomationCategory[] = [
   { id: 'ofertas-fortes', label: 'Ofertas fortes (relâmpago e desconto alto)', prioritized: false },
   { id: 'black-friday', label: 'Black Friday (campanha de novembro)', prioritized: true },
   { id: 'natal-presentes', label: 'Natal e presentes (campanha até 25/12)', prioritized: true },
+  { id: 'roupas-natal', label: 'Roupas de Natal (campanha até 25/12)', prioritized: true },
+  { id: 'ano-novo', label: 'Ano Novo (roupa branca e ceia, 26/12 a 07/01)', prioritized: true },
 ];
 
 const LABEL_BY_ID = new Map(AUTOMATION_CATEGORY_CATALOG.map((item) => [item.id, item.label]));

@@ -61,8 +61,9 @@ test('o garimpo usa a cadeia de categorias e as regras da categoria da vez', () 
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   const fonte = readFileSync(join(root, 'server', 'index.mjs'), 'utf-8');
   const ciclo = fonte.slice(fonte.indexOf('async function runAutomaticOfferDiscovery'), fonte.indexOf('let dailyRhythmRunning'));
-  assert.match(ciclo, /const cadeiaDeCategorias = categoryFallbackChain\(/);
+  assert.match(ciclo, /seasonalAutomationCategories\(new Date\(\), categoryCursor\)/, 'campanhas da estação devem vir antes do rodízio comum');
+  assert.match(ciclo, /\.\.\.categoryFallbackChain\(/, 'o fallback precisa continuar disponível quando a campanha não render');
   assert.match(ciclo, /for \(const categoriaDaVez of cadeiaDeCategorias\)/);
   assert.match(ciclo, /regrasDaCategoria\.requireTitleMatch/, 'o filtro de tema tem que seguir a categoria da vez');
-  assert.match(ciclo, /\.\.\.regrasDaCategoria\.gate/, 'o gate tem que seguir a categoria da vez');
+  assert.match(ciclo, /gateWithCommissionFloor\(regrasDaCategoria\)/, 'o gate tem que seguir a categoria da vez');
 });

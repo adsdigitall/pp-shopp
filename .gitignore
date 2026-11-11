@@ -36,3 +36,4 @@ data/push_subscriptions.json
 data/app_secrets.json
 data/sale_alert_state.json
 data/sale_alert_history.json
+data/automation_health_state.json

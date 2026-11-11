@@ -92,27 +92,27 @@ test('merge tolerates empty or invalid inputs without shrinking', () => {
 test('dispatch intervals fall back to safe defaults with no input', () => {
   assert.deepEqual(resolveDispatchIntervals(), {
     humanMessageInterval: { minOffers: 8, maxOffers: 12 },
-    repeatCooldownHours: 4,
+    repeatCooldownHours: 72,
   });
   assert.deepEqual(resolveDispatchIntervals(undefined, undefined, null), {
     humanMessageInterval: { minOffers: 8, maxOffers: 12 },
-    repeatCooldownHours: 4,
+    repeatCooldownHours: 72,
   });
 });
 
 test('dispatch intervals prefer wizard, then body, then automation config', () => {
-  const auto = { humanMessageInterval: { minOffers: 3, maxOffers: 9 }, repeatCooldownHours: 6 };
+  const auto = { humanMessageInterval: { minOffers: 3, maxOffers: 9 }, repeatCooldownHours: 72 };
   assert.deepEqual(
     resolveDispatchIntervals({ humanMessageInterval: { minOffers: 5, maxOffers: 15 } }, {}, auto).humanMessageInterval,
     { minOffers: 5, maxOffers: 15 },
   );
   assert.deepEqual(
     resolveDispatchIntervals({}, { repeatCooldownHours: 10 }, auto).repeatCooldownHours,
-    10,
+    72,
   );
   assert.deepEqual(resolveDispatchIntervals({}, {}, auto), {
     humanMessageInterval: { minOffers: 3, maxOffers: 9 },
-    repeatCooldownHours: 6,
+    repeatCooldownHours: 72,
   });
 });
 

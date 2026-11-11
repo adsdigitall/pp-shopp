@@ -45,18 +45,26 @@ test('descoberta ordena por mais vendidos (trending traz produtos com 0 vendas)'
   assert.equal(AUTOMATION_DISCOVERY_FILTER, 'top_sales');
 });
 
-test('campanhas de Black Friday e Natal têm buscas curtas e régua forte', async () => {
-  const { automationCategoryRules, isAutomationCategoryActive } = await import('../server/services/automation/categories.mjs');
+test('campanhas sazonais têm buscas curtas, régua forte e só entram na época certa', async () => {
+  const { automationCategoryRules, isAutomationCategoryActive, seasonalAutomationCategories } = await import('../server/services/automation/categories.mjs');
   const blackFriday = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'black-friday');
   const natal = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'natal-presentes');
-  assert.ok(blackFriday && natal, 'as duas campanhas sazonais devem existir');
+  const roupasNatal = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'roupas-natal');
+  const anoNovo = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'ano-novo');
+  assert.ok(blackFriday && natal && roupasNatal && anoNovo, 'as campanhas sazonais devem existir');
   assert.equal(automationCategoryRules('black-friday').gate.minCommissionRate, 12);
   assert.equal(automationCategoryRules('black-friday').gate.minDiscount, 25);
   assert.equal(automationCategoryRules('natal-presentes').gate.minCommissionRate, 12);
+  assert.equal(automationCategoryRules('roupas-natal').requireTitleMatch, true);
+  assert.equal(automationCategoryRules('ano-novo').gate.minScore, 78);
   assert.equal(isAutomationCategoryActive('black-friday', new Date('2026-11-20T15:00:00Z')), true);
   assert.equal(isAutomationCategoryActive('black-friday', new Date('2026-12-02T15:00:00Z')), false);
   assert.equal(isAutomationCategoryActive('natal-presentes', new Date('2026-12-25T15:00:00Z')), true);
   assert.equal(isAutomationCategoryActive('natal-presentes', new Date('2026-12-26T15:00:00Z')), false);
+  assert.equal(isAutomationCategoryActive('ano-novo', new Date('2026-12-26T15:00:00Z')), true);
+  assert.equal(isAutomationCategoryActive('ano-novo', new Date('2027-01-08T15:00:00Z')), false);
+  assert.deepEqual(seasonalAutomationCategories(new Date('2026-11-11T15:00:00Z')).slice(0, 4), ['datas-duplas', 'black-friday', 'natal-presentes', 'roupas-natal']);
+  assert.deepEqual(seasonalAutomationCategories(new Date('2026-11-11T15:00:00Z'), 1).slice(0, 2), ['datas-duplas', 'natal-presentes']);
 });
 
 test('essenciais do dia a dia: buscas validadas, regras próprias e só produto com o nome buscado', async () => {
@@ -70,7 +78,8 @@ test('essenciais do dia a dia: buscas validadas, regras próprias e só produto 
   assert.deepEqual(rules.gate, { preferredMinPrice: 8, preferredMaxPrice: 120, minSales: 500 });
   assert.equal(rules.requireTitleMatch, true);
   assert.equal(rules.preferDiscount, true);
-  assert.deepEqual(automationCategoryRules('moda-feminina'), { gate: {}, requireTitleMatch: false, preferDiscount: false });
+  assert.equal(automationCategoryRules('moda-feminina').gate.minSales, 30);
+  assert.equal(automationCategoryRules('moda-feminina').requireTitleMatch, true);
 
   assert.equal(offerMatchesSearchTerm('Potes Herméticos Marmita de Vidro 640ml', 'pote hermético'), true);
   assert.equal(offerMatchesSearchTerm('Papel Higiênico Neve Folha Dupla 12 rolos', 'papel higiênico'), true);

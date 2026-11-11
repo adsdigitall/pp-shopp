@@ -45,7 +45,7 @@ import { loadShopeeConfigForUser, getShopeeIntegrationStatus, maskAppId } from '
 import { evaluateAutomationOffer, scoreAutomationOffer, validateAutomationOfferForDispatch, DEFAULT_AUTOMATION_FILTERS } from './services/automation/scoring.mjs';
 import { normalizeAutomationCategoryIds, normalizeAutomationGroupIds, mergeGroupLists, resolveDispatchIntervals, normalizeAutomationSchedule, normalizeActiveDays, normalizeMinCommissionRate, automationSlotAt, automationCadence, automationIsWithinSchedule, dispatchJobAllowedNow, isValidAutomationTime, DEFAULT_AUTOMATION_SCHEDULE } from './services/automation/config.mjs';
 import { normalizeDailyRhythm, rhythmDayKey, slotsDueToday, pickRhythmMessage } from './services/automation/rhythm.mjs';
-import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm, isAutomationCategoryActive } from './services/automation/categories.mjs';
+import { AUTOMATION_DISCOVERY_FILTER, automationCategoryRules, automationSearchTerms, offerMatchesSearchTerm, isAutomationCategoryActive, seasonalAutomationCategories } from './services/automation/categories.mjs';
 import { AUTOMATION_QUEUE_TARGET, automationPaceWaitMs, pendingAutomationJobs } from './services/automation/pacing.mjs';
 import { activeDispatchGroups } from './services/analytics/activeGroups.mjs';
 import { diagnoseAutomation } from './services/automation/diagnostics.mjs';
@@ -2808,7 +2808,7 @@ async function handleGetDispatchAutomation(req, res) {
       minCommissionRate: normalizeMinCommissionRate(out.minCommissionRate),
     }
     : null;
-  sendJson(res, 200, { config: withRhythm || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 4, championRepostAfterHours: 6, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, rhythmEnabled: true, dailyRhythm: normalizeDailyRhythm(undefined), scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE, minCommissionRate: DEFAULT_AUTOMATION_FILTERS.minCommissionRate } });
+  sendJson(res, 200, { config: withRhythm || { enabled: false, mode: 'manual', groups: [], categories: [], interval: { value: 7, unit: 'minutes' }, offerInterval: { value: 7, unit: 'minutes' }, humanMessageInterval: { minOffers: 8, maxOffers: 12 }, repeatCooldownHours: 72, championRepostAfterHours: 72, batchSize: 10, aiEnabled: false, activeFrom: '08:00', activeUntil: '23:00', activeDays: [0, 1, 2, 3, 4, 5, 6], humanTone: true, rhythmEnabled: true, dailyRhythm: normalizeDailyRhythm(undefined), scheduleSlots: DEFAULT_AUTOMATION_SCHEDULE, minCommissionRate: DEFAULT_AUTOMATION_FILTERS.minCommissionRate } });
 }
 
 async function handleSaveDispatchAutomation(req, res) {
@@ -2839,8 +2839,8 @@ async function handleSaveDispatchAutomation(req, res) {
     });
     const humanMin = Math.min(1000, Math.max(1, Math.round(Number(body.humanMessageInterval?.minOffers) || 8)));
     const humanMax = Math.min(1000, Math.max(humanMin, Math.round(Number(body.humanMessageInterval?.maxOffers) || 12)));
-    const repeatCooldownHours = Math.min(720, Math.max(1, Number(body.repeatCooldownHours) || 4));
-    const championRepostAfterHours = Math.min(720, Math.max(repeatCooldownHours, Number(body.championRepostAfterHours) || 6));
+    const repeatCooldownHours = Math.min(720, Math.max(72, Number(body.repeatCooldownHours) || 72));
+    const championRepostAfterHours = Math.min(720, Math.max(repeatCooldownHours, Number(body.championRepostAfterHours) || 72));
     const config = await DispatchAutomationStore.save(userId, {
       enabled: body.enabled === true, mode: body.mode === 'auto' ? 'auto' : 'manual', groups, interval: { value, unit },
       offerInterval: { value: offerValue, unit: offerUnit },
@@ -3075,13 +3075,16 @@ async function runAutomaticOfferDiscovery() {
         // Categoria da faixa não pode deixar o grupo mudo: se nada passar, o
         // mesmo ciclo tenta as gerais e, por último, as de oferta forte.
         const cadeiaDeCategorias = [
-          ...(activeDoubleDateCampaign() ? ['datas-duplas'] : []),
+          // Duas campanhas no máximo por ciclo: mantém a descoberta rápida e
+          // ainda deixa espaço para cozinha/moda/ofertas fortes no fallback.
+          ...seasonalAutomationCategories(new Date(), categoryCursor).slice(0, 2),
           ...categoryFallbackChain({
           slotCategories: scheduledCategories,
           userCategories: categories,
           cursor: categoryCursor,
           }),
         ].filter((category, index, list) => list.indexOf(category) === index)
+          .slice(0, 4)
           .filter(category => isAutomationCategoryActive(category));
         let categoriaUsada = rawCategory;
         let regrasDaCategoria = categoryRules;
