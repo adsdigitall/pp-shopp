@@ -19,6 +19,9 @@ export const AUTOMATION_CATEGORY_PLAN = [
     id: 'essenciais-dia-a-dia',
     terms: ['café', 'amaciante', 'shampoo', 'papel higiênico', 'desodorante', 'pote hermético', 'garrafa térmica', 'pano de prato', 'esponja', 'ventilador', 'sabonete', 'creme dental', 'detergente', 'tapete banheiro'],
   },
+  // Limpeza tem procura recorrente e entra como prioridade operacional no
+  // período de Natal, quando o grupo precisa de produtos úteis além de presentes.
+  { id: 'limpeza-casa', terms: ['amaciante', 'desinfetante', 'lava roupas', 'sabão líquido', 'limpa vidro'] },
   { id: 'casa-cozinha', terms: ['air fryer', 'potes herméticos', 'utensílios cozinha', 'panela'] },
   { id: 'beleza-autocuidado', terms: ['beleza', 'skincare', 'maquiagem', 'cabelo'] },
   { id: 'organizacao', terms: ['organizadores', 'organizador', 'caixa organizadora', 'colmeia organizadora'] },
@@ -99,6 +102,11 @@ export function automationSearchTerms(category, cursor = 0) {
 const CATEGORY_RULES = {
   'essenciais-dia-a-dia': {
     gate: { preferredMinPrice: 8, preferredMaxPrice: 120, minSales: 500 },
+    requireTitleMatch: true,
+    preferDiscount: true,
+  },
+  'limpeza-casa': {
+    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 12, preferredMaxPrice: 250, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
     requireTitleMatch: true,
     preferDiscount: true,
   },

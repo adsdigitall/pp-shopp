@@ -20,6 +20,7 @@ test('faixas que ficavam mudas usam buscas que retornam produtos', () => {
   assert.ok(!byId['melhores-ofertas'].some(t => t.includes('cupom mais vendidos')));
   assert.ok(!byId['moda-feminina'].includes('moda feminina barata'));
   assert.ok(byId['compra-por-impulso'].length >= 3);
+  assert.deepEqual(byId['limpeza-casa'], ['amaciante', 'desinfetante', 'lava roupas', 'sabão líquido', 'limpa vidro']);
 });
 
 test('slug da categoria rotaciona as buscas começando pelo cursor', () => {
@@ -80,6 +81,9 @@ test('essenciais do dia a dia: buscas validadas, regras próprias e só produto 
   assert.equal(rules.preferDiscount, true);
   assert.equal(automationCategoryRules('moda-feminina').gate.minSales, 30);
   assert.equal(automationCategoryRules('moda-feminina').requireTitleMatch, true);
+  assert.equal(automationCategoryRules('limpeza-casa').gate.minSales, 50);
+  assert.equal(automationCategoryRules('limpeza-casa').gate.minCommissionRate, 12);
+  assert.equal(automationCategoryRules('limpeza-casa').requireTitleMatch, true);
 
   assert.equal(offerMatchesSearchTerm('Potes Herméticos Marmita de Vidro 640ml', 'pote hermético'), true);
   assert.equal(offerMatchesSearchTerm('Papel Higiênico Neve Folha Dupla 12 rolos', 'papel higiênico'), true);

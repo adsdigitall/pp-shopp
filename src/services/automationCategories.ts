@@ -16,6 +16,7 @@ export interface AutomationCategory {
 
 export const AUTOMATION_CATEGORY_CATALOG: AutomationCategory[] = [
   { id: 'essenciais-dia-a-dia', label: 'Essenciais do dia a dia (casa, limpeza, higiene, café)', prioritized: true },
+  { id: 'limpeza-casa', label: 'Limpeza da casa (alto giro)', prioritized: true },
   { id: 'casa-cozinha', label: 'Casa e cozinha (50%)', prioritized: true },
   { id: 'beleza-autocuidado', label: 'Beleza e autocuidado (20%)', prioritized: true },
   { id: 'organizacao', label: 'Organização (15%)', prioritized: true },
@@ -65,8 +66,8 @@ interface SuggestionRule {
  */
 const SUGGESTION_RULES: SuggestionRule[] = [
   { startMinutes: 0, categories: ['ofertas-fortes', 'compra-por-impulso'], reason: 'Madrugada: quem está acordado só para em desconto forte.' },
-  { startMinutes: 5 * 60, categories: ['essenciais-dia-a-dia'], reason: 'Começo do dia: item de reposição, do tipo que acaba em casa.' },
-  { startMinutes: 8 * 60, categories: ['casa-cozinha', 'essenciais-dia-a-dia'], reason: 'Manhã: casa em ordem, cozinha e limpeza.' },
+  { startMinutes: 5 * 60, categories: ['limpeza-casa', 'essenciais-dia-a-dia'], reason: 'Começo do dia: limpeza e reposição, produtos de alto giro.' },
+  { startMinutes: 8 * 60, categories: ['limpeza-casa', 'casa-cozinha'], reason: 'Manhã: casa em ordem, limpeza e cozinha.' },
   { startMinutes: 10 * 60, categories: ['organizacao', 'banheiro'], reason: 'Meio da manhã: organização e banheiro.' },
   { startMinutes: 12 * 60, categories: ['compra-por-impulso', 'utilidades'], reason: 'Almoço: celular na mão, compra rápida de impulso.' },
   { startMinutes: 14 * 60, categories: ['beleza-autocuidado', 'acessorios-femininos'], reason: 'Tarde: beleza e autocuidado.' },

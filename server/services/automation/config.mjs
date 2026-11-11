@@ -88,6 +88,9 @@ const CATEGORY_CANONICAL = new Map([
   ['essenciais', 'essenciais-dia-a-dia'],
   ['essenciais do dia a dia', 'essenciais-dia-a-dia'],
   ['essenciais-dia-a-dia', 'essenciais-dia-a-dia'],
+  ['limpeza', 'limpeza-casa'],
+  ['limpeza casa', 'limpeza-casa'],
+  ['limpeza-casa', 'limpeza-casa'],
 ]);
 
 export function canonicalAutomationCategoryId(value) {
