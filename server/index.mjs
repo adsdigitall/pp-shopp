@@ -3039,7 +3039,7 @@ async function runAutomaticOfferDiscovery() {
         const categoryPool = scheduledCategories.length ? scheduledCategories : categories;
         const rawCategory = categoryPool.length ? String(categoryPool[categoryCursor % categoryPool.length]).trim() : '';
         const categoryRules = automationCategoryRules(rawCategory);
-        // A campanha sazonal pede ao menos 12% de comissão; se a pessoa já
+        // A campanha sazonal pede ao menos 10% de comissão; se a pessoa já
         // escolheu um corte maior na tela, o valor maior sempre vence.
         const gateWithCommissionFloor = (rules) => ({
           ...rules.gate,

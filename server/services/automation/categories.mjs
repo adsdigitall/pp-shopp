@@ -106,59 +106,59 @@ const CATEGORY_RULES = {
     preferDiscount: true,
   },
   'limpeza-casa': {
-    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 12, preferredMaxPrice: 250, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    gate: { minSales: 50, preferredMinPrice: 12, preferredMaxPrice: 250, minDiscount: 20, minScore: 75, minCommissionRate: 10 },
     requireTitleMatch: true,
     preferDiscount: true,
   },
   // Campanha não pode virar liquidação de comissão baixa: exige comissão
   // mínima própria, desconto real e uma pontuação mais alta que a normal.
   'black-friday': {
-    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 75, minCommissionRate: 12 },
+    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 75, minCommissionRate: 10 },
     requireTitleMatch: false,
     preferDiscount: true,
   },
   'natal-presentes': {
-    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    gate: { minSales: 30, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 25, minScore: 78, minCommissionRate: 10 },
     requireTitleMatch: true,
     preferDiscount: true,
   },
   'roupas-natal': {
-    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 500, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    gate: { minSales: 30, preferredMinPrice: 20, preferredMaxPrice: 500, minDiscount: 25, minScore: 78, minCommissionRate: 10 },
     requireTitleMatch: true,
     preferDiscount: true,
   },
   'ano-novo': {
-    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 600, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    gate: { minSales: 30, preferredMinPrice: 20, preferredMaxPrice: 600, minDiscount: 25, minScore: 78, minCommissionRate: 10 },
     requireTitleMatch: true,
     preferDiscount: true,
   },
   'datas-duplas': {
-    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 10 },
     requireTitleMatch: false,
     preferDiscount: true,
   },
   'casa-cozinha': {
-    gate: { minSales: 40, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 600, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    gate: { minSales: 40, preferredMinPrice: 20, preferredMaxPrice: 600, minDiscount: 20, minScore: 75, minCommissionRate: 10 },
     requireTitleMatch: true,
     preferDiscount: true,
   },
   'moda-feminina': {
-    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 20, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    gate: { minSales: 30, preferredMinPrice: 20, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 10 },
     requireTitleMatch: true,
     preferDiscount: true,
   },
   'ofertas-fortes': {
-    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 10 },
     requireTitleMatch: false,
     preferDiscount: true,
   },
   'melhores-ofertas': {
-    gate: { minSales: 50, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 12 },
+    gate: { minSales: 50, preferredMinPrice: 15, preferredMaxPrice: 800, minDiscount: 25, minScore: 78, minCommissionRate: 10 },
     requireTitleMatch: false,
     preferDiscount: true,
   },
   'compra-por-impulso': {
-    gate: { minSales: 30, minReviews: 5, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 12 },
+    gate: { minSales: 30, preferredMinPrice: 15, preferredMaxPrice: 500, minDiscount: 20, minScore: 75, minCommissionRate: 10 },
     requireTitleMatch: false,
     preferDiscount: true,
   },

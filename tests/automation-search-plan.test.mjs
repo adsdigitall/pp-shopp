@@ -53,9 +53,9 @@ test('campanhas sazonais têm buscas curtas, régua forte e só entram na época
   const roupasNatal = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'roupas-natal');
   const anoNovo = AUTOMATION_CATEGORY_PLAN.find((category) => category.id === 'ano-novo');
   assert.ok(blackFriday && natal && roupasNatal && anoNovo, 'as campanhas sazonais devem existir');
-  assert.equal(automationCategoryRules('black-friday').gate.minCommissionRate, 12);
+  assert.equal(automationCategoryRules('black-friday').gate.minCommissionRate, 10);
   assert.equal(automationCategoryRules('black-friday').gate.minDiscount, 25);
-  assert.equal(automationCategoryRules('natal-presentes').gate.minCommissionRate, 12);
+  assert.equal(automationCategoryRules('natal-presentes').gate.minCommissionRate, 10);
   assert.equal(automationCategoryRules('roupas-natal').requireTitleMatch, true);
   assert.equal(automationCategoryRules('ano-novo').gate.minScore, 78);
   assert.equal(isAutomationCategoryActive('black-friday', new Date('2026-11-20T15:00:00Z')), true);
@@ -82,7 +82,7 @@ test('essenciais do dia a dia: buscas validadas, regras próprias e só produto 
   assert.equal(automationCategoryRules('moda-feminina').gate.minSales, 30);
   assert.equal(automationCategoryRules('moda-feminina').requireTitleMatch, true);
   assert.equal(automationCategoryRules('limpeza-casa').gate.minSales, 50);
-  assert.equal(automationCategoryRules('limpeza-casa').gate.minCommissionRate, 12);
+  assert.equal(automationCategoryRules('limpeza-casa').gate.minCommissionRate, 10);
   assert.equal(automationCategoryRules('limpeza-casa').requireTitleMatch, true);
 
   assert.equal(offerMatchesSearchTerm('Potes Herméticos Marmita de Vidro 640ml', 'pote hermético'), true);
